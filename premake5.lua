@@ -8,9 +8,9 @@ include "Dependencies"
 -- Includes curstom premake command for adding solution items (VS only)
 include "./Dependencies/premake/customizations/solution_items.lua"
 
-workspace "CppProject"
+workspace "Blocky"
 	architecture "x86_64"
-	startproject "CppProject"
+	startproject "Blocky"
 
 	configurations {
 	    "Debug",
@@ -32,7 +32,7 @@ workspace "CppProject"
 outputdir = "%{cfg.buildcfg}-%{cfg.system}-%{cfg.architecture}";
 
 -- Project
-project "CppProject"
+project "Blocky"
 	language "C++"
 	cppdialect "C++20"
 	staticruntime "on"
@@ -48,7 +48,12 @@ project "CppProject"
 	}
 
 	includedirs {
-		"Source"
+		"Source",
+		"%{IncludeDir.VulkanSDK}"
+	}
+
+	links { 
+		"%{Library.Vulkan}" 
 	}
 
 	defines {
@@ -58,8 +63,7 @@ project "CppProject"
 
 	filter "system:windows"
 		systemversion "latest"
-		defines { "GND_PLATFORM_WIN32" }
-		links { }
+		defines { "BK_PLATFORM_WIN32" }
 
 		-- Exclude all .cpp files from build by default
 	filter "files:Source/**.cpp"
@@ -67,7 +71,7 @@ project "CppProject"
 
 	-- List of files to build
 	local includedFiles = {
-	    "Source/main.cpp"
+	    "Source/Win32_Blocky.cpp"
 	}
 
 	-- Simply iterate over them and remove the set flag
@@ -78,13 +82,13 @@ project "CppProject"
 
 	filter "configurations:Debug"
 		kind "ConsoleApp"
-		defines { "CPP_DEBUG", "ENABLE_VALIDATION_LAYERS=1" }
+		defines { "BK_DEBUG", "ENABLE_VALIDATION_LAYERS=1" }
 		runtime "Debug"
 		symbols "on"
 
 	filter "configurations:Release"
 		kind "ConsoleApp"
-		defines { "CPP_RELEASE", "ENABLE_VALIDATION_LAYERS=0" }
+		defines { "BK_RELEASE", "ENABLE_VALIDATION_LAYERS=0" }
 		runtime "Release"
 		optimize "Speed"
 		symbols "on"
