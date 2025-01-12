@@ -1,0 +1,254 @@
+/*
+ * Win32 game layer
+*/
+
+// General defines
+#define CountOf(arr) sizeof(arr) / sizeof(arr[0])
+#define STRINGIFY(x) #x
+
+// Asserts
+#define ENABLE_ASSERTS 1
+
+#ifdef BK_DEBUG
+#define Debugbreak() __debugbreak()
+#else
+#define Debugbreak()
+#endif
+
+#if ENABLE_ASSERTS
+#define Assert(__cond__, ...) do { if(!(__cond__)) { Err(__VA_ARGS__); Debugbreak(); } } while(0)
+#else
+#define Assert(...)
+#endif
+
+// Win32 assert
+#define WAssert(__cond__, ...) Assert(SUCCEEDED(__cond__), __VA_ARGS__)
+
+// Win32 utils
+#define GET_X_LPARAM(lp) ((int)(short)LOWORD(lp))
+#define GET_Y_LPARAM(lp) ((int)(short)HIWORD(lp))
+
+// Vulkan assert
+#define VkAssert(__vulkan_func) do { VkResult __result = (__vulkan_func); Assert(__result  == VK_SUCCESS, "%d", static_cast<u32>(__result)); } while(0)
+
+// Log
+#define BK_RESET_COLOR "\033[0m"
+#define BK_GREEN_COLOR "\033[32m"
+#define BK_YELLOW_COLOR "\033[33m"
+#define BK_RED_COLOR "\033[31m"
+#define BK_WHITE_RED_BG_COLOR "\033[41;37m"
+
+#define Trace(...) do { \
+    printf(__VA_ARGS__); \
+    printf(BK_RESET_COLOR "\n"); \
+} while(0)
+
+#define Info(...) do { \
+    printf(BK_GREEN_COLOR); \
+    printf(__VA_ARGS__); \
+    printf(BK_RESET_COLOR "\n"); \
+} while(0)
+
+#define Warn(...) do { \
+    printf(BK_YELLOW_COLOR); \
+    printf(__VA_ARGS__); \
+    printf(BK_RESET_COLOR "\n"); \
+} while(0)
+
+#define Err(...) do { \
+    printf(BK_WHITE_RED_BG_COLOR); \
+    printf(__VA_ARGS__); \
+    printf(BK_RESET_COLOR "\n"); \
+} while(0)
+
+#include <stdio.h>
+#include <cstdint>
+
+#define WIN32_LEAN_AND_MEAN
+#include <Windows.h>
+
+// Primitive types
+using u8 = uint8_t;
+using u16 = uint16_t;
+using u32 = uint32_t;
+using u64 = uint64_t;
+
+using i8 = int8_t;
+using i16 = int16_t;
+using i32 = int32_t;
+using i64 = int64_t;
+
+using f32 = float;
+using f64 = double;
+
+struct game_window
+{
+    HWND WindowHandle;
+    HINSTANCE ModuleInstance;
+
+    u32 ClientAreaWidth;
+    u32 ClientAreaHeight;
+};
+
+struct buffer
+{
+    void* Data;
+    u64 Size;
+};
+
+#include "VulkanRenderer.h"
+
+static u32 g_ClientWidth = 0;
+static u32 g_ClientHeight = 0;
+static bool g_IsMinimized = false;
+
+LRESULT Win32ProcedureHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
+{
+    LRESULT Result = 0;
+
+    switch (msg)
+    {
+        case WM_SIZE:
+        {
+            if (wParam == SIZE_MINIMIZED)
+            {
+                g_IsMinimized = true;
+                Trace("Window minimized");
+            }
+            else if (wParam == SIZE_RESTORED)
+            {
+                // The window has been restored from minimized or maximized
+                g_IsMinimized = false;
+                Trace("Restored");
+            }
+
+            u32 width = GET_X_LPARAM(lParam);
+            u32 height = GET_Y_LPARAM(lParam);
+
+            // NOTE: Swapchain has a problem with width and height being the same after restoring the window and requires
+            // resize as well
+            if (width != 0 && height != 0)
+            {
+                g_ClientWidth = width;
+                g_ClientHeight = height;
+            }
+            break;
+        }
+        case WM_DESTROY:
+        case WM_CLOSE:
+        {
+            ::PostQuitMessage(0);
+            break;
+        }
+        default:
+        {
+            Result = ::DefWindowProc(hWnd, msg, wParam, lParam);
+            break;
+        }
+    }
+
+    //Log("%i", msg);
+
+    return Result;
+}
+
+static game_window CreateGameWindow()
+{
+    game_window Window;
+
+    // Create window
+    WNDCLASSEX WindowClass = { sizeof(WindowClass) };
+    WindowClass.lpfnWndProc = Win32ProcedureHandler;
+    WindowClass.hInstance = GetModuleHandle(NULL);
+    WindowClass.lpszClassName = L"BlockyWindowClass";
+    WindowClass.hCursor = LoadCursor(0, IDC_ARROW);
+    WindowClass.hIcon = LoadIcon(WindowClass.hInstance, MAKEINTRESOURCE(1));
+    WindowClass.hbrBackground = nullptr;
+    ::RegisterClassEx(&WindowClass);
+
+    // NOTE: Also this means that there will be no glitch when opening the game
+    DWORD ExStyle = WS_EX_APPWINDOW | WS_EX_NOREDIRECTIONBITMAP;
+
+    Window.WindowHandle = CreateWindowExW(ExStyle, WindowClass.lpszClassName, L"Blocky", WS_OVERLAPPEDWINDOW,
+                             CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
+                             0, 0, WindowClass.hInstance, 0);
+    Window.ModuleInstance = WindowClass.hInstance;
+
+    RECT ClientRect;
+    GetClientRect(Window.WindowHandle, &ClientRect);
+
+    Window.ClientAreaWidth = ClientRect.right - ClientRect.left;
+    Window.ClientAreaHeight = ClientRect.bottom - ClientRect.top;
+
+    Trace("Window Client Area: %u, %u", Window.ClientAreaWidth, Window.ClientAreaHeight);
+
+    return Window;
+}
+
+int main(int argc, char** argv)
+{
+    Trace("Hello, Blocky!");
+
+    // Creates and shows the window
+    game_window Window = CreateGameWindow();
+
+    game_renderer Renderer = CreateGameRenderer(Window);
+
+    // First resize
+    {
+        RecreateSwapChain(&Renderer, Window.ClientAreaWidth, Window.ClientAreaHeight);
+
+        // This just set width and height of the window
+        ShowWindow(Window.WindowHandle, SW_SHOW);
+    }
+
+    // Timestep
+    f32 TimeStep = 0.0f;
+
+    LARGE_INTEGER LastCounter;
+    ::QueryPerformanceCounter(&LastCounter);
+
+    // NOTE: This value represent how many increments of performance counter is happening
+    LARGE_INTEGER CounterFrequency;
+    ::QueryPerformanceFrequency(&CounterFrequency);
+
+    // Game loop
+    bool IsRunning = true;
+    while (IsRunning)
+    {
+        // Process events
+        MSG Message;
+        while (::PeekMessage(&Message, nullptr, 0, 0, PM_REMOVE))
+        {
+            if (Message.message == WM_QUIT)
+            {
+                IsRunning = false;
+            }
+
+            ::TranslateMessage(&Message);
+            ::DispatchMessage(&Message);
+        }
+
+        if (Renderer.SwapChainSize.width != g_ClientWidth || Renderer.SwapChainSize.height != g_ClientHeight)
+        {
+            RecreateSwapChain(&Renderer, g_ClientWidth, g_ClientHeight);
+        }
+
+        // Do not render when minimized
+        if (!g_IsMinimized)
+        {
+            BeginRender(&Renderer);
+            EndRender(&Renderer);
+        }
+
+        // Timestep
+        LARGE_INTEGER EndCounter;
+        ::QueryPerformanceCounter(&EndCounter);
+
+        i64 CounterElapsed = EndCounter.QuadPart - LastCounter.QuadPart;
+        TimeStep = (CounterElapsed / static_cast<f32>(CounterFrequency.QuadPart));
+        LastCounter = EndCounter;
+    }
+
+    return 0;
+}

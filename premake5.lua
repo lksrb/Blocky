@@ -21,7 +21,10 @@ workspace "Blocky"
 		".editorconfig",
 		".gitignore",
 		"Dependencies.lua",
-		"premake5.lua"
+		"premake5.lua",
+		"Resources/Quad.glsl",
+		"Blocky/Blocky.lua",
+		"Blocky-ResourcePacker/Blocky-ResourcePacker.lua",
 	}
 
 	flags {
@@ -31,65 +34,10 @@ workspace "Blocky"
 -- Output directory for binaries
 outputdir = "%{cfg.buildcfg}-%{cfg.system}-%{cfg.architecture}";
 
--- Project
-project "Blocky"
-	language "C++"
-	cppdialect "C++20"
-	staticruntime "on"
-	floatingpoint "fast"
-	debugdir "%{wks.location}"
+-- Main executable
+group ""
+include "Blocky/Blocky.lua"
 
-	targetdir ("%{wks.location}/bin/" .. outputdir .. "/%{prj.name}")
-	objdir ("%{wks.location}/bin-obj/" .. outputdir .. "/%{prj.name}")
-
-	files {
-		"Source/**.h",
-		"Source/**.cpp",
-	}
-
-	includedirs {
-		"Source",
-		"%{IncludeDir.VulkanSDK}"
-	}
-
-	links { 
-		"%{Library.Vulkan}" 
-	}
-
-	defines {
-		"_CRT_SECURE_NO_WARNINGS",
-		"NOMINMAX"
-	}
-
-	filter "system:windows"
-		systemversion "latest"
-		defines { "BK_PLATFORM_WIN32" }
-
-		-- Exclude all .cpp files from build by default
-	filter "files:Source/**.cpp"
-		flags "ExcludeFromBuild"
-
-	-- List of files to build
-	local includedFiles = {
-	    "Source/Win32_Blocky.cpp"
-	}
-
-	-- Simply iterate over them and remove the set flag
-	for _, file in ipairs(includedFiles) do
-	    filter("files:" .. file)
-	        removeflags "ExcludeFromBuild"
-	end
-
-	filter "configurations:Debug"
-		kind "ConsoleApp"
-		defines { "BK_DEBUG", "ENABLE_VALIDATION_LAYERS=1" }
-		runtime "Debug"
-		symbols "on"
-
-	filter "configurations:Release"
-		kind "ConsoleApp"
-		defines { "BK_RELEASE", "ENABLE_VALIDATION_LAYERS=0" }
-		runtime "Release"
-		optimize "Speed"
-		symbols "on"
-		flags { "LinkTimeOptimization" }
+-- Tools
+group "Tools"
+include "Blocky-ResourcePacker/Blocky-ResourcePacker.lua"

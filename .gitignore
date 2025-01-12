@@ -103,3 +103,9 @@ Dependencies/Vulkan/
 
 # Logs
 *.log
+
+# Resources
+PackedResources.blp
+
+# Cache
+Resources/Cache/**

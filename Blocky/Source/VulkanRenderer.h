@@ -1,4 +1,7 @@
 #include "Vulkan.h"
+#include "VulkanBuffer.h"
+#include "VulkanShader.h"
+#include "VulkanPipeline.h"
 
 // Double-buffer is sufficient
 #define FIF 2
@@ -6,30 +9,81 @@
 static constexpr inline u32 c_MaxQuadsPerBatch = 2048 * 1;
 static constexpr inline u32 c_MaxQuadVertices = c_MaxQuadsPerBatch * 4;
 static constexpr inline u32 c_MaxQuadIndices = c_MaxQuadsPerBatch * 6;
-
 static constexpr inline u32 c_MaxTexturesPerDrawCall = 32; // TODO: Get this from the driver
 
-//static constexpr inline V4 c_QuadVertexPositions[4]
-//{
-//    { -0.5f, -0.5f, 0.0f, 1.0f },
-//    {  0.5f, -0.5f, 0.0f, 1.0f },
-//    {  0.5f,  0.5f, 0.0f, 1.0f },
-//    { -0.5f,  0.5f, 0.0f, 1.0f }
-//};
-//
+struct v2
+{
+    f32 X, Y;
+};
+
+struct v3
+{
+    f32 X, Y, Z;
+};
+
+struct v4
+{
+    f32 X, Y, Z, W;
+};
+
+static constexpr inline v4 c_QuadVertexPositions[4]
+{
+    { -0.5f, -0.5f, 0.0f, 1.0f },
+    {  0.5f, -0.5f, 0.0f, 1.0f },
+    {  0.5f,  0.5f, 0.0f, 1.0f },
+    { -0.5f,  0.5f, 0.0f, 1.0f }
+};
+
+// Each face has to have a normal vector, so unfortunately we cannot encode cube as 8 vertices
+static constexpr inline v4 c_CubeVertexPositions[24] =
+{
+    // Front face (+Z)
+    { -0.5f, -0.5f,  0.5f, 1.0f },
+    {  0.5f, -0.5f,  0.5f, 1.0f },
+    {  0.5f,  0.5f,  0.5f, 1.0f },
+    { -0.5f,  0.5f,  0.5f, 1.0f },
+
+    // Back face (-Z)
+    {  0.5f, -0.5f, -0.5f, 1.0f },
+    { -0.5f, -0.5f, -0.5f, 1.0f },
+    { -0.5f,  0.5f, -0.5f, 1.0f },
+    {  0.5f,  0.5f, -0.5f, 1.0f },
+
+    // Left face (-X)
+    { -0.5f, -0.5f, -0.5f, 1.0f },
+    { -0.5f, -0.5f,  0.5f, 1.0f },
+    { -0.5f,  0.5f,  0.5f, 1.0f },
+    { -0.5f,  0.5f, -0.5f, 1.0f },
+
+    // Right face (+X)
+    {  0.5f, -0.5f,  0.5f, 1.0f },
+    {  0.5f, -0.5f, -0.5f, 1.0f },
+    {  0.5f,  0.5f, -0.5f, 1.0f },
+    {  0.5f,  0.5f,  0.5f, 1.0f },
+
+    // Top face (+Y)
+    { -0.5f,  0.5f,  0.5f, 1.0f },
+    {  0.5f,  0.5f,  0.5f, 1.0f },
+    {  0.5f,  0.5f, -0.5f, 1.0f },
+    { -0.5f,  0.5f, -0.5f, 1.0f },
+
+    // Bottom face (-Y)
+    { -0.5f, -0.5f, -0.5f, 1.0f },
+    {  0.5f, -0.5f, -0.5f, 1.0f },
+    {  0.5f, -0.5f,  0.5f, 1.0f },
+    { -0.5f, -0.5f,  0.5f, 1.0f }
+};
+
 //struct PushConstantBuffer
 //{
 //    M4 CameraViewProjection;
 //};
-//
-//struct QuadVertex
-//{
-//    V3 Position;
-//    V4 Color;
-//    V2 TextureCoord;
-//    u32 TextureIndex;
-//    V2 TilingFactor;
-//};
+
+struct cube_vertex
+{
+    v3 Position;
+    v4 Color;
+};
 
 struct queue_family_indices
 {
@@ -77,7 +131,7 @@ struct game_renderer
     VkImage Images[FIF];
 
     // Depth
-    bool DepthTesting = true;
+    bool DepthTesting = false;
     VkImage DepthImages[FIF];
     VkDeviceMemory DepthImageMemories[FIF];
     VkImageView DepthImagesViews[FIF];
@@ -85,8 +139,9 @@ struct game_renderer
     VkFramebuffer FrameBuffers[FIF];
     VkCommandBuffer RenderCommandBuffers[FIF];
 
-    bool ResizeSwapChain = true;
+    bool ResizeSwapChain = false;
 
+    VkExtent2D SwapChainSize = {};
     VkSwapchainKHR SwapChain = nullptr;
     VkRenderPass RenderPass = nullptr;
     VkSurfaceCapabilitiesKHR SurfaceCapabilities;
@@ -95,17 +150,21 @@ struct game_renderer
     u32 ImageIndex = 0;
 
     // Batch renderer
+    graphics_pipeline QuadPipeline;
+    shader QuadShader;
+
     //V4 ClearColor = { 0.2f, 0.3f, 0.8f, 1.0f };
     //Texture2D DefaultWhiteTexture;
     //Texture2D TextureStack[c_MaxTexturesPerDrawCall] = {};
-    u32 TextureStackIndex = 0;
-
-    VkDescriptorSet DescriptorSets[FIF];
-    VkDescriptorSetLayout DescriptorSetLayout;
-    VkDescriptorPool DescriptorPool;
+    //u32 TextureStackIndex = 0;
+    //
+    //VkDescriptorSet DescriptorSets[FIF];
+    //VkDescriptorSetLayout DescriptorSetLayout;
+    //VkDescriptorPool DescriptorPool;
 
     //PushConstantBuffer PushConstant;
 
+    //vulkan_buffer Quad
     // Solid Quads
     //IndexBuffer QuadIndexBuffer;
     //Shader QuadShader;
@@ -129,9 +188,9 @@ static VkBool32 VKAPI_CALL VulkanDebugCallback(VkDebugUtilsMessageSeverityFlagBi
     switch (messageSeverity)
     {
         //case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT: FAA_TRACE("Validation layer: %s", pCallbackData->pMessage); break;
-        case VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT:    Log("Validation layer[INFO]: %s", pCallbackData->pMessage); break;
-        case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT: Log("Validation layer[WARN]: %s", pCallbackData->pMessage); break;
-        case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:   Log("Validation layer[ERROR]: %s", pCallbackData->pMessage); break;
+        case VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT:    Info("Validation layer: %s", pCallbackData->pMessage); break;
+        case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT: Warn("Validation layer: %s", pCallbackData->pMessage); break;
+        case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:   Err("Validation layer: %s", pCallbackData->pMessage); break;
     }
 
     return VK_FALSE;
@@ -377,7 +436,7 @@ static void InitializeVulkan(game_renderer* Renderer, game_window Window)
         if (deviceCount > 5)
         {
             deviceCount = 5;
-            Log("[WARN] User has more than 5 GPUs!");
+            Trace("[WARN] User has more than 5 GPUs!");
         }
 
         VkPhysicalDevice devices[5];
@@ -648,8 +707,69 @@ static void InitializeRendering(game_renderer* Renderer)
     }
 }
 
+buffer ReadBinary(const char* path)
+{
+    buffer Result;
+
+    HANDLE FileHandle = ::CreateFileA(path, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr);
+    if (FileHandle != INVALID_HANDLE_VALUE)
+    {
+        DWORD dwBytesRead = 0;
+        DWORD dwBytesWritten = 0;
+        LARGE_INTEGER size;
+        if (::GetFileSizeEx(FileHandle, &size))
+        {
+            // NOTE: We allocate more but that does not matter for now
+            u8* data = static_cast<u8*>(::VirtualAlloc(nullptr, size.QuadPart, MEM_COMMIT, PAGE_READWRITE));
+
+            if (::ReadFile(FileHandle, data, static_cast<DWORD>(size.QuadPart), &dwBytesRead, nullptr))
+            {
+                Result.Data = data;
+                Result.Size = static_cast<u32>(size.QuadPart);
+            }
+            else
+            {
+                ::VirtualFree(data, 0, MEM_RELEASE);
+            }
+        }
+
+        ::CloseHandle(FileHandle);
+    }
+
+    return Result;
+}
+
 static void InitializeRenderingResources(game_renderer* Renderer)
 {
+    // Load shader
+    {
+        buffer Vertex = {};
+        buffer Fragment = {};
+
+        buffer Resources = ReadBinary("PackedResources.blp");
+        u8* At = static_cast<u8*>(Resources.Data);
+
+        // BLPF magic
+        At += 4;
+
+        // Load Shader Code
+        {
+            u32 AssetSize = *(u32*)(At);
+            At += 4;
+
+            Vertex = { At, AssetSize };
+            At += AssetSize;
+
+            AssetSize = *(u32*)(At);
+            At += 4;
+
+            Fragment = { At, AssetSize };
+            At += AssetSize;
+        }
+
+        ShaderCreate(&Renderer->QuadShader, Renderer->Device, Vertex, Fragment);
+    }
+
 #if 0
     // White texture for texture-less quads
     {
@@ -778,9 +898,188 @@ static void InitializeRenderingResources(game_renderer* Renderer)
         {
             vertexBuffer.Create(c_MaxQuadVertices * sizeof(QuadVertex));
         }
+}
+#endif
+}
+
+static void RecreateSwapChain(game_renderer* Renderer, u32 Width, u32 Height)
+{
+    Assert(Width != 0 && Height != 0, "Width or height are 0s!");
+
+    // Wait for GPU to finish
+    vkDeviceWaitIdle(Renderer->Device);
+
+    // Store it for dynamic viewport and scissors 
+    Renderer->SwapChainSize = { Width, Height };
+
+    // Query for swap chain capabilities
+    // NOTE: This needs to be called every time to ensure that vulkan caches internal copy?????
+    VkAssert(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(Renderer->PhysicalDevice, Renderer->Surface, &Renderer->SurfaceCapabilities));
+
+    // Check support for features
+    VkSurfaceTransformFlagBitsKHR surfaceTransform = Renderer->SurfaceCapabilities.currentTransform;
+    if (Renderer->SurfaceCapabilities.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR)
+    {
+        surfaceTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
     }
+
+    // Find a supported composite alpha format (not all devices support alpha opaque)
+    VkCompositeAlphaFlagBitsKHR compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+
+    // Simply select the first composite alpha format available
+    VkCompositeAlphaFlagBitsKHR compositeAlphaFlags[] = {
+        VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
+        VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR,
+        VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR,
+        VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR,
+    };
+    for (auto compositeAlphaFlag : compositeAlphaFlags)
+    {
+        if (Renderer->SurfaceCapabilities.supportedCompositeAlpha & compositeAlphaFlag)
+        {
+            compositeAlpha = compositeAlphaFlag;
+            break;
+        }
+    }
+    // TODO: For maximum device support this needs to be updated
+
+    // Create swapchain
+    {
+        VkSwapchainCreateInfoKHR createInfo = {};
+        createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+        createInfo.surface = Renderer->Surface;
+        createInfo.minImageCount = FIF;
+        createInfo.imageFormat = Renderer->SurfaceFormat.format;
+        createInfo.imageColorSpace = Renderer->SurfaceFormat.colorSpace;
+        createInfo.imageExtent = { Renderer->SurfaceCapabilities.currentExtent.width, Renderer->SurfaceCapabilities.currentExtent.height };
+        createInfo.imageArrayLayers = 1;
+        createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+        createInfo.preTransform = surfaceTransform;
+        createInfo.compositeAlpha = compositeAlpha;
+        //createInfo.presentMode = VK_PRESENT_MODE_MAILBOX_KHR ; // V-Sync
+        createInfo.presentMode = VK_PRESENT_MODE_FIFO_KHR; // V-Sync
+        // Setting clipped to true allows the implementation to discard rendering outside of the surface area
+        createInfo.clipped = true;
+        createInfo.oldSwapchain = Renderer->SwapChain; // Using old swapchain
+        createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE; // TODO: Investigate 
+
+        // Create new swapchain
+        VkSwapchainKHR newSwapchain = nullptr;
+        VkAssert(vkCreateSwapchainKHR(Renderer->Device, &createInfo, nullptr, &newSwapchain));
+
+        // Get swapchain images
+        u32 imageCount;
+        VkAssert(vkGetSwapchainImagesKHR(Renderer->Device, newSwapchain, &imageCount, nullptr));
+        Assert(imageCount <= FIF, "imageCount <= FIF");
+        VkAssert(vkGetSwapchainImagesKHR(Renderer->Device, newSwapchain, &imageCount, Renderer->Images));
+
+        // Destroy old stuff if exists
+        if (Renderer->SwapChain)
+        {
+            // Color
+            for (auto framebuffer : Renderer->FrameBuffers)
+                vkDestroyFramebuffer(Renderer->Device, framebuffer, nullptr);
+            for (auto imageView : Renderer->ImageViews)
+                vkDestroyImageView(Renderer->Device, imageView, nullptr);
+
+            // Depth
+            if (Renderer->DepthTesting)
+            {
+                for (auto image : Renderer->DepthImages)
+                    vkDestroyImage(Renderer->Device, image, nullptr);
+                for (auto imageMemory : Renderer->DepthImageMemories)
+                    vkFreeMemory(Renderer->Device, imageMemory, nullptr);
+                for (auto imageView : Renderer->DepthImagesViews)
+                    vkDestroyImageView(Renderer->Device, imageView, nullptr);
+            }
+
+            vkDestroySwapchainKHR(Renderer->Device, Renderer->SwapChain, nullptr);
+        }
+
+        // Assign new swapchain
+        Renderer->SwapChain = newSwapchain;
+    }
+
+    // Color image views
+    for (u32 i = 0; i < FIF; ++i)
+    {
+        VkImageViewCreateInfo imageViewInfo = {};
+        imageViewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        imageViewInfo.image = Renderer->Images[i];
+        imageViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        imageViewInfo.format = Renderer->SurfaceFormat.format;
+        imageViewInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+        imageViewInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+        imageViewInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+        imageViewInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+        imageViewInfo.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+        VkAssert(vkCreateImageView(Renderer->Device, &imageViewInfo, nullptr, &Renderer->ImageViews[i]));
+    }
+
+#if 0
+    // Depth resources
+    if (Renderer->DepthTesting)
+    {
+        for (u32 i = 0; i < FIF; ++i)
+        {
+            VkImageCreateInfo imageCreateInfo = {};
+            imageCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+            imageCreateInfo.pNext = nullptr;
+            imageCreateInfo.imageType = VK_IMAGE_TYPE_2D;
+            imageCreateInfo.extent = { width, height, 1 };
+            imageCreateInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+            imageCreateInfo.format = Renderer->DepthFormat;
+            imageCreateInfo.arrayLayers = 1;
+            imageCreateInfo.mipLevels = 1;
+            imageCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+            imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+            imageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+            imageCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+            VkAssert(vkCreateImage(Renderer->Device, &imageCreateInfo, nullptr, &Renderer->DepthImages[i]));
+
+            // Image memory
+            VkMemoryRequirements memRequirements;
+            vkGetImageMemoryRequirements(Renderer->Device, Renderer->DepthImages[i], &memRequirements);
+            VkMemoryAllocateInfo allocInfo = {};
+            allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+            allocInfo.allocationSize = memRequirements.size;
+            allocInfo.memoryTypeIndex = Vulkan::FindMemoryType(memRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+            VkAssert(vkAllocateMemory(Renderer->Device, &allocInfo, nullptr, &Renderer->DepthImageMemories[i]));
+            VkAssert(vkBindImageMemory(Renderer->Device, Renderer->DepthImages[i], Renderer->DepthImageMemories[i], 0));
+
+            // Image view
+            VkImageViewCreateInfo createInfo = {};
+            createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+            createInfo.image = Renderer->DepthImages[i];
+            createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+            createInfo.format = Renderer->DepthFormat;
+            createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+            createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+            createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+            createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+            createInfo.subresourceRange = { VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1 };
+            VkAssert(vkCreateImageView(Renderer->Device, &createInfo, nullptr, &Renderer->DepthImagesViews[i]));
+    }
+}
 #endif
 
+    // Framebuffers
+    for (u32 i = 0; i < FIF; ++i)
+    {
+        VkImageView attachments[] = { Renderer->ImageViews[i], Renderer->DepthImagesViews[i] };
+        VkFramebufferCreateInfo framebufferInfo = {};
+        framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+        framebufferInfo.renderPass = Renderer->RenderPass;
+        framebufferInfo.attachmentCount = Renderer->DepthTesting ? CountOf(attachments) : (CountOf(attachments) - 1);
+        framebufferInfo.pAttachments = attachments;
+        framebufferInfo.width = Width;
+        framebufferInfo.height = Height;
+        framebufferInfo.layers = 1;
+        VkAssert(vkCreateFramebuffer(Renderer->Device, &framebufferInfo, nullptr, &Renderer->FrameBuffers[i]));
+    }
+
+    Trace("Swapchain resized! %u, %u", Width, Height);
 }
 
 static game_renderer CreateGameRenderer(game_window Window)
@@ -790,16 +1089,156 @@ static game_renderer CreateGameRenderer(game_window Window)
     InitializeRendering(&Renderer);
     InitializeRenderingResources(&Renderer);
 
-    Log("Game renderer initialized.");
+    Trace("Game renderer initialized.");
     return Renderer;
 }
 
 static void BeginRender(game_renderer* Renderer)
 {
+    bool justResized = false;
 
+    if (Renderer->ResizeSwapChain)
+    {
+        Renderer->ResizeSwapChain = false;
+        RecreateSwapChain(Renderer, Renderer->SwapChainSize.width, Renderer->SwapChainSize.height);
+    }
+
+    // Wait for the previous frame to finish - blocks cpu until signaled
+    VkAssert(vkWaitForFences(Renderer->Device, 1, &Renderer->InFlightFences[Renderer->CurrentFrame], VK_TRUE, UINT64_MAX));
+
+    VkSemaphore currentSemaphore = Renderer->PresentSemaphores[Renderer->CurrentFrame];
+    VkResult result = vkAcquireNextImageKHR(Renderer->Device, Renderer->SwapChain, UINT64_MAX, currentSemaphore, nullptr, &Renderer->ImageIndex);
+
+    if (result == VK_SUBOPTIMAL_KHR || result == VK_ERROR_OUT_OF_DATE_KHR)
+    {
+        Renderer->ResizeSwapChain = true;
+    }
+
+    //// Reset batch renderer
+    //{
+    //    Renderer->TextureStackIndex = 1;
+
+    //    Renderer->QuadVertexDataPtr = Renderer->QuadVertexDataBase;
+    //    Renderer->QuadIndexCount = 0;
+
+    //    Renderer->SemiTransparentQuadVertexDataPtr = Renderer->SemiTransparentQuadVertexDataBase;
+    //    Renderer->SemiTransparentQuadIndexCount = 0;
+    //}
 }
 
 static void EndRender(game_renderer* Renderer)
 {
+    // Record command buffer
+    {
+        VkCommandBufferBeginInfo beginInfo = {};
+        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        beginInfo.pNext = nullptr;
+        beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+        beginInfo.pInheritanceInfo = nullptr;
+        VkCommandBuffer commandBuffer = Renderer->RenderCommandBuffers[Renderer->CurrentFrame];
+        VkAssert(vkBeginCommandBuffer(commandBuffer, &beginInfo));
 
+        VkClearValue clearValue[2];
+        clearValue[0].color = { 0.2f, 0.3f, 0.8f, 1.0f };
+        clearValue[1].depthStencil = { 1.0f, 0 };
+
+        // Prepass
+        //CmdPrepass(commandBuffer);
+
+        VkRenderPassBeginInfo renderPassBeginInfo = {};
+        renderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+        renderPassBeginInfo.renderPass = Renderer->RenderPass;
+        renderPassBeginInfo.renderArea.offset = { 0, 0 };
+        renderPassBeginInfo.renderArea.extent = Renderer->SwapChainSize;
+        renderPassBeginInfo.clearValueCount = Renderer->DepthTesting ? CountOf(clearValue) : (CountOf(clearValue) - 1);
+        renderPassBeginInfo.pClearValues = clearValue;
+        renderPassBeginInfo.framebuffer = Renderer->FrameBuffers[Renderer->ImageIndex];
+        vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+        VkViewport viewport = {};
+        viewport.x = 0.0f;
+        viewport.y = static_cast<f32>(Renderer->SwapChainSize.width);
+        viewport.width = static_cast<f32>(Renderer->SwapChainSize.height);
+        viewport.height = viewport.width * -1.0f;
+        viewport.minDepth = 0.0f;
+        viewport.maxDepth = 1.0f;
+        vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+
+        VkRect2D scissor = {};
+        scissor.offset = { 0,0 };
+        scissor.extent = Renderer->SwapChainSize;
+        vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+
+        //// Quad pass
+        //if (Renderer->QuadIndexCount)
+        //{
+        //    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Renderer->QuadPipeline.m_PipelineLayoutHandle, 0, 1, &Renderer->DescriptorSets[Renderer->CurrentFrame], 0, nullptr);
+        //    vkCmdPushConstants(commandBuffer, Renderer->QuadPipeline.m_PipelineLayoutHandle, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstantBuffer), &Renderer->PushConstant);
+        //    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Renderer->QuadPipeline.m_PipelineHandle);
+
+        //    VkDeviceSize offset[] = { 0 };
+        //    vkCmdBindVertexBuffers(commandBuffer, 0, 1, &Renderer->QuadVertexBuffers[Renderer->CurrentFrame].BufferHandle, offset);
+        //    vkCmdBindIndexBuffer(commandBuffer, Renderer->QuadIndexBuffeRenderer->m_BufferHandle, 0, VK_INDEX_TYPE_UINT32);
+        //    vkCmdDrawIndexed(commandBuffer, Renderer->QuadIndexCount, 1, 0, 0, 0);
+        //}
+
+        //// Render semi-transparent next
+        //vkCmdNextSubpass(commandBuffer, VK_SUBPASS_CONTENTS_INLINE);
+
+        //// Semi-transparent quads
+        //if (Renderer->SemiTransparentQuadIndexCount)
+        //{
+        //    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Renderer->SemiTransparentQuadPipeline.m_PipelineLayoutHandle, 0, 1, &Renderer->DescriptorSets[Renderer->CurrentFrame], 0, nullptr);
+        //    vkCmdPushConstants(commandBuffer, Renderer->SemiTransparentQuadPipeline.m_PipelineLayoutHandle, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstantBuffer), &Renderer->PushConstant);
+        //    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Renderer->SemiTransparentQuadPipeline.m_PipelineHandle);
+
+        //    VkDeviceSize offset[] = { 0 };
+        //    vkCmdBindVertexBuffers(commandBuffer, 0, 1, &Renderer->SemiTransparentQuadVertexBuffers[Renderer->CurrentFrame].BufferHandle, offset);
+        //    vkCmdBindIndexBuffer(commandBuffer, Renderer->QuadIndexBuffeRenderer->m_BufferHandle, 0, VK_INDEX_TYPE_UINT32);
+        //    vkCmdDrawIndexed(commandBuffer, Renderer->SemiTransparentQuadIndexCount, 1, 0, 0, 0);
+        //}
+
+        vkCmdEndRenderPass(commandBuffer);
+
+        vkEndCommandBuffer(commandBuffer);
+    }
+
+    // Submit command buffers
+    {
+        VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+
+        VkSubmitInfo submitInfo = {};
+        submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+        submitInfo.commandBufferCount = 1;
+        submitInfo.pCommandBuffers = &Renderer->RenderCommandBuffers[Renderer->CurrentFrame];
+        submitInfo.waitSemaphoreCount = 1;
+        submitInfo.pWaitSemaphores = &Renderer->PresentSemaphores[Renderer->CurrentFrame];
+        submitInfo.signalSemaphoreCount = 1;
+        submitInfo.pSignalSemaphores = &Renderer->RenderFinishedSemaphores[Renderer->CurrentFrame];
+        submitInfo.pWaitDstStageMask = &waitStage;
+
+        VkAssert(vkResetFences(Renderer->Device, 1, &Renderer->InFlightFences[Renderer->CurrentFrame]));
+        VkAssert(vkQueueSubmit(Renderer->GraphicsQueue, 1, &submitInfo, Renderer->InFlightFences[Renderer->CurrentFrame]));
+    }
+
+    // Present rendered frame
+    {
+        VkPresentInfoKHR presentInfo = {};
+        presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+        presentInfo.waitSemaphoreCount = 1;
+        presentInfo.pWaitSemaphores = &Renderer->RenderFinishedSemaphores[Renderer->CurrentFrame];  // Wait for the frame to render
+        presentInfo.swapchainCount = 1;
+        presentInfo.pSwapchains = &Renderer->SwapChain;
+        presentInfo.pImageIndices = &Renderer->ImageIndex;
+
+        // TODO: Distinguish between graphics queue and present queue
+        VkResult result = vkQueuePresentKHR(Renderer->GraphicsQueue, &presentInfo);
+        if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
+        {
+            Renderer->ResizeSwapChain = true;
+        }
+    }
+
+    // Cycle frames in flights
+    Renderer->CurrentFrame = (Renderer->CurrentFrame + 1) % FIF;
 }
