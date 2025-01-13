@@ -19,7 +19,7 @@ using u32 = uint32_t;
 using u64 = uint64_t;
 
 #define Assert(__cond__, ...)
-#define Log(x, ...)
+#define Log(...) do { printf(__VA_ARGS__); printf("\n"); } while(0)
 
 // Shaderc and SPIR-V for cross-plaftform shader compilation (TODO: We should just invoke shaderc compiler's executable)
 #include <shaderc/shaderc.hpp>
@@ -277,7 +277,7 @@ static buffer ReadBinary(const char* path)
     return Buffer;
 }
 
-static void WriteShader(std::ostringstream& OutStream, const char* Path, bool ForceCompile = false)
+static void WriteShader(std::ostringstream& OutStream, const char* Path, bool ForceCompile = true)
 {
     ShaderCompilationResult result = CompileShader(Path, ForceCompile);
 
@@ -301,7 +301,8 @@ int main()
     OutStream << "BLPF";
 
     // Quad shader 
-    WriteShader(OutStream, "Resources/Quad.glsl");
+    //WriteShader(OutStream, "Resources/Quad.glsl");
+    WriteShader(OutStream, "Resources/SimpleQuad.glsl");
 
     // Write it all at once
     {

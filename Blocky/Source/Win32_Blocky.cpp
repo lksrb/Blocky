@@ -61,6 +61,49 @@
     printf(BK_RESET_COLOR "\n"); \
 } while(0)
 
+#define ENABLE_BITWISE_OPERATORS(Enum, SizeOfEnum)                   \
+constexpr Enum operator|(Enum inLHS, Enum inRHS)                     \
+{                                                                    \
+    return Enum(static_cast<SizeOfEnum>(inLHS) |                     \
+                static_cast<SizeOfEnum>(inRHS));                     \
+}                                                                    \
+                                                                     \
+constexpr Enum operator&(Enum inLHS, Enum inRHS)                     \
+{                                                                    \
+    return Enum(static_cast<SizeOfEnum>(inLHS) &                     \
+                static_cast<SizeOfEnum>(inRHS));                     \
+}                                                                    \
+                                                                     \
+constexpr Enum operator^(Enum inLHS, Enum inRHS)                     \
+{                                                                    \
+    return Enum(static_cast<SizeOfEnum>(inLHS) ^                     \
+                static_cast<SizeOfEnum>(inRHS));                     \
+}                                                                    \
+                                                                     \
+constexpr Enum operator~(Enum inLHS)                                 \
+{                                                                    \
+    return Enum(~static_cast<SizeOfEnum>(inLHS));                    \
+}                                                                    \
+                                                                     \
+constexpr Enum& operator|=(Enum& ioLHS, Enum inRHS)                  \
+{                                                                    \
+    ioLHS = ioLHS | inRHS;                                           \
+    return ioLHS;                                                    \
+}                                                                    \
+                                                                     \
+constexpr Enum& operator&=(Enum& ioLHS, Enum inRHS)                  \
+{                                                                    \
+    ioLHS = ioLHS & inRHS;                                           \
+    return ioLHS;                                                    \
+}                                                                    \
+                                                                     \
+constexpr Enum& operator^=(Enum& ioLHS, Enum inRHS)                  \
+{                                                                    \
+    ioLHS = ioLHS ^ inRHS;                                           \
+    return ioLHS;                                                    \
+}                                                                    \
+
+
 #include <stdio.h>
 #include <cstdint>
 
@@ -134,15 +177,41 @@ LRESULT Win32ProcedureHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             }
             break;
         }
+        case WM_SYSKEYUP:
+        case WM_SYSKEYDOWN:
+        case WM_KEYUP:
+        case WM_KEYDOWN:
+        {
+            //Log("Not raw");
+
+            u64 vkCode = wParam;
+            bool wasDown = (lParam & (1 << 30)) != 0;
+            bool isDown = (lParam & (1 << 31)) == 0;
+
+            // Don't allow repeats
+            if (isDown != wasDown)
+            {
+                switch (vkCode)
+                {
+                    case VK_ESCAPE:
+                    {
+                        PostQuitMessage(0);
+                        break;
+                    }
+                }
+            }
+
+            break;
+        }
         case WM_DESTROY:
         case WM_CLOSE:
         {
-            ::PostQuitMessage(0);
+            PostQuitMessage(0);
             break;
         }
         default:
         {
-            Result = ::DefWindowProc(hWnd, msg, wParam, lParam);
+            Result = DefWindowProc(hWnd, msg, wParam, lParam);
             break;
         }
     }
@@ -155,6 +224,20 @@ LRESULT Win32ProcedureHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 static game_window CreateGameWindow()
 {
     game_window Window;
+    const u32 DefaultWindowWidth = 1600;
+    const u32 DefaultWindowHeight = 900;
+
+    // Show window on primary window
+    // TODO: User should choose on which monitor to display
+    // TODO: Error handle
+    MONITORINFO PrimaryMonitorInfo = { sizeof(MONITORINFO) };
+    GetMonitorInfo(MonitorFromWindow(nullptr, MONITOR_DEFAULTTOPRIMARY), &PrimaryMonitorInfo);
+
+    // TODO: Fullscreen
+
+    // Center window
+    u32 WindowX = PrimaryMonitorInfo.rcMonitor.right / 2 - DefaultWindowWidth / 2;
+    u32 WindowY = PrimaryMonitorInfo.rcMonitor.bottom / 2 - DefaultWindowHeight / 2;
 
     // Create window
     WNDCLASSEX WindowClass = { sizeof(WindowClass) };
@@ -164,13 +247,13 @@ static game_window CreateGameWindow()
     WindowClass.hCursor = LoadCursor(0, IDC_ARROW);
     WindowClass.hIcon = LoadIcon(WindowClass.hInstance, MAKEINTRESOURCE(1));
     WindowClass.hbrBackground = nullptr;
-    ::RegisterClassEx(&WindowClass);
+    RegisterClassEx(&WindowClass);
 
     // NOTE: Also this means that there will be no glitch when opening the game
     DWORD ExStyle = WS_EX_APPWINDOW | WS_EX_NOREDIRECTIONBITMAP;
 
     Window.WindowHandle = CreateWindowExW(ExStyle, WindowClass.lpszClassName, L"Blocky", WS_OVERLAPPEDWINDOW,
-                             CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
+                             WindowX, WindowY, DefaultWindowWidth, DefaultWindowHeight,
                              0, 0, WindowClass.hInstance, 0);
     Window.ModuleInstance = WindowClass.hInstance;
 
@@ -206,11 +289,11 @@ int main(int argc, char** argv)
     f32 TimeStep = 0.0f;
 
     LARGE_INTEGER LastCounter;
-    ::QueryPerformanceCounter(&LastCounter);
+    QueryPerformanceCounter(&LastCounter);
 
     // NOTE: This value represent how many increments of performance counter is happening
     LARGE_INTEGER CounterFrequency;
-    ::QueryPerformanceFrequency(&CounterFrequency);
+    QueryPerformanceFrequency(&CounterFrequency);
 
     // Game loop
     bool IsRunning = true;
@@ -218,15 +301,15 @@ int main(int argc, char** argv)
     {
         // Process events
         MSG Message;
-        while (::PeekMessage(&Message, nullptr, 0, 0, PM_REMOVE))
+        while (PeekMessage(&Message, nullptr, 0, 0, PM_REMOVE))
         {
             if (Message.message == WM_QUIT)
             {
                 IsRunning = false;
             }
 
-            ::TranslateMessage(&Message);
-            ::DispatchMessage(&Message);
+            TranslateMessage(&Message);
+            DispatchMessage(&Message);
         }
 
         if (Renderer.SwapChainSize.width != g_ClientWidth || Renderer.SwapChainSize.height != g_ClientHeight)
@@ -243,7 +326,7 @@ int main(int argc, char** argv)
 
         // Timestep
         LARGE_INTEGER EndCounter;
-        ::QueryPerformanceCounter(&EndCounter);
+        QueryPerformanceCounter(&EndCounter);
 
         i64 CounterElapsed = EndCounter.QuadPart - LastCounter.QuadPart;
         TimeStep = (CounterElapsed / static_cast<f32>(CounterFrequency.QuadPart));

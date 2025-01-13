@@ -3,28 +3,17 @@
 #include "VulkanShader.h"
 #include "VulkanPipeline.h"
 
+#include "VertexBuffer.h"
+
+#include "Math/MyMath.h"
+
 // Double-buffer is sufficient
 #define FIF 2
 
-static constexpr inline u32 c_MaxQuadsPerBatch = 2048 * 1;
+static constexpr inline u32 c_MaxQuadsPerBatch = 1 << 8;
 static constexpr inline u32 c_MaxQuadVertices = c_MaxQuadsPerBatch * 4;
 static constexpr inline u32 c_MaxQuadIndices = c_MaxQuadsPerBatch * 6;
 static constexpr inline u32 c_MaxTexturesPerDrawCall = 32; // TODO: Get this from the driver
-
-struct v2
-{
-    f32 X, Y;
-};
-
-struct v3
-{
-    f32 X, Y, Z;
-};
-
-struct v4
-{
-    f32 X, Y, Z, W;
-};
 
 static constexpr inline v4 c_QuadVertexPositions[4]
 {
@@ -74,12 +63,12 @@ static constexpr inline v4 c_CubeVertexPositions[24] =
     { -0.5f, -0.5f,  0.5f, 1.0f }
 };
 
-//struct PushConstantBuffer
-//{
-//    M4 CameraViewProjection;
-//};
+struct push_constant_buffer
+{
+    m4 CameraViewProjection;
+};
 
-struct cube_vertex
+struct quad_vertex
 {
     v3 Position;
     v4 Color;
@@ -131,7 +120,7 @@ struct game_renderer
     VkImage Images[FIF];
 
     // Depth
-    bool DepthTesting = false;
+    bool DepthTesting = true;
     VkImage DepthImages[FIF];
     VkDeviceMemory DepthImageMemories[FIF];
     VkImageView DepthImagesViews[FIF];
@@ -153,6 +142,15 @@ struct game_renderer
     graphics_pipeline QuadPipeline;
     shader QuadShader;
 
+    push_constant_buffer PushConstant;
+
+    vulkan_buffer QuadIndexBuffer;
+    vertex_buffer QuadVertexBuffers[FIF];
+
+    quad_vertex QuadVertexDataBase[c_MaxQuadVertices];
+    quad_vertex* QuadVertexDataPtr = QuadVertexDataBase;
+    u32 QuadIndexCount = 0;
+
     //V4 ClearColor = { 0.2f, 0.3f, 0.8f, 1.0f };
     //Texture2D DefaultWhiteTexture;
     //Texture2D TextureStack[c_MaxTexturesPerDrawCall] = {};
@@ -161,26 +159,6 @@ struct game_renderer
     //VkDescriptorSet DescriptorSets[FIF];
     //VkDescriptorSetLayout DescriptorSetLayout;
     //VkDescriptorPool DescriptorPool;
-
-    //PushConstantBuffer PushConstant;
-
-    //vulkan_buffer Quad
-    // Solid Quads
-    //IndexBuffer QuadIndexBuffer;
-    //Shader QuadShader;
-    //
-    //QuadVertex QuadVertexDataBase[c_MaxQuadVertices];
-    //QuadVertex* QuadVertexDataPtr = QuadVertexDataBase;
-    //u32 QuadIndexCount = 0;
-    //VertexBuffer QuadVertexBuffers[FIF];
-    //GraphicsPipeline QuadPipeline;
-    //
-    //// Semi-transparent quads
-    //QuadVertex SemiTransparentQuadVertexDataBase[c_MaxQuadVertices];
-    //QuadVertex* SemiTransparentQuadVertexDataPtr = SemiTransparentQuadVertexDataBase;
-    //u32 SemiTransparentQuadIndexCount = 0;
-    //VertexBuffer SemiTransparentQuadVertexBuffers[FIF];
-    //GraphicsPipeline SemiTransparentQuadPipeline;
 };
 
 static VkBool32 VKAPI_CALL VulkanDebugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageType, const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData)
@@ -770,6 +748,107 @@ static void InitializeRenderingResources(game_renderer* Renderer)
         ShaderCreate(&Renderer->QuadShader, Renderer->Device, Vertex, Fragment);
     }
 
+    // Quad
+    {
+        // Index buffer
+        {
+            u32 QuadIndices[c_MaxQuadIndices];
+            u32 Offset = 0;
+            for (u32 i = 0; i < c_MaxQuadIndices; i += 6)
+            {
+                QuadIndices[i + 0] = Offset + 0;
+                QuadIndices[i + 1] = Offset + 1;
+                QuadIndices[i + 2] = Offset + 2;
+
+                QuadIndices[i + 3] = Offset + 2;
+                QuadIndices[i + 4] = Offset + 3;
+                QuadIndices[i + 5] = Offset + 0;
+
+                Offset += 4;
+            }
+
+            // Create staging buffer
+            vulkan_buffer StagingBuffer = VulkanBufferCreate(Renderer->Device, Renderer->PhysicalDevice, buffer_usage::TransferSource,
+                memory_property::HostVisible | memory_property::Coherent, sizeof(QuadIndices), true);
+
+            Renderer->QuadIndexBuffer = VulkanBufferCreate(Renderer->Device, Renderer->PhysicalDevice, buffer_usage::TransferDestination | buffer_usage::IndexBuffer,
+                memory_property::Local | memory_property::Coherent, sizeof(QuadIndices), false);
+
+            // Copy data to the staging buffer
+            memcpy(StagingBuffer.MappedData, QuadIndices, sizeof(QuadIndices));
+
+            // Submit immidiately
+            {
+                VkCommandBuffer CommandBuffer = nullptr;
+
+                VkCommandBufferAllocateInfo cmdBufAllocateInfo = {};
+                cmdBufAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+                cmdBufAllocateInfo.commandPool = Renderer->CommandPool;
+                cmdBufAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+                cmdBufAllocateInfo.commandBufferCount = 1;
+
+                VkAssert(vkAllocateCommandBuffers(Renderer->Device, &cmdBufAllocateInfo, &CommandBuffer));
+
+                VkCommandBufferBeginInfo commandBufferBeginInfo = {};
+                commandBufferBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+                VkAssert(vkBeginCommandBuffer(CommandBuffer, &commandBufferBeginInfo));
+                VulkanBufferSubmitFullCopy(CommandBuffer, StagingBuffer, Renderer->QuadIndexBuffer);
+                VkAssert(vkEndCommandBuffer(CommandBuffer));
+
+                VkSubmitInfo submitInfo = {};
+                submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+                submitInfo.commandBufferCount = 1;
+                submitInfo.pCommandBuffers = &CommandBuffer;
+
+                // Create fence to ensure that the command buffer has finished executing
+                VkFenceCreateInfo fenceCreateInfo = {};
+                fenceCreateInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+                fenceCreateInfo.flags = 0;
+                VkFence fence;
+                VkAssert(vkCreateFence(Renderer->Device, &fenceCreateInfo, nullptr, &fence));
+
+                // Submit to the queue
+                VkAssert(vkQueueSubmit(Renderer->GraphicsQueue, 1, &submitInfo, fence));
+
+                // Wait for the fence to signal that command buffer has finished executing
+                VkAssert(vkWaitForFences(Renderer->Device, 1, &fence, VK_TRUE, UINT64_MAX));
+
+                vkDestroyFence(Renderer->Device, fence, nullptr);
+                vkFreeCommandBuffers(Renderer->Device, Renderer->CommandPool, 1, &CommandBuffer);
+            }
+
+            VulkanBufferDestroy(Renderer->Device, StagingBuffer);
+        }
+
+        // Quad
+        {
+            // NOTE: For anything that is going to be read by the CPU
+            //VK_MEMORY_PROPERTY_HOST_CACHED_BIT
+
+            // Pipeline
+            {
+                Renderer->QuadPipeline = CreateGraphicsPipeline(Renderer->Device,
+                    Renderer->QuadShader,
+                    Renderer->RenderPass,
+                    vertex_buffer_layout
+                    {
+                        { AttributeType::Vec3, "a_Position" },
+                        { AttributeType::Vec4, "a_Color" },
+                    },
+                    vertex_buffer_layout{},
+                    sizeof(push_constant_buffer),
+                    nullptr,
+                    0);
+            }
+
+            // Vertex buffers
+            for (vertex_buffer& QuadVertexBuffer : Renderer->QuadVertexBuffers)
+            {
+                QuadVertexBuffer = VertexBufferCreate(Renderer->Device, Renderer->PhysicalDevice, c_MaxQuadVertices * sizeof(quad_vertex));
+            }
+        }
+    }
+
 #if 0
     // White texture for texture-less quads
     {
@@ -854,51 +933,6 @@ static void InitializeRenderingResources(game_renderer* Renderer)
             vkUpdateDescriptorSets(Renderer->Device, 1, &descriptorWrite, 0, nullptr);
         }
     }
-
-    // Quad batch
-    {
-        // Index buffer
-        {
-            u32 quadIndices[c_MaxQuadIndices];
-            u32 offset = 0;
-            for (u32 i = 0; i < c_MaxQuadIndices; i += 6)
-            {
-                quadIndices[i + 0] = offset + 0;
-                quadIndices[i + 1] = offset + 1;
-                quadIndices[i + 2] = offset + 2;
-
-                quadIndices[i + 3] = offset + 2;
-                quadIndices[i + 4] = offset + 3;
-                quadIndices[i + 5] = offset + 0;
-
-                offset += 4;
-            }
-
-            r.QuadIndexBuffer.Create(quadIndices, c_MaxQuadIndices * sizeof(u32));
-        }
-
-        r.QuadShader.Create(Assets::GetAsset(ShaderCodeAsset::Quad));
-        r.QuadPipeline.Create(
-            r.QuadShader,
-            r.RenderPass,
-            VertexBufferLayout
-            {
-                { AttributeType::Vec3, "a_Position" },
-                { AttributeType::Vec4, "a_Color" },
-                { AttributeType::Vec2, "a_TextureCoord"},
-                { AttributeType::UInt, "a_TextureIndex" },
-                { AttributeType::Vec2, "a_TilingFactor" },
-            },
-            VertexBufferLayout{},
-            sizeof(PushConstantBuffer),
-            r.DescriptorSetLayout,
-            0);
-
-        for (auto& vertexBuffer : r.QuadVertexBuffers)
-        {
-            vertexBuffer.Create(c_MaxQuadVertices * sizeof(QuadVertex));
-        }
-}
 #endif
 }
 
@@ -1016,7 +1050,6 @@ static void RecreateSwapChain(game_renderer* Renderer, u32 Width, u32 Height)
         VkAssert(vkCreateImageView(Renderer->Device, &imageViewInfo, nullptr, &Renderer->ImageViews[i]));
     }
 
-#if 0
     // Depth resources
     if (Renderer->DepthTesting)
     {
@@ -1026,7 +1059,7 @@ static void RecreateSwapChain(game_renderer* Renderer, u32 Width, u32 Height)
             imageCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
             imageCreateInfo.pNext = nullptr;
             imageCreateInfo.imageType = VK_IMAGE_TYPE_2D;
-            imageCreateInfo.extent = { width, height, 1 };
+            imageCreateInfo.extent = { Width, Height, 1 };
             imageCreateInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
             imageCreateInfo.format = Renderer->DepthFormat;
             imageCreateInfo.arrayLayers = 1;
@@ -1043,7 +1076,7 @@ static void RecreateSwapChain(game_renderer* Renderer, u32 Width, u32 Height)
             VkMemoryAllocateInfo allocInfo = {};
             allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
             allocInfo.allocationSize = memRequirements.size;
-            allocInfo.memoryTypeIndex = Vulkan::FindMemoryType(memRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+            allocInfo.memoryTypeIndex = VulkanFindMemoryType(Renderer->PhysicalDevice, memRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
             VkAssert(vkAllocateMemory(Renderer->Device, &allocInfo, nullptr, &Renderer->DepthImageMemories[i]));
             VkAssert(vkBindImageMemory(Renderer->Device, Renderer->DepthImages[i], Renderer->DepthImageMemories[i], 0));
@@ -1060,9 +1093,8 @@ static void RecreateSwapChain(game_renderer* Renderer, u32 Width, u32 Height)
             createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
             createInfo.subresourceRange = { VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1 };
             VkAssert(vkCreateImageView(Renderer->Device, &createInfo, nullptr, &Renderer->DepthImagesViews[i]));
+        }
     }
-}
-#endif
 
     // Framebuffers
     for (u32 i = 0; i < FIF; ++i)
@@ -1114,20 +1146,89 @@ static void BeginRender(game_renderer* Renderer)
         Renderer->ResizeSwapChain = true;
     }
 
-    //// Reset batch renderer
-    //{
-    //    Renderer->TextureStackIndex = 1;
+    // Reset batch renderer
+    {
+        //    Renderer->TextureStackIndex = 1;
 
-    //    Renderer->QuadVertexDataPtr = Renderer->QuadVertexDataBase;
-    //    Renderer->QuadIndexCount = 0;
+        Renderer->QuadVertexDataPtr = Renderer->QuadVertexDataBase;
+        Renderer->QuadIndexCount = 0;
+    }
+}
 
-    //    Renderer->SemiTransparentQuadVertexDataPtr = Renderer->SemiTransparentQuadVertexDataBase;
-    //    Renderer->SemiTransparentQuadIndexCount = 0;
-    //}
+struct CameraComponent
+{
+    m4 projection{ 1.0f };
+    m4 view{ 1.0f };
+
+    f32 orthographic_size = 15.0f;
+    f32 orthographic_near = -100.0f, orthographic_far = 100.0f;
+
+    f32 aspect_ratio = 0.0f;
+
+    f32 PerspectiveFOV = MyMath::PI_HALF;
+    f32 PerspectiveNear = 0.01f, PerspectiveFar = 1000.0f;
+
+    void RecalculateProjectionOrtho(u32 width, u32 height)
+    {
+        aspect_ratio = static_cast<f32>(width) / height;
+        f32 ortho_left = -0.5f * aspect_ratio * orthographic_size;
+        f32 ortho_right = 0.5f * aspect_ratio * orthographic_size;
+        f32 ortho_bottom = -0.5f * orthographic_size;
+        f32 ortho_top = 0.5f * orthographic_size;
+        projection = MyMath::Ortho(ortho_left, ortho_right, ortho_bottom, ortho_top, orthographic_near, orthographic_far);
+    }
+
+    void RecalculateProjectionPerspective(u32 width, u32 height)
+    {
+        aspect_ratio = static_cast<f32>(width) / height;
+        projection = MyMath::Perspective(PerspectiveFOV, aspect_ratio, PerspectiveNear, PerspectiveFar);
+    }
+
+    m4 ViewProjection() const { return projection * view; }
+};
+
+static void SubmitQuad(game_renderer* Renderer, v3 Translation, v3 Rotation, v3 Scale, v4 Color)
+{
+    m4 Transform = MyMath::Translate(m4(1.0f), Translation)
+        * MyMath::ToM4(QTN(Rotation))
+        * MyMath::Scale(m4(1.0f), Scale);
+
+    for (u32 i = 0; i < CountOf(c_CubeVertexPositions); i++)
+    {
+        Renderer->QuadVertexDataPtr->Position = v3(Transform * c_CubeVertexPositions[i]);
+        Renderer->QuadVertexDataPtr->Color = Color;
+        Renderer->QuadVertexDataPtr++;
+    }
+
+    Renderer->QuadIndexCount += 36;
 }
 
 static void EndRender(game_renderer* Renderer)
 {
+    CameraComponent camera;
+    {
+        v3 translation{ 0.0f, 1.0f, 3.0f};
+        v3 rotation{ -0.2f };
+        v3 scale{ 1.0f };
+
+        camera.RecalculateProjectionPerspective(Renderer->SwapChainSize.width, Renderer->SwapChainSize.height);
+
+        camera.view = MyMath::Translate(m4(1.0f), translation)
+            * MyMath::ToM4(QTN(rotation))
+            * MyMath::Scale(m4(1.0f), scale);
+
+        camera.view = MyMath::Inverse(camera.view);
+
+        Renderer->PushConstant.CameraViewProjection = camera.ViewProjection();
+    }
+    v3 T = v3{0.0f};
+    SubmitQuad(Renderer, T, v3(0.0f), v3(1.0f), v4(1.0f, 0.0f, 0.0f, 1.0f));
+    T.x += 1.0f;
+    SubmitQuad(Renderer, T, v3(0.0f), v3(1.0f), v4(0.0f, 1.0f, 0.0f, 1.0f));
+    T.x += 1.0f;
+    SubmitQuad(Renderer, T, v3(0.0f), v3(1.0f), v4(0.0f, 0.0f, 1.0f, 1.0f));
+    T.x += 1.0f;
+
     // Record command buffer
     {
         VkCommandBufferBeginInfo beginInfo = {};
@@ -1143,6 +1244,13 @@ static void EndRender(game_renderer* Renderer)
         clearValue[1].depthStencil = { 1.0f, 0 };
 
         // Prepass
+        {
+            if (Renderer->QuadIndexCount > 0)
+            {
+                u32 VertexCount = static_cast<u32>(Renderer->QuadVertexDataPtr - Renderer->QuadVertexDataBase);
+                VertexBufferSetData(Renderer->QuadVertexBuffers[Renderer->CurrentFrame], commandBuffer, Renderer->QuadVertexDataBase, VertexCount * sizeof(quad_vertex));
+            }
+        }
         //CmdPrepass(commandBuffer);
 
         VkRenderPassBeginInfo renderPassBeginInfo = {};
@@ -1157,9 +1265,9 @@ static void EndRender(game_renderer* Renderer)
 
         VkViewport viewport = {};
         viewport.x = 0.0f;
-        viewport.y = static_cast<f32>(Renderer->SwapChainSize.width);
-        viewport.width = static_cast<f32>(Renderer->SwapChainSize.height);
-        viewport.height = viewport.width * -1.0f;
+        viewport.y = static_cast<f32>(Renderer->SwapChainSize.height);
+        viewport.width = static_cast<f32>(Renderer->SwapChainSize.width);
+        viewport.height = viewport.y * -1.0f;
         viewport.minDepth = 0.0f;
         viewport.maxDepth = 1.0f;
         vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
@@ -1169,34 +1277,18 @@ static void EndRender(game_renderer* Renderer)
         scissor.extent = Renderer->SwapChainSize;
         vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-        //// Quad pass
-        //if (Renderer->QuadIndexCount)
-        //{
-        //    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Renderer->QuadPipeline.m_PipelineLayoutHandle, 0, 1, &Renderer->DescriptorSets[Renderer->CurrentFrame], 0, nullptr);
-        //    vkCmdPushConstants(commandBuffer, Renderer->QuadPipeline.m_PipelineLayoutHandle, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstantBuffer), &Renderer->PushConstant);
-        //    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Renderer->QuadPipeline.m_PipelineHandle);
+        // Quad pass
+        if (Renderer->QuadIndexCount > 0)
+        {
+            //vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Renderer->QuadPipeline.m_PipelineLayoutHandle, 0, 1, &Renderer->DescriptorSets[Renderer->CurrentFrame], 0, nullptr);
+            vkCmdPushConstants(commandBuffer, Renderer->QuadPipeline.PipelineLayoutHandle, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(push_constant_buffer), &Renderer->PushConstant);
+            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Renderer->QuadPipeline.Handle);
 
-        //    VkDeviceSize offset[] = { 0 };
-        //    vkCmdBindVertexBuffers(commandBuffer, 0, 1, &Renderer->QuadVertexBuffers[Renderer->CurrentFrame].BufferHandle, offset);
-        //    vkCmdBindIndexBuffer(commandBuffer, Renderer->QuadIndexBuffeRenderer->m_BufferHandle, 0, VK_INDEX_TYPE_UINT32);
-        //    vkCmdDrawIndexed(commandBuffer, Renderer->QuadIndexCount, 1, 0, 0, 0);
-        //}
-
-        //// Render semi-transparent next
-        //vkCmdNextSubpass(commandBuffer, VK_SUBPASS_CONTENTS_INLINE);
-
-        //// Semi-transparent quads
-        //if (Renderer->SemiTransparentQuadIndexCount)
-        //{
-        //    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Renderer->SemiTransparentQuadPipeline.m_PipelineLayoutHandle, 0, 1, &Renderer->DescriptorSets[Renderer->CurrentFrame], 0, nullptr);
-        //    vkCmdPushConstants(commandBuffer, Renderer->SemiTransparentQuadPipeline.m_PipelineLayoutHandle, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstantBuffer), &Renderer->PushConstant);
-        //    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Renderer->SemiTransparentQuadPipeline.m_PipelineHandle);
-
-        //    VkDeviceSize offset[] = { 0 };
-        //    vkCmdBindVertexBuffers(commandBuffer, 0, 1, &Renderer->SemiTransparentQuadVertexBuffers[Renderer->CurrentFrame].BufferHandle, offset);
-        //    vkCmdBindIndexBuffer(commandBuffer, Renderer->QuadIndexBuffeRenderer->m_BufferHandle, 0, VK_INDEX_TYPE_UINT32);
-        //    vkCmdDrawIndexed(commandBuffer, Renderer->SemiTransparentQuadIndexCount, 1, 0, 0, 0);
-        //}
+            VkDeviceSize offset[] = { 0 };
+            vkCmdBindVertexBuffers(commandBuffer, 0, 1, &Renderer->QuadVertexBuffers[Renderer->CurrentFrame].DeviceLocalBuffer.Handle, offset);
+            vkCmdBindIndexBuffer(commandBuffer, Renderer->QuadIndexBuffer.Handle, 0, VK_INDEX_TYPE_UINT32);
+            vkCmdDrawIndexed(commandBuffer, Renderer->QuadIndexCount, 1, 0, 0, 0);
+        }
 
         vkCmdEndRenderPass(commandBuffer);
 

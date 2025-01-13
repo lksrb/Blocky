@@ -6,7 +6,7 @@ struct shader
     VkShaderModule FragmentShaderModule;
 };
 
-void ShaderCreate(shader* Shader, VkDevice Device, buffer VertexShader, buffer FragmentShader)
+inline void ShaderCreate(shader* Shader, VkDevice Device, buffer VertexShader, buffer FragmentShader)
 {
     // Vertex
     {
@@ -29,7 +29,7 @@ void ShaderCreate(shader* Shader, VkDevice Device, buffer VertexShader, buffer F
     }
 }
 
-void ShaderDestroy(shader* Shader, VkDevice Device)
+inline void ShaderDestroy(shader* Shader, VkDevice Device)
 {
     vkDestroyShaderModule(Device, Shader->VertexShaderModule, nullptr);
     vkDestroyShaderModule(Device, Shader->FragmentShaderModule, nullptr);

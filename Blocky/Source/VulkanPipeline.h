@@ -51,16 +51,16 @@ namespace Utils {
 
 }
 
-struct VertexBufferLayout
+struct vertex_buffer_layout
 {
     u32 Stride = 0;
     u32 AttributeCount = 0;
     VertexAttribute Attributes[FAA_VERTEX_BUFFER_LAYOUT_MAX_ATTRIBUTES];
 
-    VertexBufferLayout() = default;
+    vertex_buffer_layout() = default;
 
     // TODO: Replace initializer list
-    constexpr VertexBufferLayout(const std::initializer_list<VertexAttribute>& attributes)
+    constexpr vertex_buffer_layout(const std::initializer_list<VertexAttribute>& attributes)
     {
         // 16 attributes should be supported by every driver
         Assert(attributes.size() <= FAA_VERTEX_BUFFER_LAYOUT_MAX_ATTRIBUTES, "attributes.size() < FAA_VERTEX_BUFFER_LAYOUT_MAX_ATTRIBUTES");
@@ -87,15 +87,15 @@ struct VertexBufferLayout
 };
 struct graphics_pipeline
 {
-    VkPipeline PipelineHandle;
+    VkPipeline Handle;
     VkPipelineLayout PipelineLayoutHandle;
 };
 
 static graphics_pipeline CreateGraphicsPipeline(VkDevice Device,
     const shader& Shader,
     VkRenderPass renderPass,
-    const VertexBufferLayout& vertexLayout,
-    const VertexBufferLayout& instanceLayout,
+    const vertex_buffer_layout& vertexLayout,
+    const vertex_buffer_layout& instanceLayout,
     u32 pushConstantSize,
     VkDescriptorSetLayout descriptorSetLayout,
     u32 subpass)
@@ -313,16 +313,18 @@ static graphics_pipeline CreateGraphicsPipeline(VkDevice Device,
     pipelineCreateInfo.basePipelineHandle = nullptr; // Optional
     pipelineCreateInfo.basePipelineIndex = -1; // Optional
 
-    VkAssert(vkCreateGraphicsPipelines(Device, nullptr, 1, &pipelineCreateInfo, nullptr, &Pipeline.PipelineHandle));
+    VkAssert(vkCreateGraphicsPipelines(Device, nullptr, 1, &pipelineCreateInfo, nullptr, &Pipeline.Handle));
 
     Trace("Pipeline created!");
+
+    return Pipeline;
 }
 
 static void DestroyGraphicsPipeline(VkDevice Device, graphics_pipeline* Pipeline)
 {
     vkDestroyPipelineLayout(Device, Pipeline->PipelineLayoutHandle, nullptr);
-    vkDestroyPipeline(Device, Pipeline->PipelineHandle, nullptr);
+    vkDestroyPipeline(Device, Pipeline->Handle, nullptr);
 
-    Pipeline->PipelineHandle = nullptr;
+    Pipeline->Handle = nullptr;
     Pipeline->PipelineLayoutHandle = nullptr;
 }
