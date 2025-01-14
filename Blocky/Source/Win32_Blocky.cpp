@@ -143,7 +143,6 @@ struct buffer
 
 static u32 g_ClientWidth = 0;
 static u32 g_ClientHeight = 0;
-static bool g_IsMinimized = false;
 static bool g_DoResize = false;
 
 LRESULT Win32ProcedureHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
@@ -154,18 +153,6 @@ LRESULT Win32ProcedureHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
     {
         case WM_SIZE:
         {
-            if (wParam == SIZE_MINIMIZED)
-            {
-                g_IsMinimized = true;
-                Trace("Window minimized");
-            }
-            else if (wParam == SIZE_RESTORED)
-            {
-                // The window has been restored from minimized or maximized
-                g_IsMinimized = false;
-                Trace("Restored");
-            }
-
             u32 width = GET_X_LPARAM(lParam);
             u32 height = GET_Y_LPARAM(lParam);
 
@@ -274,6 +261,38 @@ static game_window CreateGameWindow()
     return Window;
 }
 
+struct camera_component
+{
+    m4 projection{ 1.0f };
+    m4 view{ 1.0f };
+
+    f32 orthographic_size = 15.0f;
+    f32 orthographic_near = -100.0f, orthographic_far = 100.0f;
+
+    f32 aspect_ratio = 0.0f;
+
+    f32 PerspectiveFOV = MyMath::PI_HALF;
+    f32 PerspectiveNear = 0.01f, PerspectiveFar = 1000.0f;
+
+    void RecalculateProjectionOrtho(u32 width, u32 height)
+    {
+        aspect_ratio = static_cast<f32>(width) / height;
+        f32 ortho_left = -0.5f * aspect_ratio * orthographic_size;
+        f32 ortho_right = 0.5f * aspect_ratio * orthographic_size;
+        f32 ortho_bottom = -0.5f * orthographic_size;
+        f32 ortho_top = 0.5f * orthographic_size;
+        projection = MyMath::Ortho(ortho_left, ortho_right, ortho_bottom, ortho_top, orthographic_near, orthographic_far);
+    }
+
+    void RecalculateProjectionPerspective(u32 width, u32 height)
+    {
+        aspect_ratio = static_cast<f32>(width) / height;
+        projection = MyMath::Perspective(PerspectiveFOV, aspect_ratio, PerspectiveNear, PerspectiveFar);
+    }
+
+    m4 GetViewProjection() const { return projection * view; }
+};
+
 int main(int argc, char** argv)
 {
     Trace("Hello, Blocky!");
@@ -311,6 +330,7 @@ int main(int argc, char** argv)
 
     // Game loop
     bool IsRunning = true;
+    bool IsMinimized = false;
     while (IsRunning)
     {
         // Process events
@@ -325,6 +345,8 @@ int main(int argc, char** argv)
             TranslateMessage(&Message);
             DispatchMessage(&Message);
         }
+
+        IsMinimized = IsIconic(Window.WindowHandle);
 
         if (g_DoResize)
         {
@@ -345,7 +367,7 @@ int main(int argc, char** argv)
         }
 
         // Do not render when minimized
-        if (!g_IsMinimized)
+        if (!IsMinimized)
         {
             BeginRender(&Renderer, Camera.GetViewProjection());
 

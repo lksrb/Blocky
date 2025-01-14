@@ -133,7 +133,6 @@ struct game_renderer
     VkExtent2D SwapChainSize = {};
     VkSwapchainKHR SwapChain = nullptr;
     VkRenderPass RenderPass = nullptr;
-    VkSurfaceCapabilitiesKHR SurfaceCapabilities;
 
     u32 CurrentFrame = 0;
     u32 ImageIndex = 0;
@@ -936,23 +935,43 @@ static void InitializeRenderingResources(game_renderer* Renderer)
 #endif
 }
 
-static void RecreateSwapChain(game_renderer* Renderer, u32 Width, u32 Height)
+static void RecreateSwapChain(game_renderer* Renderer, u32 RequestWidth, u32 RequestHeight)
 {
-    Assert(Width != 0 && Height != 0, "Width or height are 0s!");
+    Assert(RequestWidth != 0 && RequestHeight != 0, "Width or height are 0s!");
 
     // Wait for GPU to finish
     vkDeviceWaitIdle(Renderer->Device);
 
-    // Store it for dynamic viewport and scissors 
-    Renderer->SwapChainSize = { Width, Height };
-
     // Query for swap chain capabilities
-    // NOTE: This needs to be called every time to ensure that vulkan caches internal copy?????
-    VkAssert(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(Renderer->PhysicalDevice, Renderer->Surface, &Renderer->SurfaceCapabilities));
+
+    VkSurfaceCapabilitiesKHR SurfaceCapabilities;
+    VkAssert(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(Renderer->PhysicalDevice, Renderer->Surface, &SurfaceCapabilities));
+
+    VkExtent2D SwapchainExtent = {};
+
+    // If width (and height) equals the special value 0xFFFFFFFF, the size of the surface will be set by the swapchain
+    // Using Win + D crashes this application, because for some reason, this gets called at EndFrame with 0,0 as extent
+    if (SurfaceCapabilities.currentExtent.width == 0xFFFFFFFF || SurfaceCapabilities.currentExtent.width == 0 || SurfaceCapabilities.currentExtent.height == 0)
+    {
+        // If the surface size is undefined, the size is set to
+        // the size of the images requested.
+        SwapchainExtent.width = RequestWidth;
+        SwapchainExtent.height = RequestHeight;
+    }
+    else
+    {
+        // If the surface size is defined, the swap chain size must match
+        SwapchainExtent = SurfaceCapabilities.currentExtent;
+        RequestWidth = SurfaceCapabilities.currentExtent.width;
+        RequestHeight = SurfaceCapabilities.currentExtent.height;
+    }
+
+    // Store it for dynamic viewport and scissors 
+    Renderer->SwapChainSize = { RequestWidth, RequestHeight };
 
     // Check support for features
-    VkSurfaceTransformFlagBitsKHR surfaceTransform = Renderer->SurfaceCapabilities.currentTransform;
-    if (Renderer->SurfaceCapabilities.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR)
+    VkSurfaceTransformFlagBitsKHR surfaceTransform = SurfaceCapabilities.currentTransform;
+    if (SurfaceCapabilities.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR)
     {
         surfaceTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
     }
@@ -969,7 +988,7 @@ static void RecreateSwapChain(game_renderer* Renderer, u32 Width, u32 Height)
     };
     for (auto compositeAlphaFlag : compositeAlphaFlags)
     {
-        if (Renderer->SurfaceCapabilities.supportedCompositeAlpha & compositeAlphaFlag)
+        if (SurfaceCapabilities.supportedCompositeAlpha & compositeAlphaFlag)
         {
             compositeAlpha = compositeAlphaFlag;
             break;
@@ -985,7 +1004,7 @@ static void RecreateSwapChain(game_renderer* Renderer, u32 Width, u32 Height)
         createInfo.minImageCount = FIF;
         createInfo.imageFormat = Renderer->SurfaceFormat.format;
         createInfo.imageColorSpace = Renderer->SurfaceFormat.colorSpace;
-        createInfo.imageExtent = { Renderer->SurfaceCapabilities.currentExtent.width, Renderer->SurfaceCapabilities.currentExtent.height };
+        createInfo.imageExtent = SwapchainExtent;
         createInfo.imageArrayLayers = 1;
         createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
         createInfo.preTransform = surfaceTransform;
@@ -1059,7 +1078,7 @@ static void RecreateSwapChain(game_renderer* Renderer, u32 Width, u32 Height)
             imageCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
             imageCreateInfo.pNext = nullptr;
             imageCreateInfo.imageType = VK_IMAGE_TYPE_2D;
-            imageCreateInfo.extent = { Width, Height, 1 };
+            imageCreateInfo.extent = { SwapchainExtent.width, SwapchainExtent.height, 1 };
             imageCreateInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
             imageCreateInfo.format = Renderer->DepthFormat;
             imageCreateInfo.arrayLayers = 1;
@@ -1105,13 +1124,13 @@ static void RecreateSwapChain(game_renderer* Renderer, u32 Width, u32 Height)
         framebufferInfo.renderPass = Renderer->RenderPass;
         framebufferInfo.attachmentCount = Renderer->DepthTesting ? CountOf(attachments) : (CountOf(attachments) - 1);
         framebufferInfo.pAttachments = attachments;
-        framebufferInfo.width = Width;
-        framebufferInfo.height = Height;
+        framebufferInfo.width = SwapchainExtent.width;
+        framebufferInfo.height = SwapchainExtent.height;
         framebufferInfo.layers = 1;
         VkAssert(vkCreateFramebuffer(Renderer->Device, &framebufferInfo, nullptr, &Renderer->FrameBuffers[i]));
     }
 
-    Trace("Swapchain resized! %u, %u", Width, Height);
+    Trace("Swapchain resized! %u, %u", SwapchainExtent.width, SwapchainExtent.height);
 }
 
 static game_renderer CreateGameRenderer(game_window Window)
@@ -1124,38 +1143,6 @@ static game_renderer CreateGameRenderer(game_window Window)
     Trace("Game renderer initialized.");
     return Renderer;
 }
-
-struct camera_component
-{
-    m4 projection{ 1.0f };
-    m4 view{ 1.0f };
-
-    f32 orthographic_size = 15.0f;
-    f32 orthographic_near = -100.0f, orthographic_far = 100.0f;
-
-    f32 aspect_ratio = 0.0f;
-
-    f32 PerspectiveFOV = MyMath::PI_HALF;
-    f32 PerspectiveNear = 0.01f, PerspectiveFar = 1000.0f;
-
-    void RecalculateProjectionOrtho(u32 width, u32 height)
-    {
-        aspect_ratio = static_cast<f32>(width) / height;
-        f32 ortho_left = -0.5f * aspect_ratio * orthographic_size;
-        f32 ortho_right = 0.5f * aspect_ratio * orthographic_size;
-        f32 ortho_bottom = -0.5f * orthographic_size;
-        f32 ortho_top = 0.5f * orthographic_size;
-        projection = MyMath::Ortho(ortho_left, ortho_right, ortho_bottom, ortho_top, orthographic_near, orthographic_far);
-    }
-
-    void RecalculateProjectionPerspective(u32 width, u32 height)
-    {
-        aspect_ratio = static_cast<f32>(width) / height;
-        projection = MyMath::Perspective(PerspectiveFOV, aspect_ratio, PerspectiveNear, PerspectiveFar);
-    }
-
-    m4 GetViewProjection() const { return projection * view; }
-};
 
 static void SubmitQuad(game_renderer* Renderer, v3 Translation, v3 Rotation, v3 Scale, v4 Color)
 {
@@ -1177,12 +1164,26 @@ static void BeginRender(game_renderer* Renderer, const m4& ViewProjection)
 {
     bool JustResized = false;
 
-    VkSemaphore currentSemaphore = Renderer->PresentSemaphores[Renderer->CurrentFrame];
-    VkResult result = vkAcquireNextImageKHR(Renderer->Device, Renderer->SwapChain, UINT64_MAX, currentSemaphore, nullptr, &Renderer->ImageIndex);
+    VkSemaphore CurrentSemaphore = Renderer->PresentSemaphores[Renderer->CurrentFrame];
+    VkResult Result = vkAcquireNextImageKHR(Renderer->Device, Renderer->SwapChain, UINT64_MAX, CurrentSemaphore, nullptr, &Renderer->ImageIndex);
 
-    if (result == VK_SUBOPTIMAL_KHR || result == VK_ERROR_OUT_OF_DATE_KHR)
+    if (Result != VK_SUCCESS)
     {
-        Renderer->ResizeSwapChain = true;
+        if (Result == VK_SUBOPTIMAL_KHR || Result == VK_ERROR_OUT_OF_DATE_KHR)
+        {
+            Info("BeginRender: Requested resize!");
+            Renderer->ResizeSwapChain = true;
+        }
+        else
+        {
+            Assert(false, "vkAcquireNextImageKHR was unsuccessfull");
+        }
+    }
+
+    if (Renderer->ResizeSwapChain)
+    {
+        Renderer->ResizeSwapChain = false;
+        RecreateSwapChain(Renderer, Renderer->SwapChainSize.width, Renderer->SwapChainSize.height);
     }
 
     // Set view projection
@@ -1295,8 +1296,9 @@ static void EndRender(game_renderer* Renderer)
 
         if (result != VK_SUCCESS)
         {
-            if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
+            if (result == VK_ERROR_OUT_OF_DATE_KHR|| result == VK_SUBOPTIMAL_KHR)
             {
+                Info("EndRender: Requested resize!");
                 Renderer->ResizeSwapChain = true;
             }
             else
@@ -1304,13 +1306,6 @@ static void EndRender(game_renderer* Renderer)
                 Assert(false, "vkQueuePresentKHR was not successful!");
             }
         }
-    }
-
-    if (Renderer->ResizeSwapChain)
-    {
-        Renderer->ResizeSwapChain = false;
-        RecreateSwapChain(Renderer, Renderer->SwapChainSize.width, Renderer->SwapChainSize.height);
-        return;
     }
 
     // Cycle frames in flights
