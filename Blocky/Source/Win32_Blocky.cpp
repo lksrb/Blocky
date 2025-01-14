@@ -372,12 +372,16 @@ int main(int argc, char** argv)
             BeginRender(&Renderer, Camera.GetViewProjection());
 
             {
-                v3 Pos = v3{ 0.0f };
+                v3 Pos = v3{ -2.0f, 0.0f, 0.0f };
                 SubmitQuad(&Renderer, Pos, v3(0.0f), v3(1.0f), v4(1.0f, 0.0f, 0.0f, 1.0f));
                 Pos.x += 1.0f;
                 SubmitQuad(&Renderer, Pos, v3(0.0f), v3(1.0f), v4(0.0f, 1.0f, 0.0f, 1.0f));
                 Pos.x += 1.0f;
                 SubmitQuad(&Renderer, Pos, v3(0.0f), v3(1.0f), v4(0.0f, 0.0f, 1.0f, 1.0f));
+                Pos.x += 1.0f;
+                SubmitQuad(&Renderer, Pos, v3(0.0f), v3(1.0f), v4(0.0f, 1.0f, 1.0f, 1.0f));
+                Pos.x += 1.0f;
+                SubmitQuad(&Renderer, Pos, v3(0.0f), v3(1.0f), v4(1.0f, 0.0f, 1.0f, 1.0f));
                 Pos.x += 1.0f;
             }
 

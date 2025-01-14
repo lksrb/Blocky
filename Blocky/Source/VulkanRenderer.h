@@ -1176,7 +1176,7 @@ static void BeginRender(game_renderer* Renderer, const m4& ViewProjection)
         }
         else
         {
-            Assert(false, "vkAcquireNextImageKHR was unsuccessfull");
+            Assert(false, "vkAcquireNextImageKHR was unsuccessful");
         }
     }
 
