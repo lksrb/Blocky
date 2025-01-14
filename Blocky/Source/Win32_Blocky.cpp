@@ -144,6 +144,7 @@ struct buffer
 static u32 g_ClientWidth = 0;
 static u32 g_ClientHeight = 0;
 static bool g_IsMinimized = false;
+static bool g_DoResize = false;
 
 LRESULT Win32ProcedureHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
@@ -174,6 +175,7 @@ LRESULT Win32ProcedureHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             {
                 g_ClientWidth = width;
                 g_ClientHeight = height;
+                g_DoResize = true;
             }
             break;
         }
@@ -312,10 +314,16 @@ int main(int argc, char** argv)
             DispatchMessage(&Message);
         }
 
-        if (Renderer.SwapChainSize.width != g_ClientWidth || Renderer.SwapChainSize.height != g_ClientHeight)
+        if (g_DoResize)
         {
+            g_DoResize = false;
+            Trace("%d %d", g_ClientWidth, g_ClientHeight);
             RecreateSwapChain(&Renderer, g_ClientWidth, g_ClientHeight);
         }
+
+        //if (Renderer.SwapChainSize.width != g_ClientWidth || Renderer.SwapChainSize.height != g_ClientHeight)
+        //{
+        //}
 
         // Do not render when minimized
         if (!g_IsMinimized)
