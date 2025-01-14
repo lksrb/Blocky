@@ -1125,7 +1125,7 @@ static game_renderer CreateGameRenderer(game_window Window)
     return Renderer;
 }
 
-struct CameraComponent
+struct camera_component
 {
     m4 projection{ 1.0f };
     m4 view{ 1.0f };
@@ -1157,51 +1157,6 @@ struct CameraComponent
     m4 GetViewProjection() const { return projection * view; }
 };
 
-static void BeginRender(game_renderer* Renderer)
-{
-    bool justResized = false;
-
-    if (Renderer->ResizeSwapChain)
-    {
-        Renderer->ResizeSwapChain = false;
-        RecreateSwapChain(Renderer, Renderer->SwapChainSize.width, Renderer->SwapChainSize.height);
-    }
-
-    // Wait for the previous frame to finish - blocks cpu until signaled
-    VkAssert(vkWaitForFences(Renderer->Device, 1, &Renderer->InFlightFences[Renderer->CurrentFrame], VK_TRUE, UINT64_MAX));
-
-    VkSemaphore currentSemaphore = Renderer->PresentSemaphores[Renderer->CurrentFrame];
-    VkResult result = vkAcquireNextImageKHR(Renderer->Device, Renderer->SwapChain, UINT64_MAX, currentSemaphore, nullptr, &Renderer->ImageIndex);
-
-    if (result == VK_SUBOPTIMAL_KHR || result == VK_ERROR_OUT_OF_DATE_KHR)
-    {
-        Renderer->ResizeSwapChain = true;
-    }
-
-    CameraComponent camera;
-    {
-        v3 translation{ 0.0f, 1.0f, 3.0f };
-        v3 rotation{ -0.2f };
-        v3 scale{ 1.0f };
-
-        camera.RecalculateProjectionPerspective(Renderer->SwapChainSize.width, Renderer->SwapChainSize.height);
-
-        camera.view = MyMath::Translate(m4(1.0f), translation)
-            * MyMath::ToM4(QTN(rotation))
-            * MyMath::Scale(m4(1.0f), scale);
-
-        camera.view = MyMath::Inverse(camera.view);
-    }
-
-    // Set view projection
-    Renderer->PushConstant.CameraViewProjection = camera.GetViewProjection();
-
-    // Reset batch renderer
-    // Renderer->TextureStackIndex = 1;
-    Renderer->QuadVertexDataPtr = Renderer->QuadVertexDataBase;
-    Renderer->QuadIndexCount = 0;
-}
-
 static void SubmitQuad(game_renderer* Renderer, v3 Translation, v3 Rotation, v3 Scale, v4 Color)
 {
     m4 Transform = MyMath::Translate(m4(1.0f), Translation)
@@ -1218,16 +1173,29 @@ static void SubmitQuad(game_renderer* Renderer, v3 Translation, v3 Rotation, v3 
     Renderer->QuadIndexCount += 36;
 }
 
+static void BeginRender(game_renderer* Renderer, const m4& ViewProjection)
+{
+    bool JustResized = false;
+
+    VkSemaphore currentSemaphore = Renderer->PresentSemaphores[Renderer->CurrentFrame];
+    VkResult result = vkAcquireNextImageKHR(Renderer->Device, Renderer->SwapChain, UINT64_MAX, currentSemaphore, nullptr, &Renderer->ImageIndex);
+
+    if (result == VK_SUBOPTIMAL_KHR || result == VK_ERROR_OUT_OF_DATE_KHR)
+    {
+        Renderer->ResizeSwapChain = true;
+    }
+
+    // Set view projection
+    Renderer->PushConstant.CameraViewProjection = ViewProjection;
+
+    // Reset batch renderer
+    // Renderer->TextureStackIndex = 1;
+    Renderer->QuadVertexDataPtr = Renderer->QuadVertexDataBase;
+    Renderer->QuadIndexCount = 0;
+}
+
 static void EndRender(game_renderer* Renderer)
 {
-    v3 T = v3{ 0.0f };
-    SubmitQuad(Renderer, T, v3(0.0f), v3(1.0f), v4(1.0f, 0.0f, 0.0f, 1.0f));
-    T.x += 1.0f;
-    SubmitQuad(Renderer, T, v3(0.0f), v3(1.0f), v4(0.0f, 1.0f, 0.0f, 1.0f));
-    T.x += 1.0f;
-    SubmitQuad(Renderer, T, v3(0.0f), v3(1.0f), v4(0.0f, 0.0f, 1.0f, 1.0f));
-    T.x += 1.0f;
-
     // Record command buffer
     {
         VkCommandBufferBeginInfo beginInfo = {};
@@ -1324,12 +1292,30 @@ static void EndRender(game_renderer* Renderer)
 
         // TODO: Distinguish between graphics queue and present queue
         VkResult result = vkQueuePresentKHR(Renderer->GraphicsQueue, &presentInfo);
-        if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
+
+        if (result != VK_SUCCESS)
         {
-            Renderer->ResizeSwapChain = true;
+            if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
+            {
+                Renderer->ResizeSwapChain = true;
+            }
+            else
+            {
+                Assert(false, "vkQueuePresentKHR was not successful!");
+            }
         }
+    }
+
+    if (Renderer->ResizeSwapChain)
+    {
+        Renderer->ResizeSwapChain = false;
+        RecreateSwapChain(Renderer, Renderer->SwapChainSize.width, Renderer->SwapChainSize.height);
+        return;
     }
 
     // Cycle frames in flights
     Renderer->CurrentFrame = (Renderer->CurrentFrame + 1) % FIF;
+
+    // Wait for the previous frame to finish - blocks cpu until signaled
+    VkAssert(vkWaitForFences(Renderer->Device, 1, &Renderer->InFlightFences[Renderer->CurrentFrame], VK_TRUE, UINT64_MAX));
 }

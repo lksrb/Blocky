@@ -173,9 +173,12 @@ LRESULT Win32ProcedureHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             // resize as well
             if (width != 0 && height != 0)
             {
+                if (g_ClientWidth != width || g_ClientHeight != height)
+                    g_DoResize = true;
+
                 g_ClientWidth = width;
                 g_ClientHeight = height;
-                g_DoResize = true;
+
             }
             break;
         }
@@ -252,6 +255,7 @@ static game_window CreateGameWindow()
     RegisterClassEx(&WindowClass);
 
     // NOTE: Also this means that there will be no glitch when opening the game
+    // NOTE: WS_EX_NOREDIRECTIONBITMAP does not work on Intel GPUs (even when they just pass data)
     DWORD ExStyle = WS_EX_APPWINDOW | WS_EX_NOREDIRECTIONBITMAP;
 
     Window.WindowHandle = CreateWindowExW(ExStyle, WindowClass.lpszClassName, L"Blocky", WS_OVERLAPPEDWINDOW,
@@ -285,7 +289,15 @@ int main(int argc, char** argv)
 
         // This just set width and height of the window
         ShowWindow(Window.WindowHandle, SW_SHOW);
+
+        g_DoResize = false;
     }
+
+    camera_component Camera;
+    v3 translation{ 0.0f, 1.0f, 3.0f };
+    v3 rotation{ -0.2f };
+    v3 scale{ 1.0f };
+    Camera.RecalculateProjectionPerspective(g_ClientWidth, g_ClientHeight);
 
     // Timestep
     f32 TimeStep = 0.0f;
@@ -317,18 +329,36 @@ int main(int argc, char** argv)
         if (g_DoResize)
         {
             g_DoResize = false;
-            Trace("%d %d", g_ClientWidth, g_ClientHeight);
+
+            Camera.RecalculateProjectionPerspective(g_ClientWidth, g_ClientHeight);
+
             RecreateSwapChain(&Renderer, g_ClientWidth, g_ClientHeight);
         }
 
-        //if (Renderer.SwapChainSize.width != g_ClientWidth || Renderer.SwapChainSize.height != g_ClientHeight)
-        //{
-        //}
+        // Logic
+        {
+            Camera.view = MyMath::Translate(m4(1.0f), translation)
+                * MyMath::ToM4(QTN(rotation))
+                * MyMath::Scale(m4(1.0f), scale);
+
+            Camera.view = MyMath::Inverse(Camera.view);
+        }
 
         // Do not render when minimized
         if (!g_IsMinimized)
         {
-            BeginRender(&Renderer);
+            BeginRender(&Renderer, Camera.GetViewProjection());
+
+            {
+                v3 Pos = v3{ 0.0f };
+                SubmitQuad(&Renderer, Pos, v3(0.0f), v3(1.0f), v4(1.0f, 0.0f, 0.0f, 1.0f));
+                Pos.x += 1.0f;
+                SubmitQuad(&Renderer, Pos, v3(0.0f), v3(1.0f), v4(0.0f, 1.0f, 0.0f, 1.0f));
+                Pos.x += 1.0f;
+                SubmitQuad(&Renderer, Pos, v3(0.0f), v3(1.0f), v4(0.0f, 0.0f, 1.0f, 1.0f));
+                Pos.x += 1.0f;
+            }
+
             EndRender(&Renderer);
         }
 
