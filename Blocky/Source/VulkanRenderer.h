@@ -85,7 +85,7 @@ struct queue_family_indices
     }
 };
 
-struct game_renderer
+struct vulkan_game_renderer
 {
     // Vulkan context stuff
     VkSurfaceFormatKHR SurfaceFormat;
@@ -285,7 +285,7 @@ static VkPresentModeKHR VulkanChooseSwapchainPresentMode(VkPhysicalDevice physic
 }
 
 
-static void InitializeVulkan(game_renderer* Renderer, game_window Window)
+static void InitializeVulkan(vulkan_game_renderer* Renderer, game_window Window)
 {
     // Load base functions from vulkan-1.dll
     VulkanLoadBaseFunctions();
@@ -543,7 +543,7 @@ static void InitializeVulkan(game_renderer* Renderer, game_window Window)
     }
 }
 
-static void InitializeRendering(game_renderer* Renderer)
+static void InitializeRendering(vulkan_game_renderer* Renderer)
 {
     // Main renderpass
     {
@@ -716,7 +716,7 @@ buffer ReadBinary(const char* path)
     return Result;
 }
 
-static void InitializeRenderingResources(game_renderer* Renderer)
+static void InitializeRenderingResources(vulkan_game_renderer* Renderer)
 {
     // Load shader
     {
@@ -935,7 +935,7 @@ static void InitializeRenderingResources(game_renderer* Renderer)
 #endif
 }
 
-static void RecreateSwapChain(game_renderer* Renderer, u32 RequestWidth, u32 RequestHeight)
+static void RecreateSwapChain(vulkan_game_renderer* Renderer, u32 RequestWidth, u32 RequestHeight)
 {
     Assert(RequestWidth != 0 && RequestHeight != 0, "Width or height are 0s!");
 
@@ -1133,9 +1133,9 @@ static void RecreateSwapChain(game_renderer* Renderer, u32 RequestWidth, u32 Req
     Trace("Swapchain resized! %u, %u", SwapchainExtent.width, SwapchainExtent.height);
 }
 
-static game_renderer CreateGameRenderer(game_window Window)
+static vulkan_game_renderer CreateVulkanGameRenderer(game_window Window)
 {
-    game_renderer Renderer;
+    vulkan_game_renderer Renderer;
     InitializeVulkan(&Renderer, Window);
     InitializeRendering(&Renderer);
     InitializeRenderingResources(&Renderer);
@@ -1144,7 +1144,7 @@ static game_renderer CreateGameRenderer(game_window Window)
     return Renderer;
 }
 
-static void SubmitQuad(game_renderer* Renderer, v3 Translation, v3 Rotation, v3 Scale, v4 Color)
+static void SubmitQuad(vulkan_game_renderer* Renderer, v3 Translation, v3 Rotation, v3 Scale, v4 Color)
 {
     m4 Transform = MyMath::Translate(m4(1.0f), Translation)
         * MyMath::ToM4(QTN(Rotation))
@@ -1160,7 +1160,7 @@ static void SubmitQuad(game_renderer* Renderer, v3 Translation, v3 Rotation, v3 
     Renderer->QuadIndexCount += 36;
 }
 
-static void BeginRender(game_renderer* Renderer, const m4& ViewProjection)
+static void BeginRender(vulkan_game_renderer* Renderer, const m4& ViewProjection)
 {
     bool JustResized = false;
 
@@ -1195,7 +1195,7 @@ static void BeginRender(game_renderer* Renderer, const m4& ViewProjection)
     Renderer->QuadIndexCount = 0;
 }
 
-static void EndRender(game_renderer* Renderer)
+static void EndRender(vulkan_game_renderer* Renderer)
 {
     // Record command buffer
     {

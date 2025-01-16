@@ -44,19 +44,54 @@ struct dx12_game_renderer
     HANDLE FenceEvent;
 };
 
-static dx12_game_renderer CreateDX12GameRenderer(dx12_game_renderer& Renderer, game_window Window)
+static u64 DX12RendererSignal(ID3D12CommandQueue* CommandQueue, ID3D12Fence* Fence, u64* FenceValue)
 {
+    u64& RefFenceValue = *FenceValue;
+    u64 FenceValueForSignal = ++RefFenceValue;
+    HAssert(CommandQueue->Signal(Fence, FenceValueForSignal));
+    return FenceValueForSignal;
+}
+
+static void DX12RendererWaitForFenceValue(ID3D12Fence* Fence, u64 FenceValue, HANDLE FenceEvent, u32 Duration = UINT32_MAX)
+{
+    if (Fence->GetCompletedValue() < FenceValue)
+    {
+        Fence->SetEventOnCompletion(FenceValue, FenceEvent);
+        WaitForSingleObject(FenceEvent, Duration);
+    }
+}
+
+static void DX12RendererFlush(ID3D12CommandQueue* commandQueue, ID3D12Fence* Fence, uint64_t* FenceValue, HANDLE FenceEvent)
+{
+    u64 FenceValueForSignal = DX12RendererSignal(commandQueue, Fence, FenceValue);
+    DX12RendererWaitForFenceValue(Fence, FenceValueForSignal, FenceEvent);
+};
+
+static D3D12_RESOURCE_BARRIER  DX12RendererTransition(
+   _In_ ID3D12Resource* pResource,
+   D3D12_RESOURCE_STATES stateBefore,
+   D3D12_RESOURCE_STATES stateAfter,
+   UINT subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,
+   D3D12_RESOURCE_BARRIER_FLAGS flags = D3D12_RESOURCE_BARRIER_FLAG_NONE)
+{
+    D3D12_RESOURCE_BARRIER result;
+    result.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    result.Flags = flags;
+    result.Transition.pResource = pResource;
+    result.Transition.StateBefore = stateBefore;
+    result.Transition.StateAfter = stateAfter;
+    result.Transition.Subresource = subresource;
+    return result;
+};
+
+static dx12_game_renderer CreateDX12GameRenderer(game_window Window)
+{
+    dx12_game_renderer Renderer;
+
     // Enable debug layer
     // This is sort of like validation layers in Vulkan
     HAssert(D3D12GetDebugInterface(IID_PPV_ARGS(&Renderer.DebugInterface)));
     Renderer.DebugInterface->EnableDebugLayer();
-
-    // Get Adapter
-    // NOTE: Vulkan Physical device?
-
-    //IDXGIFactory4* DxGiFactory;
-    //HAssert(CreateDXGIFactory2(DXGI_CREATE_FACTORY_DEBUG, IID_PPV_ARGS(&DxGiFactory)));
-    //
 
     // Create device
     {
@@ -137,15 +172,18 @@ static dx12_game_renderer CreateDX12GameRenderer(dx12_game_renderer& Renderer, g
         swapChainDesc.AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED;
         // It is recommended to always allow tearing if tearing support is available.
         // TODO: More robustness needed
-        swapChainDesc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;// CheckTearingSupport() ? : 0;
+        swapChainDesc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING | DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;// CheckTearingSupport() ? : 0;
 
-        HAssert(Factory4->MakeWindowAssociation(Window.WindowHandle, DXGI_MWA_NO_ALT_ENTER));
         HAssert(Factory4->CreateSwapChainForHwnd(Renderer.CommandQueue, Window.WindowHandle, &swapChainDesc, nullptr, nullptr, &SwapChain1));
+
+        // Disable the Alt+Enter fullscreen toggle feature. Switching to fullscreen
+        // will be handled manually.
+        HAssert(Factory4->MakeWindowAssociation(Window.WindowHandle, DXGI_MWA_NO_ALT_ENTER));
         SwapChain1->QueryInterface(IID_PPV_ARGS(&Renderer.SwapChain));
         SwapChain1->Release();
         Factory4->Release();
 
-        //        Renderer.SwapChain->SetMaximumFrameLatency(FIF);
+        Renderer.SwapChain->SetMaximumFrameLatency(FIF);
 
         Renderer.CurrentBackBufferIndex = Renderer.SwapChain->GetCurrentBackBufferIndex();
     }
@@ -192,8 +230,6 @@ static dx12_game_renderer CreateDX12GameRenderer(dx12_game_renderer& Renderer, g
         HAssert(Renderer.CommandList->Close());
     }
 
-    // GPU sync objects
-
     // Fence
     {
         HAssert(Renderer.Device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&Renderer.Fence)));
@@ -203,136 +239,95 @@ static dx12_game_renderer CreateDX12GameRenderer(dx12_game_renderer& Renderer, g
         Assert(Renderer.FenceEvent != INVALID_HANDLE_VALUE, "Could not create fence event.");
     }
 
-    auto Signal = [](ID3D12CommandQueue* CommandQueue, ID3D12Fence* Fence, u64* FenceValue)
-    {
-        u64& RefFenceValue = *FenceValue;
-        u64 FenceValueForSignal = ++RefFenceValue;
-        HAssert(CommandQueue->Signal(Fence, FenceValueForSignal));
-        return FenceValueForSignal;
-    };
+    // RESOURCE STUFF
+    // RESOURCE STUFF
+    // RESOURCE STUFF
+    // RESOURCE STUFF
+    // RESOURCE STUFF
+    // RESOURCE STUFF
 
-    auto WaitForFenceValue = [](ID3D12Fence* Fence, u64 FenceValue, HANDLE FenceEvent, u32 Duration = UINT32_MAX)
-    {
-        if (Fence->GetCompletedValue() < FenceValue)
-        {
-            Fence->SetEventOnCompletion(FenceValue, FenceEvent);
-            WaitForSingleObject(FenceEvent, Duration);
-        }
-    };
 
-    auto Flush = [&](ID3D12CommandQueue* commandQueue, ID3D12Fence* Fence, uint64_t* FenceValue, HANDLE FenceEvent)
-    {
-        u64 FenceValueForSignal = Signal(commandQueue, Fence, FenceValue);
-        WaitForFenceValue(Fence, FenceValueForSignal, FenceEvent);
-    };
-
-    auto Transition = [](
-       _In_ ID3D12Resource* pResource,
-       D3D12_RESOURCE_STATES stateBefore,
-       D3D12_RESOURCE_STATES stateAfter,
-       UINT subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,
-       D3D12_RESOURCE_BARRIER_FLAGS flags = D3D12_RESOURCE_BARRIER_FLAG_NONE) -> D3D12_RESOURCE_BARRIER
-    {
-        D3D12_RESOURCE_BARRIER result;
-        result.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-        result.Flags = flags;
-        result.Transition.pResource = pResource;
-        result.Transition.StateBefore = stateBefore;
-        result.Transition.StateAfter = stateAfter;
-        result.Transition.Subresource = subresource;
-        return result;
-    };
-
-    // Game loop
-    {
-        ShowWindow(Window.WindowHandle, SW_SHOW);
-
-        LARGE_INTEGER LastCounter;
-        QueryPerformanceCounter(&LastCounter);
-
-        // NOTE: This value represent how many increments of performance counter is happening
-        LARGE_INTEGER CounterFrequency;
-        QueryPerformanceFrequency(&CounterFrequency);
-        bool IsRunning = true;
-        bool IsMinimized = false;
-        f32 TimeStep = 0.0f;
-
-        while (IsRunning)
-        {
-            // Process events
-            MSG Message;
-            while (PeekMessage(&Message, nullptr, 0, 0, PM_REMOVE))
-            {
-                if (Message.message == WM_QUIT)
-                {
-                    IsRunning = false;
-                }
-
-                TranslateMessage(&Message);
-                DispatchMessage(&Message);
-            }
-
-            IsMinimized = IsIconic(Window.WindowHandle);
-
-            // Render
-            if (!IsMinimized)
-            {
-                // Reset state
-                auto CommandAllocator = Renderer.CommandAllocators[Renderer.CurrentBackBufferIndex];
-                //Trace("%d", Renderer.CurrentBackBufferIndex);
-                auto BackBuffer = Renderer.BackBuffers[Renderer.CurrentBackBufferIndex];
-                auto CommandList = Renderer.CommandList;
-
-                CommandAllocator->Reset();
-                Renderer.CommandList->Reset(CommandAllocator, nullptr);
-
-                // Frame that was presented needs to be set to render target again
-                auto Barrier = Transition(BackBuffer, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
-                CommandList->ResourceBarrier(1, &Barrier);
-
-                v4 ClearColor = { 0.8f, 0.2f, 0.6f, 1.0f };
-
-                auto RTV = Renderer.RTVDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
-                RTV.ptr += u64(Renderer.CurrentBackBufferIndex * Renderer.RTVDescriptorSize);
-                CommandList->ClearRenderTargetView(RTV, &ClearColor.x, 0, nullptr);
-
-                // Present
-                {
-                    // Rendered frame needs to be transitioned to present state
-                    auto barrier = Transition(BackBuffer, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
-                    CommandList->ResourceBarrier(1, &barrier);
-                }
-
-                // Finalize the command list
-                CommandList->Close();
-
-                Renderer.CommandQueue->ExecuteCommandLists(1, (ID3D12CommandList* const*)&CommandList);
-
-                Renderer.FrameFenceValues[Renderer.CurrentBackBufferIndex] = Signal(Renderer.CommandQueue, Renderer.Fence, &Renderer.FenceValue);
-
-                Renderer.SwapChain->Present(Renderer.VSync ? 1 : 0, 0);
-
-                Renderer.CurrentBackBufferIndex = Renderer.SwapChain->GetCurrentBackBufferIndex();
-
-                // Wait for GPU to finish presenting
-                WaitForFenceValue(Renderer.Fence, Renderer.FrameFenceValues[Renderer.CurrentBackBufferIndex], Renderer.FenceEvent);
-            }
-
-            // Timestep
-            LARGE_INTEGER EndCounter;
-            QueryPerformanceCounter(&EndCounter);
-
-            i64 CounterElapsed = EndCounter.QuadPart - LastCounter.QuadPart;
-            TimeStep = (CounterElapsed / static_cast<f32>(CounterFrequency.QuadPart));
-            LastCounter = EndCounter;
-        }
-    }
-
-    Flush(Renderer.CommandQueue, Renderer.Fence, &Renderer.FenceValue, Renderer.FenceEvent); 
-
-    ExitProcess(0);
 
     return Renderer;
+}
+
+static void DX12RendererResizeSwapChain(dx12_game_renderer* Renderer, u32 RequestWidth, u32 RequestHeight)
+{
+    // Flush the GPU queue to make sure the swap chain's back buffers are not being referenced by an in-flight command list.
+    DX12RendererFlush(Renderer->CommandQueue, Renderer->Fence, &Renderer->FenceValue, Renderer->FenceEvent);
+
+    // Reset fence values
+    for (u32 i = 0; i < FIF; i++)
+    {
+        Renderer->BackBuffers[i]->Release();
+        Renderer->FrameFenceValues[i] = Renderer->FrameFenceValues[Renderer->CurrentBackBufferIndex];
+    }
+
+    DXGI_SWAP_CHAIN_DESC swapChainDesc = {};
+    HAssert(Renderer->SwapChain->GetDesc(&swapChainDesc));
+    HAssert(Renderer->SwapChain->ResizeBuffers(FIF, RequestWidth, RequestHeight, swapChainDesc.BufferDesc.Format, swapChainDesc.Flags));
+
+    Renderer->CurrentBackBufferIndex = Renderer->SwapChain->GetCurrentBackBufferIndex();
+
+    Renderer->RTVDescriptorSize = Renderer->Device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+
+    D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = Renderer->RTVDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
+
+    for (u32 i = 0; i < FIF; ++i)
+    {
+        ID3D12Resource* backBuffer;
+        HAssert(Renderer->SwapChain->GetBuffer(i, IID_PPV_ARGS(&backBuffer)));
+
+        Renderer->Device->CreateRenderTargetView(backBuffer, nullptr, rtvHandle);
+
+        Renderer->BackBuffers[i] = backBuffer;
+
+        rtvHandle.ptr += Renderer->RTVDescriptorSize;
+    }
+
+    Warn("SwapChain resized to %d %d", RequestWidth, RequestHeight);
 
 }
 
+static void DX12RendererRender(dx12_game_renderer* Renderer)
+{
+    // Reset state
+    auto CommandAllocator = Renderer->CommandAllocators[Renderer->CurrentBackBufferIndex];
+    //Trace("%d", Renderer->CurrentBackBufferIndex);
+    auto BackBuffer = Renderer->BackBuffers[Renderer->CurrentBackBufferIndex];
+    auto CommandList = Renderer->CommandList;
+
+    CommandAllocator->Reset();
+    Renderer->CommandList->Reset(CommandAllocator, nullptr);
+
+    // Frame that was presented needs to be set to render target again
+    auto Barrier = DX12RendererTransition(BackBuffer, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
+    CommandList->ResourceBarrier(1, &Barrier);
+
+    v4 ClearColor = { 0.8f, 0.5f, 0.9f, 1.0f };
+
+    auto RTV = Renderer->RTVDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
+    RTV.ptr += u64(Renderer->CurrentBackBufferIndex * Renderer->RTVDescriptorSize);
+    CommandList->ClearRenderTargetView(RTV, &ClearColor.x, 0, nullptr);
+
+    // Present
+    {
+        // Rendered frame needs to be transitioned to present state
+        auto barrier = DX12RendererTransition(BackBuffer, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
+        CommandList->ResourceBarrier(1, &barrier);
+    }
+
+    // Finalize the command list
+    CommandList->Close();
+
+    Renderer->CommandQueue->ExecuteCommandLists(1, (ID3D12CommandList* const*)&CommandList);
+
+    Renderer->FrameFenceValues[Renderer->CurrentBackBufferIndex] = DX12RendererSignal(Renderer->CommandQueue, Renderer->Fence, &Renderer->FenceValue);
+
+    Renderer->SwapChain->Present(Renderer->VSync ? 1 : 0, 0);
+
+    Renderer->CurrentBackBufferIndex = Renderer->SwapChain->GetCurrentBackBufferIndex();
+
+    // Wait for GPU to finish presenting
+    DX12RendererWaitForFenceValue(Renderer->Fence, Renderer->FrameFenceValues[Renderer->CurrentBackBufferIndex], Renderer->FenceEvent);
+}

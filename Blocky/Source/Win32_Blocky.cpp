@@ -103,7 +103,6 @@ constexpr Enum& operator^=(Enum& ioLHS, Enum inRHS)                  \
     return ioLHS;                                                    \
 }                                                                    \
 
-
 #include <stdio.h>
 #include <cstdint>
 
@@ -244,8 +243,8 @@ static game_window CreateGameWindow()
     RegisterClassEx(&WindowClass);
 
     // NOTE: Also this means that there will be no glitch when opening the game
-    // NOTE: WS_EX_NOREDIRECTIONBITMAP does not work on Intel GPUs (even when they just pass data)
-    DWORD ExStyle = WS_EX_APPWINDOW;// | WS_EX_NOREDIRECTIONBITMAP;
+    // NOTE: When using Vulkan, WS_EX_NOREDIRECTIONBITMAP does not work on Intel GPUs (even when they just pass data)
+    DWORD ExStyle = WS_EX_APPWINDOW | WS_EX_NOREDIRECTIONBITMAP;
 
     Window.WindowHandle = CreateWindowExW(ExStyle, WindowClass.lpszClassName, L"Blocky", WS_OVERLAPPEDWINDOW,
                              WindowX, WindowY, DefaultWindowWidth, DefaultWindowHeight,
@@ -299,20 +298,69 @@ int main(int argc, char** argv)
 {
     Trace("Hello, Blocky!");
 
+    // If the application is not DPI aware, Windows will automatically scale the pixels to a DPI scale value (150% for example)
+    // So if the resolution would be 3840×2160, the application window client area would be 2560×1440, so Windows scales that defaultly.
+    // By settings this, Windows will no longer be able to scale pixels resulting in sharper image.
+    // Note that DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 is for Windows build version > 1607
+    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+
     // Creates and shows the window
     game_window Window = CreateGameWindow();
     g_ClientWidth = Window.ClientAreaWidth;
     g_ClientHeight = Window.ClientAreaHeight;
 
-    dx12_game_renderer Dx12Renderer = {};
-    CreateDX12GameRenderer(Dx12Renderer, Window);
+    dx12_game_renderer Dx12Renderer = CreateDX12GameRenderer(Window);
 
-    game_renderer Renderer = CreateGameRenderer(Window);
+    // Show window after initialization
+    ShowWindow(Window.WindowHandle, SW_SHOW);
+
+    LARGE_INTEGER LastCounter;
+    QueryPerformanceCounter(&LastCounter);
+
+    // NOTE: This value represent how many increments of performance counter is happening
+    LARGE_INTEGER CounterFrequency;
+    QueryPerformanceFrequency(&CounterFrequency);
+    bool IsRunning = true;
+    bool IsMinimized = false;
+    f32 TimeStep = 0.0f;
+    while (IsRunning)
+    {
+        // Process events
+        MSG Message;
+        while (PeekMessage(&Message, nullptr, 0, 0, PM_REMOVE))
+        {
+            if (Message.message == WM_QUIT)
+            {
+                IsRunning = false;
+            }
+
+            TranslateMessage(&Message);
+            DispatchMessage(&Message);
+        }
+
+        IsMinimized = IsIconic(Window.WindowHandle);
+
+        if (g_DoResize)
+        {
+            g_DoResize = false;
+            DX12RendererResizeSwapChain(&Dx12Renderer, g_ClientWidth, g_ClientHeight);
+        }
+
+        if (!IsMinimized)
+        {
+            DX12RendererRender(&Dx12Renderer);
+        }
+    }
+
+    DX12RendererFlush(Dx12Renderer.CommandQueue, Dx12Renderer.Fence, &Dx12Renderer.FenceValue, Dx12Renderer.FenceEvent);
+
+#if 0
+    vulkan_game_renderer VulkanRenderer = CreateVulkanGameRenderer(Window);
 
     // First resize
     {
-        RecreateSwapChain(&Renderer, Window.ClientAreaWidth, Window.ClientAreaHeight);
-        
+        RecreateSwapChain(&VulkanRenderer, Window.ClientAreaWidth, Window.ClientAreaHeight);
+
         // Shows the window
         // Note that there are few transparent frames until we actually render something
         // Sort of nit-picking here
@@ -361,7 +409,7 @@ int main(int argc, char** argv)
 
             Camera.RecalculateProjectionPerspective(g_ClientWidth, g_ClientHeight);
 
-            RecreateSwapChain(&Renderer, g_ClientWidth, g_ClientHeight);
+            RecreateSwapChain(&VulkanRenderer, g_ClientWidth, g_ClientHeight);
         }
 
         // Logic
@@ -376,23 +424,23 @@ int main(int argc, char** argv)
         // Do not render when minimized
         if (!IsMinimized)
         {
-            BeginRender(&Renderer, Camera.GetViewProjection());
+            BeginRender(&VulkanRenderer, Camera.GetViewProjection());
 
             {
                 v3 Pos = v3{ -2.0f, 0.0f, 0.0f };
-                SubmitQuad(&Renderer, Pos, v3(0.0f), v3(1.0f), v4(1.0f, 0.0f, 0.0f, 1.0f));
+                SubmitQuad(&VulkanRenderer, Pos, v3(0.0f), v3(1.0f), v4(1.0f, 0.0f, 0.0f, 1.0f));
                 Pos.x += 1.0f;
-                SubmitQuad(&Renderer, Pos, v3(0.0f), v3(1.0f), v4(0.0f, 1.0f, 0.0f, 1.0f));
+                SubmitQuad(&VulkanRenderer, Pos, v3(0.0f), v3(1.0f), v4(0.0f, 1.0f, 0.0f, 1.0f));
                 Pos.x += 1.0f;
-                SubmitQuad(&Renderer, Pos, v3(0.0f), v3(1.0f), v4(0.0f, 0.0f, 1.0f, 1.0f));
+                SubmitQuad(&VulkanRenderer, Pos, v3(0.0f), v3(1.0f), v4(0.0f, 0.0f, 1.0f, 1.0f));
                 Pos.x += 1.0f;
-                SubmitQuad(&Renderer, Pos, v3(0.0f), v3(1.0f), v4(0.0f, 1.0f, 1.0f, 1.0f));
+                SubmitQuad(&VulkanRenderer, Pos, v3(0.0f), v3(1.0f), v4(0.0f, 1.0f, 1.0f, 1.0f));
                 Pos.x += 1.0f;
-                SubmitQuad(&Renderer, Pos, v3(0.0f), v3(1.0f), v4(1.0f, 0.0f, 1.0f, 1.0f));
+                SubmitQuad(&VulkanRenderer, Pos, v3(0.0f), v3(1.0f), v4(1.0f, 0.0f, 1.0f, 1.0f));
                 Pos.x += 1.0f;
             }
 
-            EndRender(&Renderer);
+            EndRender(&VulkanRenderer);
         }
 
         // Timestep
@@ -403,6 +451,8 @@ int main(int argc, char** argv)
         TimeStep = (CounterElapsed / static_cast<f32>(CounterFrequency.QuadPart));
         LastCounter = EndCounter;
     }
+#endif
+
 
     return 0;
 }
