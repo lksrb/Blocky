@@ -140,6 +140,7 @@ struct buffer
 };
 
 #include "VulkanRenderer.h"
+#include "DX12Renderer.h"
 
 static u32 g_ClientWidth = 0;
 static u32 g_ClientHeight = 0;
@@ -233,17 +234,18 @@ static game_window CreateGameWindow()
 
     // Create window
     WNDCLASSEX WindowClass = { sizeof(WindowClass) };
+    WindowClass.style = CS_HREDRAW | CS_VREDRAW; // Always redraw when client area size changes (TODO: confirm)
     WindowClass.lpfnWndProc = Win32ProcedureHandler;
-    WindowClass.hInstance = GetModuleHandle(NULL);
+    WindowClass.hInstance = GetModuleHandle(nullptr);
     WindowClass.lpszClassName = L"BlockyWindowClass";
     WindowClass.hCursor = LoadCursor(0, IDC_ARROW);
-    WindowClass.hIcon = LoadIcon(WindowClass.hInstance, MAKEINTRESOURCE(1));
+    WindowClass.hIcon = LoadIcon(WindowClass.hInstance, nullptr);
     WindowClass.hbrBackground = nullptr;
     RegisterClassEx(&WindowClass);
 
     // NOTE: Also this means that there will be no glitch when opening the game
     // NOTE: WS_EX_NOREDIRECTIONBITMAP does not work on Intel GPUs (even when they just pass data)
-    DWORD ExStyle = WS_EX_APPWINDOW | WS_EX_NOREDIRECTIONBITMAP;
+    DWORD ExStyle = WS_EX_APPWINDOW;// | WS_EX_NOREDIRECTIONBITMAP;
 
     Window.WindowHandle = CreateWindowExW(ExStyle, WindowClass.lpszClassName, L"Blocky", WS_OVERLAPPEDWINDOW,
                              WindowX, WindowY, DefaultWindowWidth, DefaultWindowHeight,
@@ -261,36 +263,36 @@ static game_window CreateGameWindow()
     return Window;
 }
 
-struct camera_component
+struct camera
 {
-    m4 projection{ 1.0f };
-    m4 view{ 1.0f };
+    m4 Projection{ 1.0f };
+    m4 View{ 1.0f };
 
-    f32 orthographic_size = 15.0f;
-    f32 orthographic_near = -100.0f, orthographic_far = 100.0f;
+    f32 OrthographicSize = 15.0f;
+    f32 OrthographicNear = -100.0f, OrthographicFar = 100.0f;
 
-    f32 aspect_ratio = 0.0f;
+    f32 AspectRatio = 0.0f;
 
     f32 PerspectiveFOV = MyMath::PI_HALF;
     f32 PerspectiveNear = 0.01f, PerspectiveFar = 1000.0f;
 
-    void RecalculateProjectionOrtho(u32 width, u32 height)
+    void RecalculateProjectionOrtho(u32 Width, u32 Height)
     {
-        aspect_ratio = static_cast<f32>(width) / height;
-        f32 ortho_left = -0.5f * aspect_ratio * orthographic_size;
-        f32 ortho_right = 0.5f * aspect_ratio * orthographic_size;
-        f32 ortho_bottom = -0.5f * orthographic_size;
-        f32 ortho_top = 0.5f * orthographic_size;
-        projection = MyMath::Ortho(ortho_left, ortho_right, ortho_bottom, ortho_top, orthographic_near, orthographic_far);
+        AspectRatio = static_cast<f32>(Width) / Height;
+        f32 OrthoLeft = -0.5f * AspectRatio * OrthographicSize;
+        f32 OrthoRight = 0.5f * AspectRatio * OrthographicSize;
+        f32 OrthoBottom = -0.5f * OrthographicSize;
+        f32 OrthoTop = 0.5f * OrthographicSize;
+        Projection = MyMath::Ortho(OrthoLeft, OrthoRight, OrthoBottom, OrthoTop, OrthographicNear, OrthographicFar);
     }
 
     void RecalculateProjectionPerspective(u32 width, u32 height)
     {
-        aspect_ratio = static_cast<f32>(width) / height;
-        projection = MyMath::Perspective(PerspectiveFOV, aspect_ratio, PerspectiveNear, PerspectiveFar);
+        AspectRatio = static_cast<f32>(width) / height;
+        Projection = MyMath::Perspective(PerspectiveFOV, AspectRatio, PerspectiveNear, PerspectiveFar);
     }
 
-    m4 GetViewProjection() const { return projection * view; }
+    m4 GetViewProjection() const { return Projection * View; }
 };
 
 int main(int argc, char** argv)
@@ -299,20 +301,25 @@ int main(int argc, char** argv)
 
     // Creates and shows the window
     game_window Window = CreateGameWindow();
+    g_ClientWidth = Window.ClientAreaWidth;
+    g_ClientHeight = Window.ClientAreaHeight;
+
+    dx12_game_renderer Dx12Renderer = {};
+    CreateDX12GameRenderer(Dx12Renderer, Window);
 
     game_renderer Renderer = CreateGameRenderer(Window);
 
     // First resize
     {
         RecreateSwapChain(&Renderer, Window.ClientAreaWidth, Window.ClientAreaHeight);
-
-        // This just set width and height of the window
+        
+        // Shows the window
+        // Note that there are few transparent frames until we actually render something
+        // Sort of nit-picking here
         ShowWindow(Window.WindowHandle, SW_SHOW);
-
-        g_DoResize = false;
     }
 
-    camera_component Camera;
+    camera Camera;
     v3 translation{ 0.0f, 1.0f, 3.0f };
     v3 rotation{ -0.2f };
     v3 scale{ 1.0f };
@@ -359,11 +366,11 @@ int main(int argc, char** argv)
 
         // Logic
         {
-            Camera.view = MyMath::Translate(m4(1.0f), translation)
+            Camera.View = MyMath::Translate(m4(1.0f), translation)
                 * MyMath::ToM4(QTN(rotation))
                 * MyMath::Scale(m4(1.0f), scale);
 
-            Camera.view = MyMath::Inverse(Camera.view);
+            Camera.View = MyMath::Inverse(Camera.View);
         }
 
         // Do not render when minimized
