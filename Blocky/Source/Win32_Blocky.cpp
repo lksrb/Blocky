@@ -103,6 +103,7 @@ constexpr Enum& operator^=(Enum& ioLHS, Enum inRHS)                  \
     return ioLHS;                                                    \
 }                                                                    \
 
+#include <malloc.h>
 #include <stdio.h>
 #include <cstdint>
 
@@ -309,6 +310,7 @@ int main(int argc, char** argv)
     g_ClientWidth = Window.ClientAreaWidth;
     g_ClientHeight = Window.ClientAreaHeight;
 
+#if 1
     dx12_game_renderer Dx12Renderer = CreateDX12GameRenderer(Window);
 
     // Show window after initialization
@@ -350,11 +352,13 @@ int main(int argc, char** argv)
         {
             DX12RendererRender(&Dx12Renderer);
         }
+
+        Trace("asldfjasl;d");
     }
 
     DX12RendererFlush(Dx12Renderer.CommandQueue, Dx12Renderer.Fence, &Dx12Renderer.FenceValue, Dx12Renderer.FenceEvent);
 
-#if 0
+#else
     vulkan_game_renderer VulkanRenderer = CreateVulkanGameRenderer(Window);
 
     // First resize
@@ -426,7 +430,7 @@ int main(int argc, char** argv)
         {
             BeginRender(&VulkanRenderer, Camera.GetViewProjection());
 
-            {
+            if(0){
                 v3 Pos = v3{ -2.0f, 0.0f, 0.0f };
                 SubmitQuad(&VulkanRenderer, Pos, v3(0.0f), v3(1.0f), v4(1.0f, 0.0f, 0.0f, 1.0f));
                 Pos.x += 1.0f;
