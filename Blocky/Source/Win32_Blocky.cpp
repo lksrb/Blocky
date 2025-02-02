@@ -162,7 +162,9 @@ LRESULT Win32ProcedureHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             if (width != 0 && height != 0)
             {
                 if (g_ClientWidth != width || g_ClientHeight != height)
+                {
                     g_DoResize = true;
+                }
 
                 g_ClientWidth = width;
                 g_ClientHeight = height;
@@ -310,6 +312,19 @@ int main(int argc, char** argv)
     g_ClientWidth = Window.ClientAreaWidth;
     g_ClientHeight = Window.ClientAreaHeight;
 
+    camera Camera;
+    v3 translation{ 0.0f, 1.0f, 3.0f };
+    v3 rotation{ -0.2f };
+    v3 scale{ 1.0f };
+    {
+        Camera.View = MyMath::Translate(m4(1.0f), translation)
+            * MyMath::ToM4(QTN(rotation))
+            * MyMath::Scale(m4(1.0f), scale);
+
+        Camera.View = MyMath::Inverse(Camera.View);
+        Camera.RecalculateProjectionPerspective(g_ClientWidth, g_ClientHeight);
+    }
+
 #if 1
     dx12_game_renderer Dx12Renderer = CreateDX12GameRenderer(Window);
 
@@ -345,18 +360,20 @@ int main(int argc, char** argv)
         if (g_DoResize)
         {
             g_DoResize = false;
+
+            Camera.RecalculateProjectionPerspective(g_ClientWidth, g_ClientHeight);
             DX12RendererResizeSwapChain(&Dx12Renderer, g_ClientWidth, g_ClientHeight);
         }
 
         if (!IsMinimized)
         {
-            DX12RendererRender(&Dx12Renderer);
+            DX12RendererRender(&Dx12Renderer, Camera.GetViewProjection(), g_ClientWidth, g_ClientHeight);
         }
 
-        Trace("asldfjasl;d");
+        DX12RendererDumpInfoQueue(Dx12Renderer.DebugInfoQueue);
     }
 
-    DX12RendererFlush(Dx12Renderer.CommandQueue, Dx12Renderer.Fence, &Dx12Renderer.FenceValue, Dx12Renderer.FenceEvent);
+    DX12RendererFlush(&Dx12Renderer);
 
 #else
     vulkan_game_renderer VulkanRenderer = CreateVulkanGameRenderer(Window);
@@ -370,12 +387,6 @@ int main(int argc, char** argv)
         // Sort of nit-picking here
         ShowWindow(Window.WindowHandle, SW_SHOW);
     }
-
-    camera Camera;
-    v3 translation{ 0.0f, 1.0f, 3.0f };
-    v3 rotation{ -0.2f };
-    v3 scale{ 1.0f };
-    Camera.RecalculateProjectionPerspective(g_ClientWidth, g_ClientHeight);
 
     // Timestep
     f32 TimeStep = 0.0f;
@@ -430,18 +441,19 @@ int main(int argc, char** argv)
         {
             BeginRender(&VulkanRenderer, Camera.GetViewProjection());
 
-            if(0){
-                v3 Pos = v3{ -2.0f, 0.0f, 0.0f };
-                SubmitQuad(&VulkanRenderer, Pos, v3(0.0f), v3(1.0f), v4(1.0f, 0.0f, 0.0f, 1.0f));
-                Pos.x += 1.0f;
-                SubmitQuad(&VulkanRenderer, Pos, v3(0.0f), v3(1.0f), v4(0.0f, 1.0f, 0.0f, 1.0f));
-                Pos.x += 1.0f;
-                SubmitQuad(&VulkanRenderer, Pos, v3(0.0f), v3(1.0f), v4(0.0f, 0.0f, 1.0f, 1.0f));
-                Pos.x += 1.0f;
-                SubmitQuad(&VulkanRenderer, Pos, v3(0.0f), v3(1.0f), v4(0.0f, 1.0f, 1.0f, 1.0f));
-                Pos.x += 1.0f;
-                SubmitQuad(&VulkanRenderer, Pos, v3(0.0f), v3(1.0f), v4(1.0f, 0.0f, 1.0f, 1.0f));
-                Pos.x += 1.0f;
+            if (1)
+            {
+                v3 Pos = v3{ -0.0f, 0.0f, 0.0f };
+                SubmitCube(&VulkanRenderer, Pos, v3(0.0f), v3(1.0f), v4(1.0f, 0.0f, 0.0f, 1.0f));
+                /* Pos.x += 1.0f;
+                 SubmitCube(&VulkanRenderer, Pos, v3(0.0f), v3(1.0f), v4(0.0f, 1.0f, 0.0f, 1.0f));
+                 Pos.x += 1.0f;
+                 SubmitCube(&VulkanRenderer, Pos, v3(0.0f), v3(1.0f), v4(0.0f, 0.0f, 1.0f, 1.0f));
+                 Pos.x += 1.0f;
+                 SubmitCube(&VulkanRenderer, Pos, v3(0.0f), v3(1.0f), v4(0.0f, 1.0f, 1.0f, 1.0f));
+                 Pos.x += 1.0f;
+                 SubmitCube(&VulkanRenderer, Pos, v3(0.0f), v3(1.0f), v4(1.0f, 0.0f, 1.0f, 1.0f));
+                 Pos.x += 1.0f;*/
             }
 
             EndRender(&VulkanRenderer);
@@ -456,7 +468,6 @@ int main(int argc, char** argv)
         LastCounter = EndCounter;
     }
 #endif
-
 
     return 0;
 }

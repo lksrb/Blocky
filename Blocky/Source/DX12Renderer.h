@@ -10,9 +10,9 @@
 #pragma comment(lib, "dxgi.lib")
 
 // D3D12 extension
-//#include <d3dx12.h>
+#include <d3dx12.h>
 
-#define HAssert(x) Assert(SUCCEEDED(x), #x)
+#define DxAssert(x) Assert(SUCCEEDED(x), #x) 
 
 #define DX12_ENABLE_DEBUG_LAYER
 
@@ -22,7 +22,32 @@
 
 #endif
 
-#include <d3dx12.h>
+static constexpr inline v4 c_QuadVertexPositions[4]
+{
+    { -0.5f, -0.5f, 0.0f, 1.0f },
+    {  0.5f, -0.5f, 0.0f, 1.0f },
+    {  0.5f,  0.5f, 0.0f, 1.0f },
+    { -0.5f,  0.5f, 0.0f, 1.0f }
+};
+
+static D3D12_RESOURCE_BARRIER DX12RendererTransition(
+   ID3D12Resource* pResource,
+   D3D12_RESOURCE_STATES stateBefore,
+   D3D12_RESOURCE_STATES stateAfter,
+   UINT subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,
+   D3D12_RESOURCE_BARRIER_FLAGS flags = D3D12_RESOURCE_BARRIER_FLAG_NONE)
+{
+    D3D12_RESOURCE_BARRIER Result;
+    Result.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    Result.Flags = flags;
+    Result.Transition.pResource = pResource;
+    Result.Transition.StateBefore = stateBefore;
+    Result.Transition.StateAfter = stateAfter;
+    Result.Transition.Subresource = subresource;
+    return Result;
+};
+
+#include "DX12Buffer.h"
 
 struct dx12_resource
 {
@@ -35,11 +60,17 @@ struct dx12_game_renderer
     ID3D12Device2* Device;
     ID3D12Debug* DebugInterface;
     ID3D12InfoQueue* DebugInfoQueue;
-    ID3D12CommandQueue* CommandQueue;
+
+    ID3D12CommandAllocator* DirectCommandAllocators[FIF];
+    ID3D12GraphicsCommandList2* DirectCommandList;
+    ID3D12CommandQueue* DirectCommandQueue;
+
+    ID3D12CommandAllocator* CopyCommandAllocators[FIF];
+    ID3D12CommandQueue* CopyCommandQueue;
+    ID3D12GraphicsCommandList2* CopyCommandList;
+
     IDXGISwapChain4* SwapChain;
     ID3D12Resource* BackBuffers[FIF];
-    ID3D12GraphicsCommandList2* CommandList;
-    ID3D12CommandAllocator* CommandAllocators[FIF];
     ID3D12DescriptorHeap* RTVDescriptorHeap;
     u32 RTVDescriptorSize;
     u32 CurrentBackBufferIndex;
@@ -50,28 +81,28 @@ struct dx12_game_renderer
     ID3D12Fence* Fence;
     u64 FenceValue;
     u64 FrameFenceValues[FIF];
-    HANDLE FenceEvent;
+    HANDLE DirectFenceEvent;
 
     // Describes resources used in the shader
     ID3D12RootSignature* RootSignature;
 
-    // Describes the rendering process
-    ID3D12PipelineState* PipelineState;
-
     D3D12_VIEWPORT Viewport;
     D3D12_RECT ScissorRect;
 
-    // Resources
-    ID3D12Resource* VertexBuffer;
-    D3D12_VERTEX_BUFFER_VIEW VertexBufferView;
+    // Quad
+    ID3D12PipelineState* QuadPipelineState;
+    dx12_vertex_buffer QuadVertexBuffer;
+
+    dx12_buffer QuadIndexBuffer;
+
+    quad_vertex QuadVertexDataBase[c_MaxQuadVertices];
+    quad_vertex* QuadVertexDataPtr = QuadVertexDataBase;
+    u32 QuadIndexCount = 0;
 };
 
-static void DX12RendererDumpInfoQueue(dx12_game_renderer* Renderer)
+static void DX12RendererDumpInfoQueue(ID3D12InfoQueue* InfoQueue)
 {
-    auto InfoQueue = Renderer->DebugInfoQueue;
-    const UINT64 messageCount = InfoQueue->GetNumStoredMessages();
-
-    for (UINT64 i = 0; i < messageCount; ++i)
+    for (UINT64 i = 0; i < InfoQueue->GetNumStoredMessages(); ++i)
     {
         SIZE_T MessageLength = 0;
 
@@ -111,7 +142,7 @@ static u64 DX12RendererSignal(ID3D12CommandQueue* CommandQueue, ID3D12Fence* Fen
 {
     u64& RefFenceValue = *FenceValue;
     u64 FenceValueForSignal = ++RefFenceValue;
-    HAssert(CommandQueue->Signal(Fence, FenceValueForSignal));
+    DxAssert(CommandQueue->Signal(Fence, FenceValueForSignal));
     return FenceValueForSignal;
 }
 
@@ -124,51 +155,29 @@ static void DX12RendererWaitForFenceValue(ID3D12Fence* Fence, u64 FenceValue, HA
     }
 }
 
-static void DX12RendererFlush(ID3D12CommandQueue* commandQueue, ID3D12Fence* Fence, uint64_t* FenceValue, HANDLE FenceEvent)
+static void DX12RendererFlush(dx12_game_renderer* Renderer)
 {
-    u64 FenceValueForSignal = DX12RendererSignal(commandQueue, Fence, FenceValue);
-    DX12RendererWaitForFenceValue(Fence, FenceValueForSignal, FenceEvent);
-};
+    u64 FenceValueForSignal = DX12RendererSignal(Renderer->DirectCommandQueue, Renderer->Fence, &Renderer->FenceValue);
+    DX12RendererWaitForFenceValue(Renderer->Fence, FenceValueForSignal, Renderer->DirectFenceEvent);
+}
 
-static D3D12_RESOURCE_BARRIER  DX12RendererTransition(
-   _In_ ID3D12Resource* pResource,
-   D3D12_RESOURCE_STATES stateBefore,
-   D3D12_RESOURCE_STATES stateAfter,
-   UINT subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,
-   D3D12_RESOURCE_BARRIER_FLAGS flags = D3D12_RESOURCE_BARRIER_FLAG_NONE)
+static IDXGIAdapter1* GetHardwareAdapter(IDXGIFactory1* Factory, bool RequestHighPerformanceAdapter = true)
 {
-    D3D12_RESOURCE_BARRIER result;
-    result.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-    result.Flags = flags;
-    result.Transition.pResource = pResource;
-    result.Transition.StateBefore = stateBefore;
-    result.Transition.StateAfter = stateAfter;
-    result.Transition.Subresource = subresource;
-    return result;
-};
-
-void GetHardwareAdapter(
-    IDXGIFactory1* pFactory,
-    IDXGIAdapter1** ppAdapter,
-    bool requestHighPerformanceAdapter = true)
-{
-    *ppAdapter = nullptr;
-
-    IDXGIAdapter1* adapter;
+    IDXGIAdapter1* Adapter = nullptr;
 
     IDXGIFactory6* factory6;
-    if (SUCCEEDED(pFactory->QueryInterface(IID_PPV_ARGS(&factory6))))
+    if (SUCCEEDED(Factory->QueryInterface(IID_PPV_ARGS(&factory6))))
     {
         for (
             UINT adapterIndex = 0;
             SUCCEEDED(factory6->EnumAdapterByGpuPreference(
                 adapterIndex,
-                requestHighPerformanceAdapter == true ? DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE : DXGI_GPU_PREFERENCE_UNSPECIFIED,
-                IID_PPV_ARGS(&adapter)));
+                RequestHighPerformanceAdapter == true ? DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE : DXGI_GPU_PREFERENCE_UNSPECIFIED,
+                IID_PPV_ARGS(&Adapter)));
                 ++adapterIndex)
         {
             DXGI_ADAPTER_DESC1 desc;
-            adapter->GetDesc1(&desc);
+            Adapter->GetDesc1(&desc);
 
             if (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE)
             {
@@ -179,19 +188,19 @@ void GetHardwareAdapter(
 
             // Check to see whether the adapter supports Direct3D 12, but don't create the
             // actual device yet.
-            if (SUCCEEDED(D3D12CreateDevice(adapter, D3D_FEATURE_LEVEL_11_0, _uuidof(ID3D12Device), nullptr)))
+            if (SUCCEEDED(D3D12CreateDevice(Adapter, D3D_FEATURE_LEVEL_11_0, _uuidof(ID3D12Device), nullptr)))
             {
                 break;
             }
         }
     }
 
-    if (adapter == nullptr)
+    if (Adapter == nullptr)
     {
-        for (UINT adapterIndex = 0; SUCCEEDED(pFactory->EnumAdapters1(adapterIndex, &adapter)); ++adapterIndex)
+        for (UINT adapterIndex = 0; SUCCEEDED(Factory->EnumAdapters1(adapterIndex, &Adapter)); ++adapterIndex)
         {
             DXGI_ADAPTER_DESC1 desc;
-            adapter->GetDesc1(&desc);
+            Adapter->GetDesc1(&desc);
 
             if (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE)
             {
@@ -202,47 +211,42 @@ void GetHardwareAdapter(
 
             // Check to see whether the adapter supports Direct3D 12, but don't create the
             // actual device yet.
-            if (SUCCEEDED(D3D12CreateDevice(adapter, D3D_FEATURE_LEVEL_11_0, _uuidof(ID3D12Device), nullptr)))
+            if (SUCCEEDED(D3D12CreateDevice(Adapter, D3D_FEATURE_LEVEL_11_0, _uuidof(ID3D12Device), nullptr)))
             {
                 break;
             }
         }
     }
 
-    *ppAdapter = adapter;
+    return Adapter;
 }
 
-static dx12_game_renderer CreateDX12GameRenderer(game_window Window)
+static void DX12RendererInitializeContext(dx12_game_renderer* Renderer, game_window Window)
 {
-    dx12_game_renderer Renderer = {};
-
     // Enable debug layer
     // This is sort of like validation layers in Vulkan
-    HAssert(D3D12GetDebugInterface(IID_PPV_ARGS(&Renderer.DebugInterface)));
-    Renderer.DebugInterface->EnableDebugLayer();
+    DxAssert(D3D12GetDebugInterface(IID_PPV_ARGS(&Renderer->DebugInterface)));
+    Renderer->DebugInterface->EnableDebugLayer();
 
     // Create device
     {
-        // NOTE: pAdapter is optional, when nullptr it defaultly selects one
+        IDXGIFactory4* Factory;
+        DxAssert(CreateDXGIFactory2(DXGI_CREATE_FACTORY_DEBUG, IID_PPV_ARGS(&Factory)));
 
-        IDXGIFactory4* factory;
-        HAssert(CreateDXGIFactory2(DXGI_CREATE_FACTORY_DEBUG, IID_PPV_ARGS(&factory)));
-
-        IDXGIAdapter1* hardwareAdapter;
-        GetHardwareAdapter(factory, &hardwareAdapter);
-        HAssert(D3D12CreateDevice(hardwareAdapter, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&Renderer.Device)));
+        IDXGIAdapter1* HardwareAdapter = GetHardwareAdapter(Factory);
+        DxAssert(D3D12CreateDevice(HardwareAdapter, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&Renderer->Device)));
     }
 
     // Setup debug interface
     {
-        Renderer.Device->QueryInterface(IID_PPV_ARGS(&Renderer.DebugInfoQueue));
-        Renderer.DebugInfoQueue->QueryInterface(IID_PPV_ARGS(&Renderer.DebugInfoQueue));
-        Renderer.DebugInfoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_ERROR, true);
-        Renderer.DebugInfoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_CORRUPTION, true);
-        Renderer.DebugInfoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_WARNING, false);
-        Renderer.DebugInfoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_INFO, false);
+        DxAssert(Renderer->Device->QueryInterface(IID_PPV_ARGS(&Renderer->DebugInfoQueue)));
+        Renderer->DebugInfoQueue->QueryInterface(IID_PPV_ARGS(&Renderer->DebugInfoQueue));
+        Renderer->DebugInfoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_CORRUPTION, false);
+        Renderer->DebugInfoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_ERROR, false);
+        Renderer->DebugInfoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_WARNING, false);
+        Renderer->DebugInfoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_INFO, false);
         //InfoQueue->Release();
-        //Renderer.DebugInterface->Release();
+        //Renderer->DebugInterface->Release();
 
         // Suppressing some warning
         {
@@ -265,31 +269,75 @@ static dx12_game_renderer CreateDX12GameRenderer(game_window Window)
             D3D12_INFO_QUEUE_FILTER NewFilter = {};
             //NewFilter.DenyList.NumCategories = _countof(Categories);
             //NewFilter.DenyList.pCategoryList = Categories;
-            NewFilter.DenyList.NumSeverities = _countof(Severities);
+            NewFilter.DenyList.NumSeverities = CountOf(Severities);
             NewFilter.DenyList.pSeverityList = Severities;
-            NewFilter.DenyList.NumIDs = _countof(DenyIds);
+            NewFilter.DenyList.NumIDs = CountOf(DenyIds);
             NewFilter.DenyList.pIDList = DenyIds;
 
-            HAssert(Renderer.DebugInfoQueue->PushStorageFilter(&NewFilter));
+            DxAssert(Renderer->DebugInfoQueue->PushStorageFilter(&NewFilter));
         }
     }
 
-    // Create command queue
+    // Create direct command queue
     {
-        D3D12_COMMAND_QUEUE_DESC desc = {};
-        desc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT; // Most general - For draw, compute and copy commands
-        desc.Priority = D3D12_COMMAND_QUEUE_PRIORITY_NORMAL;
-        desc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
-        desc.NodeMask = 0;
+        // Create direct command allocator
+        for (u32 i = 0; i < FIF; i++)
+        {
+            DxAssert(Renderer->Device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&Renderer->DirectCommandAllocators[i])));
+        }
 
-        HAssert(Renderer.Device->CreateCommandQueue(&desc, IID_PPV_ARGS(&Renderer.CommandQueue)));
+        D3D12_COMMAND_QUEUE_DESC Desc = {};
+        Desc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT; // Most general - For draw, compute and copy commands
+        Desc.Priority = D3D12_COMMAND_QUEUE_PRIORITY_NORMAL;
+        Desc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
+        Desc.NodeMask = 0;
+        DxAssert(Renderer->Device->CreateCommandQueue(&Desc, IID_PPV_ARGS(&Renderer->DirectCommandQueue)));
+
+        // Create a direct command list
+        {
+            DxAssert(Renderer->Device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, Renderer->DirectCommandAllocators[Renderer->CurrentBackBufferIndex], nullptr, IID_PPV_ARGS(&Renderer->DirectCommandList)));
+
+            // Command lists are created in the recording state, but there is nothing
+            // to record yet. The main loop expects it to be closed, so close it now.
+            DxAssert(Renderer->DirectCommandList->Close());
+        }
+
+        // Fence
+        DxAssert(Renderer->Device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&Renderer->Fence)));
+        Renderer->DirectFenceEvent = CreateEvent(nullptr, false, false, nullptr);
+        Assert(Renderer->DirectFenceEvent != INVALID_HANDLE_VALUE, "Could not create fence event.");
+    }
+
+    // Create copy command queue
+    {
+        // Create direct command allocator
+        for (u32 i = 0; i < FIF; i++)
+        {
+            DxAssert(Renderer->Device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_COPY, IID_PPV_ARGS(&Renderer->CopyCommandAllocators[i])));
+        }
+
+        D3D12_COMMAND_QUEUE_DESC Desc = {};
+        Desc.Type = D3D12_COMMAND_LIST_TYPE_COPY;
+        Desc.Priority = D3D12_COMMAND_QUEUE_PRIORITY_NORMAL;
+        Desc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
+        Desc.NodeMask = 0;
+        DxAssert(Renderer->Device->CreateCommandQueue(&Desc, IID_PPV_ARGS(&Renderer->CopyCommandQueue)));
+
+        // Create a copy command list
+        {
+            DxAssert(Renderer->Device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_COPY, Renderer->CopyCommandAllocators[Renderer->CurrentBackBufferIndex], nullptr, IID_PPV_ARGS(&Renderer->CopyCommandList)));
+
+            // Command lists are created in the recording state, but there is nothing
+            // to record yet. The main loop expects it to be closed, so close it now.
+            //DxAssert(Renderer->DirectCommandList->Close());
+        }
     }
 
     // Create swapchain
     {
         IDXGISwapChain1* SwapChain1;
         IDXGIFactory4* Factory4;
-        HAssert(CreateDXGIFactory2(DXGI_CREATE_FACTORY_DEBUG, IID_PPV_ARGS(&Factory4)));
+        DxAssert(CreateDXGIFactory2(DXGI_CREATE_FACTORY_DEBUG, IID_PPV_ARGS(&Factory4)));
 
         DXGI_SWAP_CHAIN_DESC1 swapChainDesc = {};
         swapChainDesc.Width = Window.ClientAreaWidth;
@@ -306,18 +354,18 @@ static dx12_game_renderer CreateDX12GameRenderer(game_window Window)
         // TODO: More robustness needed
         swapChainDesc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING | DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;// CheckTearingSupport() ? : 0;
 
-        HAssert(Factory4->CreateSwapChainForHwnd(Renderer.CommandQueue, Window.WindowHandle, &swapChainDesc, nullptr, nullptr, &SwapChain1));
+        DxAssert(Factory4->CreateSwapChainForHwnd(Renderer->DirectCommandQueue, Window.WindowHandle, &swapChainDesc, nullptr, nullptr, &SwapChain1));
 
         // Disable the Alt+Enter fullscreen toggle feature. Switching to fullscreen
         // will be handled manually.
-        HAssert(Factory4->MakeWindowAssociation(Window.WindowHandle, DXGI_MWA_NO_ALT_ENTER));
-        SwapChain1->QueryInterface(IID_PPV_ARGS(&Renderer.SwapChain));
+        DxAssert(Factory4->MakeWindowAssociation(Window.WindowHandle, DXGI_MWA_NO_ALT_ENTER));
+        SwapChain1->QueryInterface(IID_PPV_ARGS(&Renderer->SwapChain));
         SwapChain1->Release();
         Factory4->Release();
 
-        Renderer.SwapChain->SetMaximumFrameLatency(FIF);
+        Renderer->SwapChain->SetMaximumFrameLatency(FIF);
 
-        Renderer.CurrentBackBufferIndex = Renderer.SwapChain->GetCurrentBackBufferIndex();
+        Renderer->CurrentBackBufferIndex = Renderer->SwapChain->GetCurrentBackBufferIndex();
     }
 
     // Create a Descriptor Heap
@@ -327,152 +375,178 @@ static dx12_game_renderer CreateDX12GameRenderer(game_window Window)
         desc.NumDescriptors = FIF;
         desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
         desc.NodeMask = 1;
-        HAssert(Renderer.Device->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&Renderer.RTVDescriptorHeap)));
+        DxAssert(Renderer->Device->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&Renderer->RTVDescriptorHeap)));
     }
 
     // Update Render Target Views
     {
-        Renderer.RTVDescriptorSize = Renderer.Device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+        Renderer->RTVDescriptorSize = Renderer->Device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
 
-        D3D12_CPU_DESCRIPTOR_HANDLE RtvHandle = Renderer.RTVDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
+        D3D12_CPU_DESCRIPTOR_HANDLE RtvHandle = Renderer->RTVDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
 
         for (u32 i = 0; i < FIF; ++i)
         {
             ID3D12Resource* BackBuffer;
-            HAssert(Renderer.SwapChain->GetBuffer(i, IID_PPV_ARGS(&BackBuffer)));
+            DxAssert(Renderer->SwapChain->GetBuffer(i, IID_PPV_ARGS(&BackBuffer)));
 
-            Renderer.Device->CreateRenderTargetView(BackBuffer, nullptr, RtvHandle);
+            Renderer->Device->CreateRenderTargetView(BackBuffer, nullptr, RtvHandle);
 
-            Renderer.BackBuffers[i] = BackBuffer;
+            Renderer->BackBuffers[i] = BackBuffer;
 
-            RtvHandle.ptr += Renderer.RTVDescriptorSize;
+            RtvHandle.ptr += Renderer->RTVDescriptorSize;
         }
     }
+}
 
-    // Create command allocator
-    for (u32 i = 0; i < FIF; i++)
+static void DX12RendererInitializePipeline(dx12_game_renderer* Renderer)
+{
+    auto Device = Renderer->Device;
+
+    // Root Signature
     {
-        HAssert(Renderer.Device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&Renderer.CommandAllocators[i])));
-    }
+        D3D12_ROOT_PARAMETER Parameters[1] = {};
+        Parameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
+        Parameters[0].Constants.Num32BitValues = 16;  // 4x4 matrix (16 floats)
+        Parameters[0].Constants.ShaderRegister = 0;  // Matches b0 in HLSL
+        Parameters[0].Constants.RegisterSpace = 0;
+        Parameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
 
-    // NOTE: Basically the same as vulkan command buffer pool
-    // Create a command list
-    HAssert(Renderer.Device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, Renderer.CommandAllocators[Renderer.CurrentBackBufferIndex], nullptr, IID_PPV_ARGS(&Renderer.CommandList)));
-    HAssert(Renderer.CommandList->Close());
+        D3D12_ROOT_SIGNATURE_DESC Desc = {};
+        Desc.NumParameters = CountOf(Parameters);
+        Desc.pParameters = Parameters;
+        Desc.NumStaticSamplers = 0;
+        Desc.pStaticSamplers = nullptr;
+        Desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
 
-    // Fence
-    HAssert(Renderer.Device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&Renderer.Fence)));
-    Renderer.FenceEvent = CreateEvent(nullptr, false, false, nullptr);
-    Assert(Renderer.FenceEvent != INVALID_HANDLE_VALUE, "Could not create fence event.");
-
-    // RESOURCE STUFF
-
-    // Root signature
-    {
-        /*  D3D12_ROOT_SIGNATURE_DESC Desc = {};
-          Desc.NumParameters = 0;
-          Desc.pParameters = nullptr;
-          Desc.NumStaticSamplers = 0;
-          Desc.pStaticSamplers = nullptr;
-          Desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
-
-         */
-
+        // Root signature
         ID3DBlob* Error;
         ID3DBlob* Signature;
-        CD3DX12_ROOT_SIGNATURE_DESC Desc;
-        Desc.Init(0, nullptr, 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
-        HAssert(D3D12SerializeRootSignature(&Desc, D3D_ROOT_SIGNATURE_VERSION_1, &Signature, &Error));
-
-        HAssert(Renderer.Device->CreateRootSignature(0, Signature->GetBufferPointer(), Signature->GetBufferSize(), IID_PPV_ARGS(&Renderer.RootSignature)));
+        DxAssert(D3D12SerializeRootSignature(&Desc, D3D_ROOT_SIGNATURE_VERSION_1, &Signature, &Error));
+        DxAssert(Device->CreateRootSignature(0, Signature->GetBufferPointer(), Signature->GetBufferSize(), IID_PPV_ARGS(&Renderer->RootSignature)));
     }
 
-    // Shaders
+    // Quad Pipeline
     {
-        ID3DBlob* VertexShader;
-        ID3DBlob* PixelShader;
+        // Graphics Pipeline State
+        {
+            ID3DBlob* VertexShader;
+            ID3DBlob* PixelShader;
 
-        ID3DBlob* ErrorMessage;
+            ID3DBlob* ErrorMessage;
 
 #if defined(BK_DEBUG)
-        // Enable better shader debugging with the graphics debugging tools.
-        UINT CompileFlags = D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
+            // Enable better shader debugging with the graphics debugging tools.
+            UINT CompileFlags = D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
 #else
-        UINT CompileFlags = 0;
+            UINT CompileFlags = 0;
 #endif
 
-        HAssert(D3DCompileFromFile(L"Resources/Shader.hlsl", nullptr, nullptr, "VSMain", "vs_5_1", CompileFlags, 0, &VertexShader, &ErrorMessage));
-        //Err("%s", ErrorMessage->GetBufferPointer());
-        HAssert(D3DCompileFromFile(L"Resources/Shader.hlsl", nullptr, nullptr, "PSMain", "ps_5_1", CompileFlags, 0, &PixelShader, &ErrorMessage));
+            DxAssert(D3DCompileFromFile(L"Resources/Shader.hlsl", nullptr, nullptr, "VSMain", "vs_5_1", CompileFlags, 0, &VertexShader, &ErrorMessage));
+            DxAssert(D3DCompileFromFile(L"Resources/Shader.hlsl", nullptr, nullptr, "PSMain", "ps_5_1", CompileFlags, 0, &PixelShader, &ErrorMessage));
 
-        // Define the vertex input layout.
-        D3D12_INPUT_ELEMENT_DESC InputElementDescs[] =
+            // Define the vertex input layout.
+            D3D12_INPUT_ELEMENT_DESC InputElementDescs[] =
+            {
+                { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+                { "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }
+            };
+
+            D3D12_GRAPHICS_PIPELINE_STATE_DESC PipelineDesc = {};
+
+            // Rasterizer state
+            PipelineDesc.RasterizerState = {};
+            PipelineDesc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
+            PipelineDesc.RasterizerState.CullMode = D3D12_CULL_MODE_BACK;
+            PipelineDesc.RasterizerState.FrontCounterClockwise = TRUE;
+            PipelineDesc.RasterizerState.DepthBias = D3D12_DEFAULT_DEPTH_BIAS;
+            PipelineDesc.RasterizerState.DepthBiasClamp = D3D12_DEFAULT_DEPTH_BIAS_CLAMP;
+            PipelineDesc.RasterizerState.SlopeScaledDepthBias = D3D12_DEFAULT_SLOPE_SCALED_DEPTH_BIAS;
+            PipelineDesc.RasterizerState.DepthClipEnable = TRUE;
+            PipelineDesc.RasterizerState.MultisampleEnable = FALSE;
+            PipelineDesc.RasterizerState.AntialiasedLineEnable = FALSE;
+            PipelineDesc.RasterizerState.ForcedSampleCount = 0;
+            PipelineDesc.RasterizerState.ConservativeRaster = D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF;
+
+            //// Blend state
+            PipelineDesc.BlendState = {};
+            PipelineDesc.BlendState.AlphaToCoverageEnable = FALSE;
+            PipelineDesc.BlendState.IndependentBlendEnable = FALSE;
+            const D3D12_RENDER_TARGET_BLEND_DESC DefaultRenderTargetBlendDesc =
+            {
+                FALSE,FALSE,
+                D3D12_BLEND_ONE, D3D12_BLEND_ZERO, D3D12_BLEND_OP_ADD,
+                D3D12_BLEND_ONE, D3D12_BLEND_ZERO, D3D12_BLEND_OP_ADD,
+                D3D12_LOGIC_OP_NOOP,
+                D3D12_COLOR_WRITE_ENABLE_ALL,
+            };
+            for (UINT i = 0; i < D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT; ++i)
+                PipelineDesc.BlendState.RenderTarget[i] = DefaultRenderTargetBlendDesc;
+
+            PipelineDesc.InputLayout = { InputElementDescs, CountOf(InputElementDescs) };
+            PipelineDesc.pRootSignature = Renderer->RootSignature;
+            PipelineDesc.VS = CD3DX12_SHADER_BYTECODE(VertexShader);
+            PipelineDesc.PS = CD3DX12_SHADER_BYTECODE(PixelShader);
+            PipelineDesc.SampleMask = UINT_MAX;
+            PipelineDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+            PipelineDesc.NumRenderTargets = 1;
+            PipelineDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+            PipelineDesc.SampleDesc.Count = 1;
+
+            DxAssert(Device->CreateGraphicsPipelineState(&PipelineDesc, IID_PPV_ARGS(&Renderer->QuadPipelineState)));
+        }
+
+        // Quad
         {
-            { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-            { "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }
-        };
+            Renderer->QuadVertexBuffer = DX12VertexBufferCreate(Device, sizeof(quad_vertex) * c_MaxQuadVertices);
 
-        //// Describe and create the graphics pipeline state object (PSO).
-        //D3D12_GRAPHICS_PIPELINE_STATE_DESC PipelineDesc = {};
-        //PipelineDesc.InputLayout = { InputElementDescs, CountOf(InputElementDescs) };
-        //PipelineDesc.pRootSignature = Renderer.RootSignature;
-        //PipelineDesc.VS = { reinterpret_cast<UINT8*>(VertexShader->GetBufferPointer()), VertexShader->GetBufferSize() };
-        //PipelineDesc.PS = { reinterpret_cast<UINT8*>(PixelShader->GetBufferPointer()), PixelShader->GetBufferSize() };
-        //PipelineDesc.DepthStencilState = {};
-        //PipelineDesc.DepthStencilState.DepthEnable = FALSE;
-        //PipelineDesc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
-        //PipelineDesc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_ALWAYS;
-        //PipelineDesc.DepthStencilState.StencilEnable = FALSE;
+            u32 QuadIndices[c_MaxQuadIndices];
+            u32 Offset = 0;
+            for (u32 i = 0; i < c_MaxQuadIndices; i += 6)
+            {
+                QuadIndices[i + 0] = Offset + 0;
+                QuadIndices[i + 1] = Offset + 1;
+                QuadIndices[i + 2] = Offset + 2;
 
-        //// Rasterizer state
-        //D3D12_RASTERIZER_DESC RasterizerStateDesc = {};
-        //RasterizerStateDesc.FillMode = D3D12_FILL_MODE_SOLID;
-        //RasterizerStateDesc.CullMode = D3D12_CULL_MODE_BACK;
-        //RasterizerStateDesc.FrontCounterClockwise = FALSE;
-        //RasterizerStateDesc.DepthBias = D3D12_DEFAULT_DEPTH_BIAS;
-        //RasterizerStateDesc.DepthBiasClamp = D3D12_DEFAULT_DEPTH_BIAS_CLAMP;
-        //RasterizerStateDesc.SlopeScaledDepthBias = D3D12_DEFAULT_SLOPE_SCALED_DEPTH_BIAS;
-        //RasterizerStateDesc.DepthClipEnable = TRUE;
-        //RasterizerStateDesc.MultisampleEnable = FALSE;
-        //RasterizerStateDesc.AntialiasedLineEnable = FALSE;
-        //RasterizerStateDesc.ForcedSampleCount = 0;
-        //RasterizerStateDesc.ConservativeRaster = D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF;
+                QuadIndices[i + 3] = Offset + 2;
+                QuadIndices[i + 4] = Offset + 3;
+                QuadIndices[i + 5] = Offset + 0;
 
-        //// Blend state
-        //D3D12_BLEND_DESC BlendStateDest = {};
-        //BlendStateDest.AlphaToCoverageEnable = FALSE;
-        //BlendStateDest.IndependentBlendEnable = FALSE;
-        //const D3D12_RENDER_TARGET_BLEND_DESC DefaultRenderTargetBlendDesc =
-        //{
-        //    FALSE,FALSE,
-        //    D3D12_BLEND_ONE, D3D12_BLEND_ZERO, D3D12_BLEND_OP_ADD,
-        //    D3D12_BLEND_ONE, D3D12_BLEND_ZERO, D3D12_BLEND_OP_ADD,
-        //    D3D12_LOGIC_OP_NOOP,
-        //    D3D12_COLOR_WRITE_ENABLE_ALL,
-        //};
-        //for (UINT i = 0; i < D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT; ++i)
-        //    BlendStateDest.RenderTarget[i] = DefaultRenderTargetBlendDesc;
+                Offset += 4;
+            }
 
+            Renderer->QuadIndexBuffer = DX12BufferCreate(Device, D3D12_RESOURCE_STATE_COMMON, D3D12_HEAP_TYPE_DEFAULT, c_MaxQuadIndices * sizeof(u32));
 
-        D3D12_GRAPHICS_PIPELINE_STATE_DESC PipelineDesc = {};
-        PipelineDesc.InputLayout = { InputElementDescs, CountOf(InputElementDescs) };
-        PipelineDesc.pRootSignature = Renderer.RootSignature;
-        PipelineDesc.VS = CD3DX12_SHADER_BYTECODE(VertexShader);
-        PipelineDesc.PS = CD3DX12_SHADER_BYTECODE(PixelShader);
-        PipelineDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
-        PipelineDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
-        PipelineDesc.SampleMask = UINT_MAX;
-        PipelineDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-        PipelineDesc.NumRenderTargets = 1;
-        PipelineDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
-        PipelineDesc.SampleDesc.Count = 1;
-        auto P = &Renderer.Device;
+            // Prepare for upload
+            D3D12_SUBRESOURCE_DATA SubresourceData = {};
+            SubresourceData.pData = QuadIndices;
+            SubresourceData.RowPitch = c_MaxQuadIndices * sizeof(u32);
+            SubresourceData.SlicePitch = SubresourceData.RowPitch;
 
-        DX12RendererDumpInfoQueue(&Renderer);
-        HRESULT HR = Renderer.Device->CreateGraphicsPipelineState(&PipelineDesc, IID_PPV_ARGS(&Renderer.PipelineState));
-        DX12RendererDumpInfoQueue(&Renderer);
+            // Copy indices
+            {
+                dx12_buffer Intermediate = DX12BufferCreate(Device, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_HEAP_TYPE_UPLOAD, c_MaxQuadIndices * sizeof(u32));
+                void* MappedPtr = nullptr;
+                Intermediate.Resource->Map(0, nullptr, &MappedPtr);
+                memcpy(MappedPtr, QuadIndices, c_MaxQuadIndices * sizeof(u32));
+                Intermediate.Resource->Unmap(0, nullptr);
 
+                Renderer->CopyCommandList->CopyBufferRegion(Renderer->QuadIndexBuffer.Resource, 0, Intermediate.Resource, 0, c_MaxQuadIndices * sizeof(u32));
+                Renderer->CopyCommandList->Close();
+                Renderer->CopyCommandQueue->ExecuteCommandLists(1, (ID3D12CommandList* const*)&Renderer->CopyCommandList);
+
+                // TODO: Wait for copy command to finish
+                //DX12BufferDestroy(&Intermediate);
+            }
+        }
     }
+}
+
+static dx12_game_renderer CreateDX12GameRenderer(game_window Window)
+{
+    dx12_game_renderer Renderer = {};
+
+    DX12RendererInitializeContext(&Renderer, Window);
+    DX12RendererInitializePipeline(&Renderer);
 
     return Renderer;
 }
@@ -480,7 +554,7 @@ static dx12_game_renderer CreateDX12GameRenderer(game_window Window)
 static void DX12RendererResizeSwapChain(dx12_game_renderer* Renderer, u32 RequestWidth, u32 RequestHeight)
 {
     // Flush the GPU queue to make sure the swap chain's back buffers are not being referenced by an in-flight command list.
-    DX12RendererFlush(Renderer->CommandQueue, Renderer->Fence, &Renderer->FenceValue, Renderer->FenceEvent);
+    DX12RendererFlush(Renderer);
 
     // Reset fence values
     for (u32 i = 0; i < FIF; i++)
@@ -489,9 +563,10 @@ static void DX12RendererResizeSwapChain(dx12_game_renderer* Renderer, u32 Reques
         Renderer->FrameFenceValues[i] = Renderer->FrameFenceValues[Renderer->CurrentBackBufferIndex];
     }
 
-    DXGI_SWAP_CHAIN_DESC swapChainDesc = {};
-    HAssert(Renderer->SwapChain->GetDesc(&swapChainDesc));
-    HAssert(Renderer->SwapChain->ResizeBuffers(FIF, RequestWidth, RequestHeight, swapChainDesc.BufferDesc.Format, swapChainDesc.Flags));
+    DXGI_SWAP_CHAIN_DESC SwapChainDesc;
+    DxAssert(Renderer->SwapChain->GetDesc(&SwapChainDesc));
+    DxAssert(Renderer->SwapChain->ResizeBuffers(FIF, RequestWidth, RequestHeight, SwapChainDesc.BufferDesc.Format, SwapChainDesc.Flags));
+    DxAssert(Renderer->SwapChain->GetDesc(&SwapChainDesc));
 
     Renderer->CurrentBackBufferIndex = Renderer->SwapChain->GetCurrentBackBufferIndex();
 
@@ -502,7 +577,7 @@ static void DX12RendererResizeSwapChain(dx12_game_renderer* Renderer, u32 Reques
     for (u32 i = 0; i < FIF; ++i)
     {
         ID3D12Resource* backBuffer;
-        HAssert(Renderer->SwapChain->GetBuffer(i, IID_PPV_ARGS(&backBuffer)));
+        DxAssert(Renderer->SwapChain->GetBuffer(i, IID_PPV_ARGS(&backBuffer)));
 
         Renderer->Device->CreateRenderTargetView(backBuffer, nullptr, rtvHandle);
 
@@ -512,48 +587,144 @@ static void DX12RendererResizeSwapChain(dx12_game_renderer* Renderer, u32 Reques
     }
 
     Warn("SwapChain resized to %d %d", RequestWidth, RequestHeight);
-
 }
 
-static void DX12RendererRender(dx12_game_renderer* Renderer)
+static void SubmitQuad(dx12_game_renderer* Renderer, v3 Translation, v3 Rotation, v3 Scale, v4 Color)
 {
+    m4 Transform = MyMath::Translate(m4(1.0f), Translation)
+        * MyMath::ToM4(QTN(Rotation))
+        * MyMath::Scale(m4(1.0f), Scale);
+
+    for (u32 i = 0; i < CountOf(c_QuadVertexPositions); i++)
+    {
+        Renderer->QuadVertexDataPtr->Position = v3(Transform * c_QuadVertexPositions[i]);
+        Renderer->QuadVertexDataPtr->Color = Color;
+        Renderer->QuadVertexDataPtr++;
+    }
+
+    Renderer->QuadIndexCount += 6;
+}
+
+static void SubmitCube(dx12_game_renderer* Renderer, v3 Translation, v3 Rotation, v3 Scale, v4 Color)
+{
+    m4 Transform = MyMath::Translate(m4(1.0f), Translation)
+        * MyMath::ToM4(QTN(Rotation))
+        * MyMath::Scale(m4(1.0f), Scale);
+
+    for (u32 i = 0; i < CountOf(c_CubeVertexPositions); i++)
+    {
+        Renderer->QuadVertexDataPtr->Position = v3(c_CubeVertexPositions[i]);
+        Renderer->QuadVertexDataPtr->Color = Color;
+        Renderer->QuadVertexDataPtr++;
+    }
+
+    Renderer->QuadIndexCount += 36;
+}
+
+static void DX12RendererRender(dx12_game_renderer* Renderer, m4 ViewProjection, u32 Width, u32 Height)
+{
+    // Begin render
+    Renderer->QuadIndexCount = 0;
+    Renderer->QuadVertexDataPtr = Renderer->QuadVertexDataBase;
+
+    //SubmitQuad(Renderer, v3(0.0f), v3(0.0f), v3(1.0f), v4(1.0f, 0.0f, 0.0f, 1.0f));
+    SubmitCube(Renderer, v3(0), v3(0), v3(1.0f), v4(1.0f, 0.0f, 0.0f, 1.0f));
+
+    // End render
+
     // Reset state
-    auto CommandAllocator = Renderer->CommandAllocators[Renderer->CurrentBackBufferIndex];
+    auto DirectCommandAllocator = Renderer->DirectCommandAllocators[Renderer->CurrentBackBufferIndex];
+
     //Trace("%d", Renderer->CurrentBackBufferIndex);
     auto BackBuffer = Renderer->BackBuffers[Renderer->CurrentBackBufferIndex];
-    auto CommandList = Renderer->CommandList;
+    auto CommandList = Renderer->DirectCommandList;
 
-    CommandAllocator->Reset();
-    Renderer->CommandList->Reset(CommandAllocator, nullptr);
+    DirectCommandAllocator->Reset();
+    CommandList->Reset(DirectCommandAllocator, Renderer->QuadPipelineState);
 
     // Frame that was presented needs to be set to render target again
     auto Barrier = DX12RendererTransition(BackBuffer, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
     CommandList->ResourceBarrier(1, &Barrier);
 
     v4 ClearColor = { 0.8f, 0.5f, 0.9f, 1.0f };
+    //v4 ClearColor = { 0.2f, 0.3f, 0.8f, 1.0f };
 
     auto RTV = Renderer->RTVDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
     RTV.ptr += u64(Renderer->CurrentBackBufferIndex * Renderer->RTVDescriptorSize);
-    CommandList->ClearRenderTargetView(RTV, &ClearColor.x, 0, nullptr);
 
-    // Present
+    // PrePass
+
+    // Set root constants
+    // Number of 32 bit values - 16 floats in 4x4 matrix
+    CommandList->SetGraphicsRootSignature(Renderer->RootSignature);
+    CommandList->SetGraphicsRoot32BitConstants(0, 16, &ViewProjection, 0);
+
+    // Copy vertex data to gpu buffer
+    DX12VertexBufferSendData(&Renderer->QuadVertexBuffer, Renderer->DirectCommandList, Renderer->QuadVertexDataBase, sizeof(quad_vertex) * Renderer->QuadIndexCount);
+
+    // Render
+    D3D12_VIEWPORT Viewport;
+    Viewport.TopLeftX = 0;
+    Viewport.TopLeftY = 0;
+    Viewport.Width = (FLOAT)Width;
+    Viewport.Height = (FLOAT)Height;
+    Viewport.MinDepth = D3D12_MIN_DEPTH;
+    Viewport.MaxDepth = D3D12_MAX_DEPTH;
+    CommandList->RSSetViewports(1, &Viewport);
+
+    D3D12_RECT ScissorRect;
+    ScissorRect.left = 0;
+    ScissorRect.top = 0;
+    ScissorRect.right = Width;
+    ScissorRect.bottom = Height;
+    CommandList->RSSetScissorRects(1, &ScissorRect);
+
+    CommandList->ClearRenderTargetView(RTV, &ClearColor.x, 0, nullptr);
+    CommandList->OMSetRenderTargets(1, &RTV, false, nullptr);
+    CommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+    // Quads
+    if (Renderer->QuadIndexCount > 0)
+    {
+        // Bind pipeline
+        CommandList->SetPipelineState(Renderer->QuadPipelineState);
+
+        // Bind vertex buffer
+        static D3D12_VERTEX_BUFFER_VIEW QuadVertexBufferView;
+        QuadVertexBufferView.BufferLocation = Renderer->QuadVertexBuffer.Buffer.Resource->GetGPUVirtualAddress();
+        QuadVertexBufferView.StrideInBytes = sizeof(quad_vertex);
+        QuadVertexBufferView.SizeInBytes = Renderer->QuadIndexCount * sizeof(quad_vertex);
+        CommandList->IASetVertexBuffers(0, 1, &QuadVertexBufferView);
+
+        // Bind index buffer
+        static D3D12_INDEX_BUFFER_VIEW QuadIndexBufferView;
+        QuadIndexBufferView.BufferLocation = Renderer->QuadIndexBuffer.Resource->GetGPUVirtualAddress();
+        QuadIndexBufferView.Format = DXGI_FORMAT_R32_UINT;
+        QuadIndexBufferView.SizeInBytes = c_MaxQuadIndices * sizeof(u32); // Maybe we could assign this value to match indices drawn instead of viewing the whole buffer
+        CommandList->IASetIndexBuffer(&QuadIndexBufferView);
+
+        // Issue draw call
+        CommandList->DrawIndexedInstanced(Renderer->QuadIndexCount, 1, 0, 0, 0);
+    }
+
+    // Present transition
     {
         // Rendered frame needs to be transitioned to present state
-        auto barrier = DX12RendererTransition(BackBuffer, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
-        CommandList->ResourceBarrier(1, &barrier);
+        auto Barrier = DX12RendererTransition(BackBuffer, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
+        CommandList->ResourceBarrier(1, &Barrier);
     }
 
     // Finalize the command list
     CommandList->Close();
 
-    Renderer->CommandQueue->ExecuteCommandLists(1, (ID3D12CommandList* const*)&CommandList);
+    Renderer->DirectCommandQueue->ExecuteCommandLists(1, (ID3D12CommandList* const*)&CommandList);
 
-    Renderer->FrameFenceValues[Renderer->CurrentBackBufferIndex] = DX12RendererSignal(Renderer->CommandQueue, Renderer->Fence, &Renderer->FenceValue);
+    Renderer->FrameFenceValues[Renderer->CurrentBackBufferIndex] = DX12RendererSignal(Renderer->DirectCommandQueue, Renderer->Fence, &Renderer->FenceValue);
 
     Renderer->SwapChain->Present(Renderer->VSync ? 1 : 0, 0);
 
     Renderer->CurrentBackBufferIndex = Renderer->SwapChain->GetCurrentBackBufferIndex();
 
     // Wait for GPU to finish presenting
-    DX12RendererWaitForFenceValue(Renderer->Fence, Renderer->FrameFenceValues[Renderer->CurrentBackBufferIndex], Renderer->FenceEvent);
+    DX12RendererWaitForFenceValue(Renderer->Fence, Renderer->FrameFenceValues[Renderer->CurrentBackBufferIndex], Renderer->DirectFenceEvent);
 }

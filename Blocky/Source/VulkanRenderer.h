@@ -2,8 +2,7 @@
 #include "VulkanBuffer.h"
 #include "VulkanShader.h"
 #include "VulkanPipeline.h"
-
-#include "VertexBuffer.h"
+#include "VulkanVertexBuffer.h"
 
 #include "Math/MyMath.h"
 
@@ -14,14 +13,6 @@ static constexpr inline u32 c_MaxQuadsPerBatch = 1 << 8;
 static constexpr inline u32 c_MaxQuadVertices = c_MaxQuadsPerBatch * 4;
 static constexpr inline u32 c_MaxQuadIndices = c_MaxQuadsPerBatch * 6;
 static constexpr inline u32 c_MaxTexturesPerDrawCall = 32; // TODO: Get this from the driver
-
-static constexpr inline v4 c_QuadVertexPositions[4]
-{
-    { -0.5f, -0.5f, 0.0f, 1.0f },
-    {  0.5f, -0.5f, 0.0f, 1.0f },
-    {  0.5f,  0.5f, 0.0f, 1.0f },
-    { -0.5f,  0.5f, 0.0f, 1.0f }
-};
 
 // Each face has to have a normal vector, so unfortunately we cannot encode cube as 8 vertices
 static constexpr inline v4 c_CubeVertexPositions[24] =
@@ -104,7 +95,7 @@ struct vulkan_game_renderer
     VkPhysicalDeviceFeatures Features;
     VkPhysicalDevice PhysicalDevice = nullptr;
 
-    // Logical device 
+    // Logical device
     VkQueue GraphicsQueue = nullptr;
     VkQueue ComputeQueue = nullptr;
     VkCommandPool CommandPool = nullptr;
@@ -144,7 +135,7 @@ struct vulkan_game_renderer
     push_constant_buffer PushConstant;
 
     vulkan_buffer QuadIndexBuffer;
-    vertex_buffer QuadVertexBuffers[FIF];
+    vulkan_vertex_buffer QuadVertexBuffers[FIF];
 
     quad_vertex QuadVertexDataBase[c_MaxQuadVertices];
     quad_vertex* QuadVertexDataPtr = QuadVertexDataBase;
@@ -628,7 +619,7 @@ static void InitializeRendering(vulkan_game_renderer* Renderer)
             selfDependency.dependencyFlags = 0;
         }
 
-        // Render pass 
+        // Render pass
         VkAttachmentDescription attachments[] = { colorAttachment, depthAttachment };
         VkSubpassDescription subpassses[] = {
             defaultSubpass,
@@ -653,7 +644,7 @@ static void InitializeRendering(vulkan_game_renderer* Renderer)
 
     // Sync objects
     {
-        // Present and RenderFinished 
+        // Present and RenderFinished
         VkSemaphoreCreateInfo semaphoreInfo = {};
         semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
         semaphoreInfo.flags = 0;
@@ -841,9 +832,9 @@ static void InitializeRenderingResources(vulkan_game_renderer* Renderer)
             }
 
             // Vertex buffers
-            for (vertex_buffer& QuadVertexBuffer : Renderer->QuadVertexBuffers)
+            for (vulkan_vertex_buffer& QuadVertexBuffer : Renderer->QuadVertexBuffers)
             {
-                QuadVertexBuffer = VertexBufferCreate(Renderer->Device, Renderer->PhysicalDevice, c_MaxQuadVertices * sizeof(quad_vertex));
+                QuadVertexBuffer = VulkanVertexBufferCreate(Renderer->Device, Renderer->PhysicalDevice, c_MaxQuadVertices * sizeof(quad_vertex));
             }
         }
     }
@@ -966,7 +957,7 @@ static void RecreateSwapChain(vulkan_game_renderer* Renderer, u32 RequestWidth, 
         RequestHeight = SurfaceCapabilities.currentExtent.height;
     }
 
-    // Store it for dynamic viewport and scissors 
+    // Store it for dynamic viewport and scissors
     Renderer->SwapChainSize = { RequestWidth, RequestHeight };
 
     // Check support for features
@@ -1014,7 +1005,7 @@ static void RecreateSwapChain(vulkan_game_renderer* Renderer, u32 RequestWidth, 
         // Setting clipped to true allows the implementation to discard rendering outside of the surface area
         createInfo.clipped = true;
         createInfo.oldSwapchain = Renderer->SwapChain; // Using old swapchain
-        createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE; // TODO: Investigate 
+        createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE; // TODO: Investigate
 
         // Create new swapchain
         VkSwapchainKHR newSwapchain = nullptr;
@@ -1144,7 +1135,7 @@ static vulkan_game_renderer CreateVulkanGameRenderer(game_window Window)
     return Renderer;
 }
 
-static void SubmitQuad(vulkan_game_renderer* Renderer, v3 Translation, v3 Rotation, v3 Scale, v4 Color)
+static void SubmitCube(vulkan_game_renderer* Renderer, v3 Translation, v3 Rotation, v3 Scale, v4 Color)
 {
     m4 Transform = MyMath::Translate(m4(1.0f), Translation)
         * MyMath::ToM4(QTN(Rotation))
@@ -1216,7 +1207,7 @@ static void EndRender(vulkan_game_renderer* Renderer)
             if (Renderer->QuadIndexCount > 0)
             {
                 u32 VertexCount = static_cast<u32>(Renderer->QuadVertexDataPtr - Renderer->QuadVertexDataBase);
-                VertexBufferSetData(Renderer->QuadVertexBuffers[Renderer->CurrentFrame], commandBuffer, Renderer->QuadVertexDataBase, VertexCount * sizeof(quad_vertex));
+                VulkanVertexBufferSetData(Renderer->QuadVertexBuffers[Renderer->CurrentFrame], commandBuffer, Renderer->QuadVertexDataBase, VertexCount * sizeof(quad_vertex));
             }
         }
         //CmdPrepass(commandBuffer);
