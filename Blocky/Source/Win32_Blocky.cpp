@@ -367,6 +367,11 @@ int main(int argc, char** argv)
 
         if (!IsMinimized)
         {
+            SubmitCube(&Dx12Renderer, v3(0), v3(0), v3(1.0f), v4(1.0f, 0.0f, 0.0f, 1.0f));
+            SubmitCube(&Dx12Renderer, v3(1, 0, 0), v3(0), v3(1.0f), v4(1.0f, 0.0f, 0.0f, 1.0f));
+            SubmitCube(&Dx12Renderer, v3(2, 0, 0), v3(0), v3(1.0f), v4(1.0f, 1.0f, 0.0f, 1.0f));
+            SubmitCube(&Dx12Renderer, v3(3, 0, 0), v3(0), v3(1.0f), v4(1.0f, 0.0f, 1.0f, 1.0f));
+
             DX12RendererRender(&Dx12Renderer, Camera.GetViewProjection(), g_ClientWidth, g_ClientHeight);
         }
 
@@ -374,6 +379,13 @@ int main(int argc, char** argv)
     }
 
     DX12RendererFlush(&Dx12Renderer);
+
+    IDXGIDebug1* dxgiDebug;
+    if (SUCCEEDED(DXGIGetDebugInterface1(0, IID_PPV_ARGS(&dxgiDebug))))
+    {
+        dxgiDebug->ReportLiveObjects(DXGI_DEBUG_ALL, DXGI_DEBUG_RLO_DETAIL);
+        DX12RendererDumpInfoQueue(Dx12Renderer.DebugInfoQueue);
+    }
 
 #else
     vulkan_game_renderer VulkanRenderer = CreateVulkanGameRenderer(Window);
@@ -441,20 +453,10 @@ int main(int argc, char** argv)
         {
             BeginRender(&VulkanRenderer, Camera.GetViewProjection());
 
-            if (1)
-            {
-                v3 Pos = v3{ -0.0f, 0.0f, 0.0f };
-                SubmitCube(&VulkanRenderer, Pos, v3(0.0f), v3(1.0f), v4(1.0f, 0.0f, 0.0f, 1.0f));
-                /* Pos.x += 1.0f;
-                 SubmitCube(&VulkanRenderer, Pos, v3(0.0f), v3(1.0f), v4(0.0f, 1.0f, 0.0f, 1.0f));
-                 Pos.x += 1.0f;
-                 SubmitCube(&VulkanRenderer, Pos, v3(0.0f), v3(1.0f), v4(0.0f, 0.0f, 1.0f, 1.0f));
-                 Pos.x += 1.0f;
-                 SubmitCube(&VulkanRenderer, Pos, v3(0.0f), v3(1.0f), v4(0.0f, 1.0f, 1.0f, 1.0f));
-                 Pos.x += 1.0f;
-                 SubmitCube(&VulkanRenderer, Pos, v3(0.0f), v3(1.0f), v4(1.0f, 0.0f, 1.0f, 1.0f));
-                 Pos.x += 1.0f;*/
-            }
+            SubmitCube(&VulkanRenderer, v3(0), v3(0), v3(1.0f), v4(1.0f, 0.0f, 0.0f, 1.0f));
+            SubmitCube(&VulkanRenderer, v3(1, 0, 0), v3(0), v3(1.0f), v4(1.0f, 0.0f, 0.0f, 1.0f));
+            SubmitCube(&VulkanRenderer, v3(2, 0, 0), v3(0), v3(1.0f), v4(1.0f, 1.0f, 0.0f, 1.0f));
+            SubmitCube(&VulkanRenderer, v3(3, 0, 0), v3(0), v3(1.0f), v4(1.0f, 0.0f, 1.0f, 1.0f));
 
             EndRender(&VulkanRenderer);
         }
