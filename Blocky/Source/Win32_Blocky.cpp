@@ -103,12 +103,13 @@ constexpr Enum& operator^=(Enum& ioLHS, Enum inRHS)                  \
     return ioLHS;                                                    \
 }                                                                    \
 
-#include <malloc.h>
-#include <stdio.h>
-#include <cstdint>
-
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
+
+#include <malloc.h>
+#include <stdio.h>
+
+#include <cstdint>
 
 // Primitive types
 using u8 = uint8_t;
@@ -124,6 +125,11 @@ using i64 = int64_t;
 using f32 = float;
 using f64 = double;
 
+using b32 = u32;
+
+// Math
+#include "Math/BKM.h"
+
 struct game_window
 {
     HWND WindowHandle;
@@ -131,6 +137,11 @@ struct game_window
 
     u32 ClientAreaWidth;
     u32 ClientAreaHeight;
+};
+
+struct game_input
+{
+    bool W, S, A, D;
 };
 
 struct buffer
@@ -142,78 +153,144 @@ struct buffer
 #include "VulkanRenderer.h"
 #include "DX12Renderer.h"
 
+// Game
+#include "Blocky.h"
+
 static u32 g_ClientWidth = 0;
 static u32 g_ClientHeight = 0;
 static bool g_DoResize = false;
 
-LRESULT Win32ProcedureHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
+static bool g_IsRunning = false;
+
+LRESULT Win32ProcedureHandler(HWND WindowHandle, UINT Message, WPARAM WParam, LPARAM LParam)
 {
     LRESULT Result = 0;
 
-    switch (msg)
+    switch (Message)
     {
         case WM_SIZE:
         {
-            u32 width = GET_X_LPARAM(lParam);
-            u32 height = GET_Y_LPARAM(lParam);
+            u32 Width = GET_X_LPARAM(LParam);
+            u32 Height = GET_Y_LPARAM(LParam);
 
             // NOTE: Swapchain has a problem with width and height being the same after restoring the window and requires
             // resize as well
-            if (width != 0 && height != 0)
+            if (Width != 0 && Height != 0)
             {
-                if (g_ClientWidth != width || g_ClientHeight != height)
+                if (g_ClientWidth != Width || g_ClientHeight != Height)
                 {
                     g_DoResize = true;
                 }
 
-                g_ClientWidth = width;
-                g_ClientHeight = height;
+                g_ClientWidth = Width;
+                g_ClientHeight = Height;
 
             }
+
             break;
         }
+
         case WM_SYSKEYUP:
         case WM_SYSKEYDOWN:
         case WM_KEYUP:
         case WM_KEYDOWN:
         {
-            //Log("Not raw");
-
-            u64 vkCode = wParam;
-            bool wasDown = (lParam & (1 << 30)) != 0;
-            bool isDown = (lParam & (1 << 31)) == 0;
-
-            // Don't allow repeats
-            if (isDown != wasDown)
-            {
-                switch (vkCode)
-                {
-                    case VK_ESCAPE:
-                    {
-                        PostQuitMessage(0);
-                        break;
-                    }
-                }
-            }
+            Assert(false, "Dispached input to the procedure handler (Keyboard)!");
 
             break;
         }
         case WM_DESTROY:
         case WM_CLOSE:
         {
-            PostQuitMessage(0);
+            g_IsRunning = false;
             break;
         }
         default:
         {
-            Result = DefWindowProc(hWnd, msg, wParam, lParam);
+            Result = DefWindowProc(WindowHandle, Message, WParam, LParam);
             break;
         }
     }
 
-    //Log("%i", msg);
-
     return Result;
+}
+
+static void Win32ProcessEvents(game_input* Input)
+{
+    MSG Message;
+
+    // Win32 message queue
+    while (PeekMessage(&Message, nullptr, 0, 0, PM_REMOVE))
+    {
+        switch (Message.message)
+        {
+            case WM_SYSKEYUP:
+            case WM_SYSKEYDOWN:
+            case WM_KEYUP:
+            case WM_KEYDOWN:
+            {
+                u64 VkCode = Message.wParam;
+                bool WasDown = (Message.lParam & (1 << 30)) != 0;
+                bool IsDown = (Message.lParam & (1 << 31)) == 0;
+
+                b32 AltKeyWasDown = (Message.lParam & (1 << 29));
+
+                // Don't allow repeats
+                if (IsDown != WasDown)
+                {
+                    switch (VkCode)
+                    {
+                        case 'W':
+                        {
+                            Input->W = IsDown;
+                            break;
+                        }
+                        case 'S':
+                        {
+                            Input->S = IsDown;
+                            break;
+                        }
+                        case 'A':
+                        {
+                            Input->A = IsDown;
+                            break;
+                        }
+                        case 'D':
+                        {
+                            Input->D = IsDown;
+                            break;
+                        }
+                        case VK_F4:
+                        {
+                            if (AltKeyWasDown)
+                                g_IsRunning = false;
+                            break;
+                        }
+                        case VK_ESCAPE:
+                        {
+                            g_IsRunning = false;
+                            break;
+                        }
+                    }
+                }
+
+                break;
+            }
+
+            case WM_QUIT:
+            {
+                g_IsRunning = false;
+                break;
+            }
+
+            default:
+            {
+                TranslateMessage(&Message);
+                DispatchMessage(&Message);
+                break;
+            }
+        }
+    }
 }
 
 static game_window CreateGameWindow()
@@ -265,38 +342,6 @@ static game_window CreateGameWindow()
     return Window;
 }
 
-struct camera
-{
-    m4 Projection{ 1.0f };
-    m4 View{ 1.0f };
-
-    f32 OrthographicSize = 15.0f;
-    f32 OrthographicNear = -100.0f, OrthographicFar = 100.0f;
-
-    f32 AspectRatio = 0.0f;
-
-    f32 PerspectiveFOV = MyMath::PI_HALF;
-    f32 PerspectiveNear = 0.01f, PerspectiveFar = 1000.0f;
-
-    void RecalculateProjectionOrtho(u32 Width, u32 Height)
-    {
-        AspectRatio = static_cast<f32>(Width) / Height;
-        f32 OrthoLeft = -0.5f * AspectRatio * OrthographicSize;
-        f32 OrthoRight = 0.5f * AspectRatio * OrthographicSize;
-        f32 OrthoBottom = -0.5f * OrthographicSize;
-        f32 OrthoTop = 0.5f * OrthographicSize;
-        Projection = MyMath::Ortho(OrthoLeft, OrthoRight, OrthoBottom, OrthoTop, OrthographicNear, OrthographicFar);
-    }
-
-    void RecalculateProjectionPerspective(u32 width, u32 height)
-    {
-        AspectRatio = static_cast<f32>(width) / height;
-        Projection = MyMath::Perspective(PerspectiveFOV, AspectRatio, PerspectiveNear, PerspectiveFar);
-    }
-
-    m4 GetViewProjection() const { return Projection * View; }
-};
-
 int main(int argc, char** argv)
 {
     Trace("Hello, Blocky!");
@@ -312,19 +357,6 @@ int main(int argc, char** argv)
     g_ClientWidth = Window.ClientAreaWidth;
     g_ClientHeight = Window.ClientAreaHeight;
 
-    camera Camera;
-    v3 translation{ 0.0f, 1.0f, 3.0f };
-    v3 rotation{ -0.2f };
-    v3 scale{ 1.0f };
-    {
-        Camera.View = MyMath::Translate(m4(1.0f), translation)
-            * MyMath::ToM4(QTN(rotation))
-            * MyMath::Scale(m4(1.0f), scale);
-
-        Camera.View = MyMath::Inverse(Camera.View);
-        Camera.RecalculateProjectionPerspective(g_ClientWidth, g_ClientHeight);
-    }
-
 #if 1
     dx12_game_renderer Dx12Renderer = CreateDX12GameRenderer(Window);
 
@@ -337,23 +369,15 @@ int main(int argc, char** argv)
     // NOTE: This value represent how many increments of performance counter is happening
     LARGE_INTEGER CounterFrequency;
     QueryPerformanceFrequency(&CounterFrequency);
-    bool IsRunning = true;
     bool IsMinimized = false;
     f32 TimeStep = 0.0f;
-    while (IsRunning)
+    g_IsRunning = true;
+
+    game_input Input = {};
+    while (g_IsRunning)
     {
         // Process events
-        MSG Message;
-        while (PeekMessage(&Message, nullptr, 0, 0, PM_REMOVE))
-        {
-            if (Message.message == WM_QUIT)
-            {
-                IsRunning = false;
-            }
-
-            TranslateMessage(&Message);
-            DispatchMessage(&Message);
-        }
+        Win32ProcessEvents(&Input);
 
         IsMinimized = IsIconic(Window.WindowHandle);
 
@@ -361,31 +385,19 @@ int main(int argc, char** argv)
         {
             g_DoResize = false;
 
-            Camera.RecalculateProjectionPerspective(g_ClientWidth, g_ClientHeight);
             DX12RendererResizeSwapChain(&Dx12Renderer, g_ClientWidth, g_ClientHeight);
         }
 
         if (!IsMinimized)
         {
-            SubmitCube(&Dx12Renderer, v3(0), v3(0), v3(1.0f), v4(1.0f, 0.0f, 0.0f, 1.0f));
-            SubmitCube(&Dx12Renderer, v3(1, 0, 0), v3(0), v3(1.0f), v4(1.0f, 0.0f, 0.0f, 1.0f));
-            SubmitCube(&Dx12Renderer, v3(2, 0, 0), v3(0), v3(1.0f), v4(1.0f, 1.0f, 0.0f, 1.0f));
-            SubmitCube(&Dx12Renderer, v3(3, 0, 0), v3(0), v3(1.0f), v4(1.0f, 0.0f, 1.0f, 1.0f));
-
-            DX12RendererRender(&Dx12Renderer, Camera.GetViewProjection(), g_ClientWidth, g_ClientHeight);
+            GameUpdateAndRender(&Dx12Renderer, &Input, g_ClientWidth, g_ClientHeight);
         }
 
+        DX12RendererRender(&Dx12Renderer, g_ClientWidth, g_ClientHeight);
         DX12RendererDumpInfoQueue(Dx12Renderer.DebugInfoQueue);
     }
 
-    DX12RendererFlush(&Dx12Renderer);
-
-    IDXGIDebug1* dxgiDebug;
-    if (SUCCEEDED(DXGIGetDebugInterface1(0, IID_PPV_ARGS(&dxgiDebug))))
-    {
-        dxgiDebug->ReportLiveObjects(DXGI_DEBUG_ALL, DXGI_DEBUG_RLO_DETAIL);
-        DX12RendererDumpInfoQueue(Dx12Renderer.DebugInfoQueue);
-    }
+    DX12GameRendererDestroy(&Dx12Renderer);
 
 #else
     vulkan_game_renderer VulkanRenderer = CreateVulkanGameRenderer(Window);
@@ -411,9 +423,9 @@ int main(int argc, char** argv)
     QueryPerformanceFrequency(&CounterFrequency);
 
     // Game loop
-    bool IsRunning = true;
+    bool g_IsRunning = true;
     bool IsMinimized = false;
-    while (IsRunning)
+    while (g_IsRunning)
     {
         // Process events
         MSG Message;
@@ -421,7 +433,7 @@ int main(int argc, char** argv)
         {
             if (Message.message == WM_QUIT)
             {
-                IsRunning = false;
+                g_IsRunning = false;
             }
 
             TranslateMessage(&Message);
@@ -441,11 +453,11 @@ int main(int argc, char** argv)
 
         // Logic
         {
-            Camera.View = MyMath::Translate(m4(1.0f), translation)
-                * MyMath::ToM4(QTN(rotation))
-                * MyMath::Scale(m4(1.0f), scale);
+            Camera.View = bkm::Translate(m4(1.0f), Translation)
+                * bkm::ToM4(qtn(Rotation))
+                * bkm::Scale(m4(1.0f), Scale);
 
-            Camera.View = MyMath::Inverse(Camera.View);
+            Camera.View = bkm::Inverse(Camera.View);
         }
 
         // Do not render when minimized

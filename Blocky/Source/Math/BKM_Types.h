@@ -419,11 +419,11 @@ struct m4
 };
 
 // Quaternion
-struct QTN
+struct qtn
 {
     f32 w, x, y, z;
 
-    explicit QTN(f32 w, f32 x, f32 y, f32 z)
+    explicit qtn(f32 w, f32 x, f32 y, f32 z)
     {
         this->w = w;
         this->x = x;
@@ -431,10 +431,10 @@ struct QTN
         this->z = z;
     }
 
-    explicit QTN(const v3& eulerAngle)
+    explicit qtn(const v3& eulerAngle)
     {
-        v3 c = v3(MyMath::Cos(eulerAngle.x * 0.5f), MyMath::Cos(eulerAngle.y * 0.5f), MyMath::Cos(eulerAngle.z * 0.5f));
-        v3 s = v3(MyMath::Sin(eulerAngle.x * 0.5f), MyMath::Sin(eulerAngle.y * 0.5f), MyMath::Sin(eulerAngle.z * 0.5f));
+        v3 c = v3(bkm::Cos(eulerAngle.x * 0.5f), bkm::Cos(eulerAngle.y * 0.5f), bkm::Cos(eulerAngle.z * 0.5f));
+        v3 s = v3(bkm::Sin(eulerAngle.x * 0.5f), bkm::Sin(eulerAngle.y * 0.5f), bkm::Sin(eulerAngle.z * 0.5f));
 
         w = c.x * c.y * c.z + s.x * s.y * s.z;
         x = s.x * c.y * c.z - c.x * s.y * s.z;
@@ -442,9 +442,9 @@ struct QTN
         z = c.x * c.y * s.z - s.x * s.y * c.z;
     }
 
-    QTN operator-() const
+    qtn operator-() const
     {
-        return QTN(-w, -x, -y, -z);
+        return qtn(-w, -x, -y, -z);
     }
 };
 
@@ -515,4 +515,4 @@ inline v4 operator*(const m4& m, const v4& v);
 inline v4 operator*(const v4& v, const m4& m);
 
 // Quaternion
-inline v3 operator*(const QTN& q, const v3& v);
+inline v3 operator*(const qtn& q, const v3& v);

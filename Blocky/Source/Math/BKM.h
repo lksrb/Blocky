@@ -9,7 +9,7 @@
 //#include "Core.h"
 
 // Mostly imported from glm library to reduce compile times
-namespace MyMath {
+namespace bkm {
     inline constexpr f32 PI = 3.1415927f;
     inline constexpr f32 TwoPI = 2.0f * PI;
     inline constexpr f32 PI_HALF = PI / 2.0f;
@@ -140,9 +140,9 @@ namespace MyMath {
     }
 }
 
-#include "MyMathTypes.h"
+#include "BKM_Types.h"
 
-namespace MyMath {
+namespace bkm {
     inline m4 Inverse(m4 m)
     {
         f32 coef00 = m[2][2] * m[3][3] - m[3][2] * m[2][3];
@@ -333,7 +333,7 @@ namespace MyMath {
         return Sqrt(Dot(v, v));
     }
 
-    inline m4 ToM4(const QTN& q)
+    inline m4 ToM4(const qtn& q)
     {
         m4 result(1.0f);
 
@@ -405,7 +405,7 @@ namespace MyMath {
         return result;
     }
 
-    inline v3 Rotate(const QTN& q, const v3& v)
+    inline v3 Rotate(const qtn& q, const v3& v)
     {
         return q * v;
     }
@@ -430,12 +430,12 @@ namespace MyMath {
         return V2(Lerp(v1.x, v2.x, maxDistanceDelta), Lerp(v1.y, v2.y, maxDistanceDelta));
     }
 
-    inline f32 Dot(QTN q1, QTN q2)
+    inline f32 Dot(qtn q1, qtn q2)
     {
         return q1.w * q2.w + q1.x * q2.x + q1.y * q2.y + q1.z * q2.z;
     }
 
-    inline QTN Normalize(QTN q)
+    inline qtn Normalize(qtn q)
     {
         f32 magnitude = Sqrt(Dot(q, q));
         q.w /= magnitude;
@@ -445,16 +445,16 @@ namespace MyMath {
         return q;
     }
 
-    inline QTN Lerp(QTN start, QTN end, f32 maxRotationDelta)
+    inline qtn Lerp(qtn start, qtn end, f32 maxRotationDelta)
     {
-        QTN result(
-            MyMath::Mix(start.w, end.w, maxRotationDelta),
-            MyMath::Mix(start.x, end.x, maxRotationDelta),
-            MyMath::Mix(start.y, end.y, maxRotationDelta),
-            MyMath::Mix(start.z, end.z, maxRotationDelta)
+        qtn result(
+            bkm::Mix(start.w, end.w, maxRotationDelta),
+            bkm::Mix(start.x, end.x, maxRotationDelta),
+            bkm::Mix(start.y, end.y, maxRotationDelta),
+            bkm::Mix(start.z, end.z, maxRotationDelta)
         );
 
-        return MyMath::Normalize(result);
+        return bkm::Normalize(result);
     }
 #if 0
     inline QTN Slerp(QTN start, QTN end, f32 maxRotationDelta)
@@ -500,7 +500,7 @@ namespace MyMath {
 #endif
 
 
-    inline v3 EulerAngles(const QTN& q)
+    inline v3 EulerAngles(const qtn& q)
     {
         f32 x = Atan2(2 * (q.x * q.y + q.w * q.z), q.w * q.w + q.x * q.x - q.y * q.y - q.z * q.z);
         f32 y = Atan(-2 * (q.x * q.z - q.w * q.y));
@@ -572,7 +572,7 @@ namespace MyMath {
         v4 ndcPosition = v4(normalizedX, normalizedY, 0.0f, 1.0f);
 
         // Invert the view-projection matrix
-        m4 inverseViewProjMatrix = MyMath::Inverse(viewProjection);
+        m4 inverseViewProjMatrix = bkm::Inverse(viewProjection);
 
         // Unproject the NDC position back to world coordinates
         v4 worldPosition = inverseViewProjMatrix * ndcPosition;
@@ -588,4 +588,4 @@ namespace MyMath {
     }
 }
 
-#include "MyMathOperators.h"
+#include "BKM_Operators.h"

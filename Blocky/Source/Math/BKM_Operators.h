@@ -169,11 +169,11 @@ inline m3 operator*(const m3& m1, const m3& m2)
 }
 
 // Quaternion
-inline v3 operator*(const QTN& q, const v3& v)
+inline v3 operator*(const qtn& q, const v3& v)
 {
     v3 QuatVector(q.x, q.y, q.z);
-    v3 uv(MyMath::Cross(QuatVector, v));
-    v3 uuv(MyMath::Cross(QuatVector, uv));
+    v3 uv(bkm::Cross(QuatVector, v));
+    v3 uuv(bkm::Cross(QuatVector, uv));
 
     return v + ((uv * q.w) + uuv) * 2.0f;
 }

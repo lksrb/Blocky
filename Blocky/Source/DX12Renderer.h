@@ -1,3 +1,8 @@
+/*
+ * Note that this renderer is game specific so it does not have to be completely api-agnostic,
+ * For example instead of having general set push constants functions, we can have set view projection function etc.
+ * We will see in the future if this is a good approach
+ */
 #pragma once
 
 // DirectX 12
@@ -50,10 +55,11 @@ static D3D12_RESOURCE_BARRIER DX12RendererTransition(
 
 #include "DX12Buffer.h"
 
-struct dx12_resource
+// Basically a push constant
+// TODO: Whats the size of this
+struct dx12_root_signature_constant_buffer
 {
-    ID3D12Resource* Resource;
-    ID3D12DescriptorHeap* Heap;
+    m4 ViewProjection;
 };
 
 struct dx12_game_renderer
@@ -82,7 +88,6 @@ struct dx12_game_renderer
 
     bool VSync = true;
 
-
     // Fence
     ID3D12Fence* Fence;
     u64 FenceValue;
@@ -91,6 +96,7 @@ struct dx12_game_renderer
 
     // Describes resources used in the shader
     ID3D12RootSignature* RootSignature;
+    dx12_root_signature_constant_buffer RootSignatureBuffer;
 
     D3D12_VIEWPORT Viewport;
     D3D12_RECT ScissorRect;
@@ -104,46 +110,6 @@ struct dx12_game_renderer
     u32 QuadIndexCount = 0;
 };
 
-// Each face has to have a normal vector, so unfortunately we cannot encode cube as 8 vertices
-static constexpr inline v4 c_CubeVertexPositionsCounterClockwise[24] =
-{
-    // Front face (+Z)
-    { -0.5f, -0.5f,  0.5f, 1.0f },
-    {  0.5f, -0.5f,  0.5f, 1.0f },
-    {  0.5f,  0.5f,  0.5f, 1.0f },
-    { -0.5f,  0.5f,  0.5f, 1.0f },
-
-    // Back face (-Z)
-    {  0.5f, -0.5f, -0.5f, 1.0f },
-    { -0.5f, -0.5f, -0.5f, 1.0f },
-    { -0.5f,  0.5f, -0.5f, 1.0f },
-    {  0.5f,  0.5f, -0.5f, 1.0f },
-
-    // Left face (-X)
-    { -0.5f, -0.5f, -0.5f, 1.0f },
-    { -0.5f, -0.5f,  0.5f, 1.0f },
-    { -0.5f,  0.5f,  0.5f, 1.0f },
-    { -0.5f,  0.5f, -0.5f, 1.0f },
-
-    // Right face (+X)
-    {  0.5f, -0.5f,  0.5f, 1.0f },
-    {  0.5f, -0.5f, -0.5f, 1.0f },
-    {  0.5f,  0.5f, -0.5f, 1.0f },
-    {  0.5f,  0.5f,  0.5f, 1.0f },
-
-    // Top face (+Y)
-    { -0.5f,  0.5f,  0.5f, 1.0f },
-    {  0.5f,  0.5f,  0.5f, 1.0f },
-    {  0.5f,  0.5f, -0.5f, 1.0f },
-    { -0.5f,  0.5f, -0.5f, 1.0f },
-
-    // Bottom face (-Y)
-    { -0.5f, -0.5f, -0.5f, 1.0f },
-    {  0.5f, -0.5f, -0.5f, 1.0f },
-    {  0.5f, -0.5f,  0.5f, 1.0f },
-    { -0.5f, -0.5f,  0.5f, 1.0f }
-};
-
 static void DX12RendererDumpInfoQueue(ID3D12InfoQueue* InfoQueue)
 {
     for (UINT64 i = 0; i < InfoQueue->GetNumStoredMessages(); ++i)
@@ -154,7 +120,7 @@ static void DX12RendererDumpInfoQueue(ID3D12InfoQueue* InfoQueue)
         HRESULT HR = InfoQueue->GetMessage(i, nullptr, &MessageLength);
         if (FAILED(HR))
         {
-            Warn("Failed to get message length: HRESULT = 0x%08X\n", HR);
+            Warn("Failed to get message length: HRESULT = 0x%08X", HR);
             continue;
         }
 
@@ -162,7 +128,7 @@ static void DX12RendererDumpInfoQueue(ID3D12InfoQueue* InfoQueue)
         auto Message = static_cast<D3D12_MESSAGE*>(alloca(MessageLength));
         if (!Message)
         {
-            Warn("Failed to allocate memory for message.\n");
+            Warn("Failed to allocate memory for message.");
             continue;
         }
 
@@ -170,12 +136,34 @@ static void DX12RendererDumpInfoQueue(ID3D12InfoQueue* InfoQueue)
         HR = InfoQueue->GetMessage(i, Message, &MessageLength);
         if (FAILED(HR))
         {
-            Warn("Failed to get message: HRESULT = 0x%08X\n", HR);
+            Warn("Failed to get message: HRESULT = 0x%08X", HR);
             continue;
         }
 
-        // Print the message description
-        Trace("Message %llu: %s\n", i, Message->pDescription);
+        switch (Message->Severity)
+        {
+            case D3D12_MESSAGE_SEVERITY_MESSAGE:
+            {
+                Trace("[DX12]%s", Message->pDescription);
+                break;
+            }
+            case D3D12_MESSAGE_SEVERITY_INFO:
+            {
+                Info("[DX12]%s", Message->pDescription);
+                break;
+            }
+            case D3D12_MESSAGE_SEVERITY_WARNING:
+            {
+                Warn("[DX12]%s", Message->pDescription);
+                break;
+            }
+            case D3D12_MESSAGE_SEVERITY_ERROR:
+            case D3D12_MESSAGE_SEVERITY_CORRUPTION:
+            {
+                Err("[DX12]%s", Message->pDescription);
+                break;
+            }
+        }
     }
 
     // Optionally, clear the messages from the queue
@@ -649,6 +637,19 @@ static dx12_game_renderer CreateDX12GameRenderer(game_window Window)
     return Renderer;
 }
 
+static void DX12GameRendererDestroy(dx12_game_renderer* Renderer)
+{
+    // Wait for GPU to finish
+    DX12RendererFlush(Renderer);
+
+    IDXGIDebug1* dxgiDebug;
+    if (SUCCEEDED(DXGIGetDebugInterface1(0, IID_PPV_ARGS(&dxgiDebug))))
+    {
+        dxgiDebug->ReportLiveObjects(DXGI_DEBUG_ALL, DXGI_DEBUG_RLO_DETAIL);
+        DX12RendererDumpInfoQueue(Renderer->DebugInfoQueue);
+    }
+}
+
 static void DX12RendererResizeSwapChain(dx12_game_renderer* Renderer, u32 RequestWidth, u32 RequestHeight)
 {
     // Flush the GPU queue to make sure the swap chain's back buffers are not being referenced by an in-flight command list.
@@ -725,11 +726,16 @@ static void DX12RendererResizeSwapChain(dx12_game_renderer* Renderer, u32 Reques
     Warn("SwapChain resized to %d %d", RequestWidth, RequestHeight);
 }
 
+static void SetViewProjection(dx12_game_renderer* Renderer, m4 ViewProjection)
+{
+    Renderer->RootSignatureBuffer.ViewProjection = ViewProjection;
+}
+
 static void SubmitQuad(dx12_game_renderer* Renderer, v3 Translation, v3 Rotation, v3 Scale, v4 Color)
 {
-    m4 Transform = MyMath::Translate(m4(1.0f), Translation)
-        * MyMath::ToM4(QTN(Rotation))
-        * MyMath::Scale(m4(1.0f), Scale);
+    m4 Transform = bkm::Translate(m4(1.0f), Translation)
+        * bkm::ToM4(qtn(Rotation))
+        * bkm::Scale(m4(1.0f), Scale);
 
     for (u32 i = 0; i < CountOf(c_QuadVertexPositions); i++)
     {
@@ -743,9 +749,9 @@ static void SubmitQuad(dx12_game_renderer* Renderer, v3 Translation, v3 Rotation
 
 static void SubmitCube(dx12_game_renderer* Renderer, v3 Translation, v3 Rotation, v3 Scale, v4 Color)
 {
-    m4 Transform = MyMath::Translate(m4(1.0f), Translation)
-        * MyMath::ToM4(QTN(Rotation))
-        * MyMath::Scale(m4(1.0f), Scale);
+    m4 Transform = bkm::Translate(m4(1.0f), Translation)
+        * bkm::ToM4(qtn(Rotation))
+        * bkm::Scale(m4(1.0f), Scale);
 
     for (u32 i = 0; i < CountOf(c_CubeVertexPositions); i++)
     {
@@ -757,7 +763,7 @@ static void SubmitCube(dx12_game_renderer* Renderer, v3 Translation, v3 Rotation
     Renderer->QuadIndexCount += 36;
 }
 
-static void DX12RendererRender(dx12_game_renderer* Renderer, m4 ViewProjection, u32 Width, u32 Height)
+static void DX12RendererRender(dx12_game_renderer* Renderer, u32 Width, u32 Height)
 {
     // End render
 
@@ -815,7 +821,7 @@ static void DX12RendererRender(dx12_game_renderer* Renderer, m4 ViewProjection, 
     // Set root constants
     // Number of 32 bit values - 16 floats in 4x4 matrix
     CommandList->SetGraphicsRootSignature(Renderer->RootSignature);
-    CommandList->SetGraphicsRoot32BitConstants(0, 16, &ViewProjection, 0);
+    CommandList->SetGraphicsRoot32BitConstants(0, 16, &Renderer->RootSignatureBuffer.ViewProjection, 0);
 
     // Quads
     if (Renderer->QuadIndexCount > 0)

@@ -4,8 +4,6 @@
 #include "VulkanPipeline.h"
 #include "VulkanVertexBuffer.h"
 
-#include "Math/MyMath.h"
-
 // Double-buffer is sufficient
 #define FIF 2
 
@@ -1137,9 +1135,9 @@ static vulkan_game_renderer CreateVulkanGameRenderer(game_window Window)
 
 static void SubmitCube(vulkan_game_renderer* Renderer, v3 Translation, v3 Rotation, v3 Scale, v4 Color)
 {
-    m4 Transform = MyMath::Translate(m4(1.0f), Translation)
-        * MyMath::ToM4(QTN(Rotation))
-        * MyMath::Scale(m4(1.0f), Scale);
+    m4 Transform = bkm::Translate(m4(1.0f), Translation)
+        * bkm::ToM4(qtn(Rotation))
+        * bkm::Scale(m4(1.0f), Scale);
 
     for (u32 i = 0; i < CountOf(c_CubeVertexPositions); i++)
     {
