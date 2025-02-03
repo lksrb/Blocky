@@ -430,6 +430,11 @@ namespace bkm {
         return V2(Lerp(v1.x, v2.x, maxDistanceDelta), Lerp(v1.y, v2.y, maxDistanceDelta));
     }
 
+    inline v3 Lerp(v3 v1, v3 v2, f32 maxDistanceDelta)
+    {
+        return v3(Lerp(v1.x, v2.x, maxDistanceDelta), Lerp(v1.y, v2.y, maxDistanceDelta), Lerp(v1.z, v2.z, maxDistanceDelta));
+    }
+
     inline f32 Dot(qtn q1, qtn q2)
     {
         return q1.w * q2.w + q1.x * q2.x + q1.y * q2.y + q1.z * q2.z;

@@ -32,31 +32,107 @@ struct camera
     m4 GetViewProjection() const { return Projection * View; }
 };
 
-static void GameUpdateAndRender(dx12_game_renderer* Renderer, game_input* Input, u32 ClientAreaWidth, u32 ClientAreaHeight)
+static void GameUpdateAndRender(dx12_game_renderer* Renderer, const game_input* Input, f32 TimeStep, u32 ClientAreaWidth, u32 ClientAreaHeight)
 {
     camera Camera;
     {
-        v3 Translation{ 0.0f, 1.0f, 3.0f };
-        v3 Rotation{ -0.2f };
-        v3 Scale{ 1.0f };
+        static v3 Translation{ 0.0f, 1.0f, 3.0f };
+        static v3 Rotation{ 0.0f };
+
+        v3 Up = { 0.0f, 1.0, 0.0f };
+        v3 Forward = { 0.0f, 0.0, -1.0f };
+        v3 Right = { 1.0f, 0.0, 0.0f };
+
+        // Rotating
+        {
+            static V2i OldMousePos;
+            V2i MousePos = (Input->IsCursorLocked ? Input->VirtualMousePosition : Input->LastMousePosition);
+
+            V2i MouseDelta = MousePos - OldMousePos;
+            OldMousePos = MousePos;
+
+            f32 MouseSensitivity = 1.0f;
+
+            // Update rotation based on mouse input
+            Rotation.y -= (f32)MouseDelta.x * MouseSensitivity * TimeStep; // Yaw
+            Rotation.x -= (f32)MouseDelta.y * MouseSensitivity * TimeStep; // Pitch
+
+            //Trace("%.3f %.3f", Rotation.y, Rotation.x);
+
+            // Clamp pitch to avoid gimbal lock
+            if (Rotation.x > bkm::Radians(89.0f))
+                Rotation.x = bkm::Radians(89.0f);
+            if (Rotation.x < bkm::Radians(-89.0f))
+                Rotation.x = bkm::Radians(-89.0f);
+
+            // Calculate the forward and right direction vectors
+            Up = qtn(v3(Rotation.x, Rotation.y, 0.0f)) * v3(0.0f, 1.0f, 0.0f);
+            Right = qtn(v3(Rotation.x, Rotation.y, 0.0f)) * v3(1.0f, 0.0f, 0.0f);
+            Forward = qtn(v3(Rotation.x, Rotation.y, 0.0f)) * v3(0.0f, 0.0f, -1.0f);
+        }
+
+        //Trace("%d %d", Input->MouseDelta.x, Input->MouseDelta.y);
+
+        v3 Direction = {};
+        // Movement
+        {
+            f32 Speed = 5.0f;
+            if (Input->W)
+            {
+                Direction += v3(Forward.x, 0.0f, Forward.z);
+            }
+
+            if (Input->S)
+            {
+                Direction -= v3(Forward.x, 0.0f, Forward.z);
+            }
+
+            if (Input->A)
+            {
+                Direction -= Right;
+            }
+
+            if (Input->D)
+            {
+                Direction += Right;
+            }
+
+            if (bkm::Length(Direction) > 0.0f)
+                Direction = bkm::Normalize(Direction);
+
+            Translation += Direction * Speed * TimeStep;
+        }
+
+        // Raycast
+        {
+            //if (Input->MouseLeft)
+            {
+                static v3 OldDest;
+                v3 Dest = Translation + Forward * 5.0f;
+                v3 L = bkm::Lerp(OldDest, Dest, TimeStep);
+                OldDest = Dest;
+                SubmitCube(Renderer, L, v3(0), v3(1.0f), v4(0.0f, 0.0f, 0.0f, 1.0f));
+            }
+        }
 
         Camera.View = bkm::Translate(m4(1.0f), Translation)
-            * bkm::ToM4(qtn(Rotation))
-            * bkm::Scale(m4(1.0f), Scale);
+            * bkm::ToM4(qtn(Rotation));
 
         Camera.View = bkm::Inverse(Camera.View);
 
         Camera.RecalculateProjectionPerspective(ClientAreaWidth, ClientAreaHeight);
-
-        if (Input->W)
-        {
-            Trace("lajfkals;jkfslkj");
-        }
     }
 
     SetViewProjection(Renderer, Camera.GetViewProjection());
-    SubmitCube(Renderer, v3(0), v3(0), v3(1.0f), v4(1.0f, 0.0f, 0.0f, 1.0f));
-    SubmitCube(Renderer, v3(1, 0, 0), v3(0), v3(1.0f), v4(1.0f, 0.0f, 0.0f, 1.0f));
+
+    static f32 Y = 0.0f;
+    static f32 Time = 0.0f;
+    Time += TimeStep;
+
+    Y = bkm::Sin(Time);
+
+    SubmitCube(Renderer, v3(0), v3(0), v3(1.0f), v4(0.0f, 1.0f, 0.0f, 1.0f));
+    SubmitCube(Renderer, v3(1, Y, 0), v3(0), v3(1.0f), v4(1.0f, 0.0f, 0.0f, 1.0f));
     SubmitCube(Renderer, v3(2, 0, 0), v3(0), v3(1.0f), v4(1.0f, 1.0f, 0.0f, 1.0f));
     SubmitCube(Renderer, v3(3, 0, 0), v3(0), v3(1.0f), v4(1.0f, 0.0f, 1.0f, 1.0f));
 }

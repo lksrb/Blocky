@@ -142,6 +142,19 @@ struct game_window
 struct game_input
 {
     bool W, S, A, D;
+
+    bool MouseLeft, MouseMiddle, MouseRight;
+
+    bool IsCursorLocked;
+    bool IsCursorVisible = true;
+
+    V2i LastMousePosition;
+    V2i VirtualMousePosition;
+
+    i32 MouseScrollDelta;
+
+    // Temp
+    POINT RestoreMousePosition;
 };
 
 struct buffer
@@ -159,8 +172,9 @@ struct buffer
 static u32 g_ClientWidth = 0;
 static u32 g_ClientHeight = 0;
 static bool g_DoResize = false;
-
 static bool g_IsRunning = false;
+static bool g_IsFocused = false;
+static HWND g_WindowHandle;
 
 LRESULT Win32ProcedureHandler(HWND WindowHandle, UINT Message, WPARAM WParam, LPARAM LParam)
 {
@@ -189,7 +203,21 @@ LRESULT Win32ProcedureHandler(HWND WindowHandle, UINT Message, WPARAM WParam, LP
 
             break;
         }
+        case WM_ACTIVATE:
+        {
+            g_IsFocused = LOWORD(WParam) != WA_INACTIVE;
 
+            if (g_IsFocused)
+            {
+                Trace("Focused.");
+            }
+            else
+            {
+                Trace("Unfocused.");
+            }
+
+            break;
+        }
         case WM_SYSKEYUP:
         case WM_SYSKEYDOWN:
         case WM_KEYUP:
@@ -217,6 +245,9 @@ LRESULT Win32ProcedureHandler(HWND WindowHandle, UINT Message, WPARAM WParam, LP
 
 static void Win32ProcessEvents(game_input* Input)
 {
+    bool DoSetCursorLock = false;
+    bool DoSetShowCursor = false;
+
     MSG Message;
 
     // Win32 message queue
@@ -260,6 +291,19 @@ static void Win32ProcessEvents(game_input* Input)
                             Input->D = IsDown;
                             break;
                         }
+                        case 'T':
+                        {
+                            if (IsDown)
+                            {
+                                DoSetCursorLock = true;
+                                DoSetShowCursor = true;
+
+                                // Alternate between true and false
+                                Input->IsCursorLocked = !Input->IsCursorLocked;
+                                Input->IsCursorVisible = !Input->IsCursorVisible;
+                            }
+                            break;
+                        }
                         case VK_F4:
                         {
                             if (AltKeyWasDown)
@@ -274,6 +318,67 @@ static void Win32ProcessEvents(game_input* Input)
                     }
                 }
 
+                break;
+            }
+            case WM_MOUSEMOVE:
+            {
+                V2i MousePos = { GET_X_LPARAM(Message.lParam), GET_Y_LPARAM(Message.lParam) };
+                V2i MouseDelta = MousePos - Input->LastMousePosition;
+                Input->VirtualMousePosition += MouseDelta;
+                Input->LastMousePosition = MousePos;
+
+                // Is this really necessary?
+                //// Clamping cursor positions so we dont wander off
+                //if (Input->LastMousePosition.x < 0) Input->LastMousePosition.x = 0;
+                //if (Input->LastMousePosition.y < 0) Input->LastMousePosition.y = 0;
+                //if (Input->LastMousePosition.x > static_cast<i32>(g_ClientWidth)) Input->LastMousePosition.x = g_ClientWidth;
+                //if (Input->LastMousePosition.y > static_cast<i32>(g_ClientHeight)) Input->LastMousePosition.y = g_ClientHeight;
+
+                //if (Input->VirtualMousePosition.x < 0) Input->VirtualMousePosition.x = 0;
+                //if (Input->VirtualMousePosition.y < 0) Input->VirtualMousePosition.y = 0;
+                //if (Input->VirtualMousePosition.x > static_cast<i32>(g_ClientWidth)) Input->VirtualMousePosition.x = g_ClientWidth;
+                //if (Input->VirtualMousePosition.y > static_cast<i32>(g_ClientHeight)) Input->VirtualMousePosition.y = g_ClientHeight;
+
+                break;
+            }
+            case WM_MOUSEWHEEL:
+            {
+                // Gets reset every frame
+                i16 Delta = GET_WHEEL_DELTA_WPARAM(Message.wParam);
+                Input->MouseScrollDelta = (Delta >> 15) | 1;
+                break;
+            }
+            case WM_LBUTTONDOWN:
+            case WM_LBUTTONDBLCLK:
+            {
+                Input->MouseLeft = true;
+                break;
+            }
+            case WM_RBUTTONDOWN:
+            case WM_RBUTTONDBLCLK:
+            {
+                Input->MouseRight = true;
+                break;
+            }
+            case WM_MBUTTONDOWN:
+            case WM_MBUTTONDBLCLK:
+            {
+                Input->MouseMiddle = true;
+                break;
+            }
+            case WM_LBUTTONUP:
+            {
+                Input->MouseLeft = false;
+                break;
+            }
+            case WM_RBUTTONUP:
+            {
+                Input->MouseRight = false;
+                break;
+            }
+            case WM_MBUTTONUP:
+            {
+                Input->MouseMiddle = false;
                 break;
             }
 
@@ -291,13 +396,71 @@ static void Win32ProcessEvents(game_input* Input)
             }
         }
     }
+
+    if (DoSetShowCursor)
+    {
+        DoSetShowCursor = false;
+
+        ::ShowCursor(Input->IsCursorVisible);
+    }
+
+    // Deferred events to avoid bloated switch statement
+    if (DoSetCursorLock)
+    {
+        DoSetCursorLock = false;
+
+        // Lock
+        if (Input->IsCursorLocked)
+        {
+            Trace("Cursor locked.");
+
+            RECT Rect;
+            ::GetClientRect(g_WindowHandle, &Rect);
+
+            // Store cursor position
+            //::GetCursorPos(&Input->RestoreMousePosition);
+            //::ScreenToClient(g_WindowHandle, &Input->RestoreMousePosition);
+
+            //// Center cursor position
+            //POINT CenterCursor = { (LONG)g_ClientWidth / 2, (LONG)g_ClientHeight / 2 };
+            //::ClientToScreen(g_WindowHandle, &CenterCursor);
+            //::SetCursorPos(CenterCursor.x, CenterCursor.y);
+        }
+        else // Unlock
+        {
+            Trace("Cursor unlocked.");
+
+            // Set last cursor position from the stored one
+          /*  POINT LastCursorPos = Input->RestoreMousePosition;
+            ::ClientToScreen(g_WindowHandle, &LastCursorPos);
+            ::SetCursorPos(LastCursorPos.x, LastCursorPos.y);
+            Input->LastMousePosition = { LastCursorPos.x, LastCursorPos.y };*/
+        }
+    }
+
+    // Maintain locked cursor
+    if (Input->IsCursorLocked && g_IsFocused)
+    {
+        // Center cursor position
+        POINT CenterCursor = { static_cast<int>(g_ClientWidth / 2), static_cast<int>(g_ClientHeight / 2) };
+        ::ClientToScreen(g_WindowHandle, &CenterCursor);
+
+        // Center cursor
+        if (Input->LastMousePosition.x != CenterCursor.y || Input->LastMousePosition.y != CenterCursor.y)
+        {
+            POINT Pos = { (LONG)g_ClientWidth / 2, (LONG)g_ClientHeight / 2 };
+            Input->LastMousePosition = { Pos.x, Pos.y };
+            ::ClientToScreen(g_WindowHandle, &Pos);
+            ::SetCursorPos(Pos.x, Pos.y);
+        }
+    }
 }
 
 static game_window CreateGameWindow()
 {
     game_window Window;
-    const u32 DefaultWindowWidth = 1600;
-    const u32 DefaultWindowHeight = 900;
+    const u32 DefaultWindowWidth = u32(1600 * 1.3f);
+    const u32 DefaultWindowHeight = u32(900 * 1.3f);
 
     // Show window on primary window
     // TODO: User should choose on which monitor to display
@@ -357,6 +520,9 @@ int main(int argc, char** argv)
     g_ClientWidth = Window.ClientAreaWidth;
     g_ClientHeight = Window.ClientAreaHeight;
 
+    // TODO: Figure out how to do this
+    g_WindowHandle = Window.WindowHandle;
+
 #if 1
     dx12_game_renderer Dx12Renderer = CreateDX12GameRenderer(Window);
 
@@ -390,11 +556,20 @@ int main(int argc, char** argv)
 
         if (!IsMinimized)
         {
-            GameUpdateAndRender(&Dx12Renderer, &Input, g_ClientWidth, g_ClientHeight);
+            GameUpdateAndRender(&Dx12Renderer, &Input, TimeStep, g_ClientWidth, g_ClientHeight);
         }
 
+        // Render stuff
         DX12RendererRender(&Dx12Renderer, g_ClientWidth, g_ClientHeight);
         DX12RendererDumpInfoQueue(Dx12Renderer.DebugInfoQueue);
+
+        // Timestep
+        LARGE_INTEGER EndCounter;
+        QueryPerformanceCounter(&EndCounter);
+
+        i64 CounterElapsed = EndCounter.QuadPart - LastCounter.QuadPart;
+        TimeStep = (CounterElapsed / static_cast<f32>(CounterFrequency.QuadPart));
+        LastCounter = EndCounter;
     }
 
     DX12GameRendererDestroy(&Dx12Renderer);

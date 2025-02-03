@@ -756,6 +756,7 @@ static void SubmitCube(dx12_game_renderer* Renderer, v3 Translation, v3 Rotation
     for (u32 i = 0; i < CountOf(c_CubeVertexPositions); i++)
     {
         Renderer->QuadVertexDataPtr->Position = v3(Transform * c_CubeVertexPositions[i]);
+
         Renderer->QuadVertexDataPtr->Color = Color;
         Renderer->QuadVertexDataPtr++;
     }
@@ -781,8 +782,8 @@ static void DX12RendererRender(dx12_game_renderer* Renderer, u32 Width, u32 Heig
     auto Barrier = DX12RendererTransition(BackBuffer, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
     CommandList->ResourceBarrier(1, &Barrier);
 
-    v4 ClearColor = { 0.8f, 0.5f, 0.9f, 1.0f };
-    //v4 ClearColor = { 0.2f, 0.3f, 0.8f, 1.0f };
+    //v4 ClearColor = { 0.8f, 0.5f, 0.9f, 1.0f };
+    v4 ClearColor = { 0.2f, 0.3f, 0.8f, 1.0f };
 
     auto RTV = Renderer->RTVDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
     RTV.ptr += u64(Renderer->CurrentBackBufferIndex * Renderer->RTVDescriptorSize);
