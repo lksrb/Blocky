@@ -226,7 +226,7 @@ namespace bkm {
         return result;
     }
 
-    inline m3 Translate(m3 m, V2 v)
+    inline m3 Translate(m3 m, v2 v)
     {
         m3 result(m);
         result[2] = m[0] * v[0] + m[1] * v[1] + m[2];
@@ -240,7 +240,7 @@ namespace bkm {
         return result;
     }
 
-    inline m3 Scale(m3 m, V2 scale)
+    inline m3 Scale(m3 m, v2 scale)
     {
         m3 result;
         result[0] = m[0] * scale[0];
@@ -259,7 +259,7 @@ namespace bkm {
         return result;
     }
 
-    inline f32 Dot(const V2& v0, const V2& v1)
+    inline f32 Dot(const v2& v0, const v2& v1)
     {
         return v0.x * v1.x + v0.y * v1.y;
     }
@@ -274,7 +274,7 @@ namespace bkm {
         return v0.x * v1.x + v0.y * v1.y + v0.z * v1.z + v0.w * v1.w;
     }
 
-    inline bool NonZero(const V2& v)
+    inline bool NonZero(const v2& v)
     {
         // TODO: Is there faster way?
         return Dot(v, v) > 0.0f;
@@ -295,7 +295,7 @@ namespace bkm {
         return (value - min) / (max - min); 
     }
 
-    inline V2 Normalize(const V2& v)
+    inline v2 Normalize(const v2& v)
     {
         return v * InverseSqrt(Dot(v, v));
     }
@@ -318,7 +318,7 @@ namespace bkm {
             a.x * b.y - b.x * a.y);
     }
 
-    inline f32 Length(const V2& v)
+    inline f32 Length(const v2& v)
     {
         return Sqrt(Dot(v, v));
     }
@@ -397,9 +397,9 @@ namespace bkm {
         return result;
     }
 
-    inline V2 Rotate(const V2& v, f32 angle)
+    inline v2 Rotate(const v2& v, f32 angle)
     {
-        V2 result;
+        v2 result;
         result.x = v.x * Cos(angle) + v.y * -Sin(angle);
         result.y = v.x * Sin(angle) + v.y * Cos(angle);
         return result;
@@ -410,9 +410,9 @@ namespace bkm {
         return q * v;
     }
 
-    inline V2 Abs(const V2& v)
+    inline v2 Abs(const v2& v)
     {
-        return V2(Abs(v.x), Abs(v.y));
+        return v2(Abs(v.x), Abs(v.y));
     }
 
     inline v3 Abs(const v3& v)
@@ -425,9 +425,9 @@ namespace bkm {
         return start + (end - start) * maxDistanceDelta;
     }
 
-    inline V2 Lerp(V2 v1, V2 v2, f32 maxDistanceDelta)
+    inline v2 Lerp(v2 v0, v2 v1, f32 maxDistanceDelta)
     {
-        return V2(Lerp(v1.x, v2.x, maxDistanceDelta), Lerp(v1.y, v2.y, maxDistanceDelta));
+        return v2(Lerp(v0.x, v1.x, maxDistanceDelta), Lerp(v0.y, v1.y, maxDistanceDelta));
     }
 
     inline v3 Lerp(v3 v1, v3 v2, f32 maxDistanceDelta)
@@ -567,7 +567,7 @@ namespace bkm {
     }
 
     // Converts 2D screen coordinates to world position
-    inline V2 OrthoScreenToWorld(V2i screenPos, V2i screenSize, m4 viewProjection)
+    inline v2 OrthoScreenToWorld(V2i screenPos, V2i screenSize, m4 viewProjection)
     {
         // Convert screen space coordinates to normalized device coordinates (NDC)
         f32 normalizedX = (2.0f * screenPos.x) / screenSize.x - 1.0f;
@@ -589,7 +589,7 @@ namespace bkm {
         }
 
         // Return the world position (as a Vector3)
-        return V2(worldPosition.x, worldPosition.y);
+        return v2(worldPosition.x, worldPosition.y);
     }
 }
 

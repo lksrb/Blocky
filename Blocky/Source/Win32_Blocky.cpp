@@ -524,7 +524,7 @@ int main(int argc, char** argv)
     g_WindowHandle = Window.WindowHandle;
 
 #if 1
-    dx12_game_renderer Dx12Renderer = CreateDX12GameRenderer(Window);
+    game_renderer Dx12Renderer = CreateDX12GameRenderer(Window);
 
     // Show window after initialization
     ShowWindow(Window.WindowHandle, SW_SHOW);
@@ -640,10 +640,10 @@ int main(int argc, char** argv)
         {
             BeginRender(&VulkanRenderer, Camera.GetViewProjection());
 
-            SubmitCube(&VulkanRenderer, v3(0), v3(0), v3(1.0f), v4(1.0f, 0.0f, 0.0f, 1.0f));
-            SubmitCube(&VulkanRenderer, v3(1, 0, 0), v3(0), v3(1.0f), v4(1.0f, 0.0f, 0.0f, 1.0f));
-            SubmitCube(&VulkanRenderer, v3(2, 0, 0), v3(0), v3(1.0f), v4(1.0f, 1.0f, 0.0f, 1.0f));
-            SubmitCube(&VulkanRenderer, v3(3, 0, 0), v3(0), v3(1.0f), v4(1.0f, 0.0f, 1.0f, 1.0f));
+            GameRendererSubmitCube(&VulkanRenderer, v3(0), v3(0), v3(1.0f), v4(1.0f, 0.0f, 0.0f, 1.0f));
+            GameRendererSubmitCube(&VulkanRenderer, v3(1, 0, 0), v3(0), v3(1.0f), v4(1.0f, 0.0f, 0.0f, 1.0f));
+            GameRendererSubmitCube(&VulkanRenderer, v3(2, 0, 0), v3(0), v3(1.0f), v4(1.0f, 1.0f, 0.0f, 1.0f));
+            GameRendererSubmitCube(&VulkanRenderer, v3(3, 0, 0), v3(0), v3(1.0f), v4(1.0f, 0.0f, 1.0f, 1.0f));
 
             EndRender(&VulkanRenderer);
         }

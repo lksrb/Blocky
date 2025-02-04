@@ -8,7 +8,7 @@ struct dx12_buffer
 
 static dx12_buffer DX12BufferCreate(ID3D12Device* Device, D3D12_RESOURCE_STATES ResourceState, D3D12_HEAP_TYPE HeapType, u64 Size)
 {
-    dx12_buffer Result = {};
+    dx12_buffer Buffer = {};
 
     D3D12_HEAP_PROPERTIES HeapProperties;
     HeapProperties.Type = HeapType;
@@ -36,11 +36,11 @@ static dx12_buffer DX12BufferCreate(ID3D12Device* Device, D3D12_RESOURCE_STATES 
         &Desc,
         ResourceState,
         nullptr,
-        IID_PPV_ARGS(&Result.Resource)));
+        IID_PPV_ARGS(&Buffer.Resource)));
 
-    Result.Size = Size;
+    Buffer.Size = Size;
 
-    return Result;
+    return Buffer;
 }
 
 static void DX12BufferDestroy(dx12_buffer* Buffer)

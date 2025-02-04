@@ -1,75 +1,39 @@
-#if 0
-// Vertex shader
-// Vertex shader
-// Vertex shader
-
-struct ModelViewProjection
-{
-    matrix MVP;
-};
-
-ConstantBuffer<ModelViewProjection> ModelViewProjectionCB : register(b0);
-
-struct VertexPosColor
-{
-    float3 Position : POSITION;
-    float3 Color    : COLOR;
-};
-
-struct VertexShaderOutput
-{
-	float4 Color    : COLOR;
-    float4 Position : SV_Position;
-};
-
-VertexShaderOutput VSMain(VertexPosColor IN)
-{
-    VertexShaderOutput OUT;
-  
-    OUT.Position = mul(ModelViewProjectionCB.MVP, float4(IN.Position, 1.0f));
-    OUT.Color = float4(IN.Color, 1.0f);
-
-    return OUT;
-}
-
-// Pixel shader
-// Pixel shader
-// Pixel shader
-
-struct PixelShaderInput
-{
-    float4 Color : COLOR;
-};
-
-float4 PSMain(PixelShaderInput IN) : SV_Target
-{
-    return IN.Color;
-}
-#else
-
-cbuffer RootConstants : register(b0)
+cbuffer root_constants : register(b0)
 {
     column_major float4x4 ViewProjection;
 };
 
-struct PSInput
+struct vertex_shader_input
 {
-    float4 position : SV_POSITION;
-    float4 color : COLOR;
+    float4 Position : POSITION;
+    float4 Color : COLOR;
+    float2 TexCoord : TEXCOORD;
 };
 
-PSInput VSMain(float4 position : POSITION, float4 color : COLOR)
+struct pixel_shader_input
 {
-    PSInput result;
+    float4 Position : SV_POSITION;
+    float4 Color : COLOR;
+    float2 TexCoord : TEXCOORD;
+};
 
-    result.position = mul(ViewProjection, position);
-    result.color = color;
+pixel_shader_input VSMain(vertex_shader_input In)
+{
+    pixel_shader_input Out;
 
-    return result;
+    Out.Position = mul(ViewProjection, In.Position);
+    Out.Color = In.Color;
+    Out.TexCoord = In.TexCoord;
+
+    return Out;
 }
 
-float4 PSMain(PSInput input) : SV_TARGET
+Texture2D g_texture : register(t0);
+SamplerState g_sampler : register(s0);
+
+float4 PSMain(pixel_shader_input In) : SV_TARGET
 {
-    return input.color;
+    //return float4(In.TexCoord, 0.0f, 1.0f);
+    return g_texture.Sample(g_sampler, In.TexCoord);
+    //return mul(In.Color, );
 }
-#endif

@@ -5,7 +5,7 @@
  */
 #pragma once
 
-// DirectX 12
+ // DirectX 12
 #include <d3d12.h>
 #include <dxgi1_6.h>
 #include <d3dcompiler.h>
@@ -54,6 +54,7 @@ static D3D12_RESOURCE_BARRIER DX12RendererTransition(
 };
 
 #include "DX12Buffer.h"
+#include "DX12Texture.h"
 
 // Basically a push constant
 // TODO: Whats the size of this
@@ -62,7 +63,7 @@ struct dx12_root_signature_constant_buffer
     m4 ViewProjection;
 };
 
-struct dx12_game_renderer
+struct game_renderer
 {
     ID3D12Device2* Device;
     ID3D12Debug* DebugInterface;
@@ -82,8 +83,10 @@ struct dx12_game_renderer
     u32 RTVDescriptorSize;
     u32 CurrentBackBufferIndex;
 
-    ID3D12Resource* DepthBuffer;
-    ID3D12DescriptorHeap* DepthStencilHeap;
+    ID3D12Resource* DepthBuffers[FIF];
+    ID3D12DescriptorHeap* DSVDescriptorHeap;
+    u32 DSVDescriptorSize;
+
     bool DepthTesting = true;
 
     bool VSync = true;
@@ -101,9 +104,12 @@ struct dx12_game_renderer
     D3D12_VIEWPORT Viewport;
     D3D12_RECT ScissorRect;
 
+    ID3D12DescriptorHeap* SRVDescriptorHeap;
+    dx12_texture WhiteTexture;
+
     // Quad
     ID3D12PipelineState* QuadPipelineState;
-    dx12_vertex_buffer QuadVertexBuffer;
+    dx12_vertex_buffer QuadVertexBuffer[FIF];
     dx12_buffer QuadIndexBuffer;
     quad_vertex QuadVertexDataBase[c_MaxQuadVertices];
     quad_vertex* QuadVertexDataPtr = QuadVertexDataBase;
@@ -187,7 +193,7 @@ static void DX12RendererWaitForFenceValue(ID3D12Fence* Fence, u64 FenceValue, HA
     }
 }
 
-static void DX12RendererFlush(dx12_game_renderer* Renderer)
+static void DX12RendererFlush(game_renderer* Renderer)
 {
     u64 FenceValueForSignal = DX12RendererSignal(Renderer->DirectCommandQueue, Renderer->Fence, &Renderer->FenceValue);
     DX12RendererWaitForFenceValue(Renderer->Fence, FenceValueForSignal, Renderer->DirectFenceEvent);
@@ -253,7 +259,7 @@ static IDXGIAdapter1* GetHardwareAdapter(IDXGIFactory1* Factory, bool RequestHig
     return Adapter;
 }
 
-static void DX12RendererInitializeContext(dx12_game_renderer* Renderer, game_window Window)
+static void DX12RendererInitializeContext(game_renderer* Renderer, game_window Window)
 {
     // Enable debug layer
     // This is sort of like validation layers in Vulkan
@@ -331,7 +337,7 @@ static void DX12RendererInitializeContext(dx12_game_renderer* Renderer, game_win
 
             // Command lists are created in the recording state, but there is nothing
             // to record yet. The main loop expects it to be closed, so close it now.
-            DxAssert(Renderer->DirectCommandList->Close());
+            //DxAssert(Renderer->DirectCommandList->Close());
         }
 
         // Fence
@@ -361,7 +367,7 @@ static void DX12RendererInitializeContext(dx12_game_renderer* Renderer, game_win
 
             // Command lists are created in the recording state, but there is nothing
             // to record yet. The main loop expects it to be closed, so close it now.
-            //DxAssert(Renderer->DirectCommandList->Close());
+            DxAssert(Renderer->DirectCommandList->Close());
         }
     }
 
@@ -400,65 +406,16 @@ static void DX12RendererInitializeContext(dx12_game_renderer* Renderer, game_win
         Renderer->CurrentBackBufferIndex = Renderer->SwapChain->GetCurrentBackBufferIndex();
     }
 
-    // Create a Descriptor Heap
-    {
-        D3D12_DESCRIPTOR_HEAP_DESC desc = {};
-        desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
-        desc.NumDescriptors = FIF;
-        desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
-        desc.NodeMask = 1;
-        DxAssert(Renderer->Device->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&Renderer->RTVDescriptorHeap)));
-    }
-
-    // Create Depth Stencil Heap
-    {
-        ID3D12DescriptorHeap* DSVHeap = nullptr;
-
-        // Create the descriptor heap for the depth-stencil view.
-        D3D12_DESCRIPTOR_HEAP_DESC DsvHeapDesc = {};
-        DsvHeapDesc.NumDescriptors = 1;
-        DsvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
-        DsvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
-        DxAssert(Renderer->Device->CreateDescriptorHeap(&DsvHeapDesc, IID_PPV_ARGS(&Renderer->DepthStencilHeap)));
-
-        // Create depth buffer
-        D3D12_CLEAR_VALUE OptimizedClearValue = {};
-        OptimizedClearValue.Format = DXGI_FORMAT_D32_FLOAT;
-        OptimizedClearValue.DepthStencil = { 1.0f, 0 };
-
-        auto HeapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
-
-        D3D12_RESOURCE_DESC DepthStencilDesc = {};
-        DepthStencilDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-        DepthStencilDesc.Width = Window.ClientAreaWidth;
-        DepthStencilDesc.Height = Window.ClientAreaHeight;
-        DepthStencilDesc.DepthOrArraySize = 1;
-        DepthStencilDesc.MipLevels = 1;
-        DepthStencilDesc.Format = DXGI_FORMAT_D32_FLOAT;
-        DepthStencilDesc.SampleDesc.Count = 1;  // No MSAA
-        DepthStencilDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
-
-        DxAssert(Renderer->Device->CreateCommittedResource(
-            &HeapProperties,
-            D3D12_HEAP_FLAG_NONE,
-            &DepthStencilDesc,
-            D3D12_RESOURCE_STATE_DEPTH_WRITE,
-            &OptimizedClearValue,
-            IID_PPV_ARGS(&Renderer->DepthBuffer)
-        ));
-
-        // Update the depth-stencil view.
-        D3D12_DEPTH_STENCIL_VIEW_DESC dsv = {};
-        dsv.Format = DXGI_FORMAT_D32_FLOAT;
-        dsv.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
-        dsv.Texture2D.MipSlice = 0;
-        dsv.Flags = D3D12_DSV_FLAG_NONE;
-
-        Renderer->Device->CreateDepthStencilView(Renderer->DepthBuffer, &dsv, Renderer->DepthStencilHeap->GetCPUDescriptorHandleForHeapStart());
-    }
-
     // Create Render Target Views
     {
+        // Create a Descriptor Heap
+        D3D12_DESCRIPTOR_HEAP_DESC Desc = {};
+        Desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
+        Desc.NumDescriptors = FIF;
+        Desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+        Desc.NodeMask = 1;
+        DxAssert(Renderer->Device->CreateDescriptorHeap(&Desc, IID_PPV_ARGS(&Renderer->RTVDescriptorHeap)));
+
         Renderer->RTVDescriptorSize = Renderer->Device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
 
         D3D12_CPU_DESCRIPTOR_HANDLE RtvHandle = Renderer->RTVDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
@@ -475,26 +432,122 @@ static void DX12RendererInitializeContext(dx12_game_renderer* Renderer, game_win
             RtvHandle.ptr += Renderer->RTVDescriptorSize;
         }
     }
+
+    // Create depth resources
+    {
+        // Create Depth Stencil Heap
+        ID3D12DescriptorHeap* DSVHeap = nullptr;
+
+        // Create the descriptor heap for the depth-stencil view.
+        D3D12_DESCRIPTOR_HEAP_DESC DsvHeapDesc = {};
+        DsvHeapDesc.NumDescriptors = FIF;
+        DsvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
+        DsvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+        DxAssert(Renderer->Device->CreateDescriptorHeap(&DsvHeapDesc, IID_PPV_ARGS(&Renderer->DSVDescriptorHeap)));
+
+        D3D12_CPU_DESCRIPTOR_HANDLE DsvHandle = Renderer->DSVDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
+        Renderer->DSVDescriptorSize = Renderer->Device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
+
+        // Create depth buffers
+        for (u32 i = 0; i < FIF; i++)
+        {
+            D3D12_CLEAR_VALUE OptimizedClearValue = {};
+            OptimizedClearValue.Format = DXGI_FORMAT_D32_FLOAT;
+            OptimizedClearValue.DepthStencil = { 1.0f, 0 };
+
+            auto HeapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
+
+            D3D12_RESOURCE_DESC DepthStencilDesc = {};
+            DepthStencilDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+            DepthStencilDesc.Width = Window.ClientAreaWidth;
+            DepthStencilDesc.Height = Window.ClientAreaHeight;
+            DepthStencilDesc.DepthOrArraySize = 1;
+            DepthStencilDesc.MipLevels = 1;
+            DepthStencilDesc.Format = DXGI_FORMAT_D32_FLOAT;
+            DepthStencilDesc.SampleDesc.Count = 1;  // No MSAA
+            DepthStencilDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
+
+            DxAssert(Renderer->Device->CreateCommittedResource(
+                &HeapProperties,
+                D3D12_HEAP_FLAG_NONE,
+                &DepthStencilDesc,
+                D3D12_RESOURCE_STATE_DEPTH_WRITE,
+                &OptimizedClearValue,
+                IID_PPV_ARGS(&Renderer->DepthBuffers[i])
+            ));
+
+            // Update the depth-stencil view.
+            D3D12_DEPTH_STENCIL_VIEW_DESC dsv = {};
+            dsv.Format = DXGI_FORMAT_D32_FLOAT;
+            dsv.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
+            dsv.Texture2D.MipSlice = 0;
+            dsv.Flags = D3D12_DSV_FLAG_NONE;
+
+            Renderer->Device->CreateDepthStencilView(Renderer->DepthBuffers[i], &dsv, DsvHandle);
+
+            // Increment by the size of the dsv descriptor size
+            DsvHandle.ptr += Renderer->DSVDescriptorSize;
+        }
+    }
+
+    // Creating the shader resource view descriptor
+    {
+        D3D12_DESCRIPTOR_HEAP_DESC Desc = {};
+        Desc.NumDescriptors = 1;  // Number of SRVs (e.g., 1 texture)
+        Desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+        Desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE; // Must be visible to shaders
+        Desc.NodeMask = 0;
+        DxAssert(Renderer->Device->CreateDescriptorHeap(&Desc, IID_PPV_ARGS(&Renderer->SRVDescriptorHeap)));
+    }
 }
 
-static void DX12RendererInitializePipeline(dx12_game_renderer* Renderer)
+static void DX12RendererInitializePipeline(game_renderer* Renderer)
 {
     auto Device = Renderer->Device;
 
     // Root Signature
     {
-        D3D12_ROOT_PARAMETER Parameters[1] = {};
+        // Sampler
+        D3D12_STATIC_SAMPLER_DESC Sampler = {};
+        Sampler.Filter = D3D12_FILTER_MIN_MAG_MIP_POINT;
+        Sampler.AddressU = D3D12_TEXTURE_ADDRESS_MODE_BORDER;
+        Sampler.AddressV = D3D12_TEXTURE_ADDRESS_MODE_BORDER;
+        Sampler.AddressW = D3D12_TEXTURE_ADDRESS_MODE_BORDER;
+        Sampler.MipLODBias = 0;
+        Sampler.MaxAnisotropy = 0;
+        Sampler.ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
+        Sampler.BorderColor = D3D12_STATIC_BORDER_COLOR_TRANSPARENT_BLACK;
+        Sampler.MinLOD = 0.0f;
+        Sampler.MaxLOD = D3D12_FLOAT32_MAX;
+        Sampler.ShaderRegister = 0;
+        Sampler.RegisterSpace = 0;
+        Sampler.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+
+        D3D12_DESCRIPTOR_RANGE Ranges[1];
+        Ranges[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+        Ranges[0].NumDescriptors = 1;
+        Ranges[0].BaseShaderRegister = 0;
+        Ranges[0].RegisterSpace = 0;
+        //Ranges[0].Flags = D3D12_DESCRIPTOR_RANGE_FLAG_DATA_STATIC;
+
+        D3D12_ROOT_PARAMETER Parameters[2] = {};
         Parameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
         Parameters[0].Constants.Num32BitValues = 16;  // 4x4 matrix (16 floats)
         Parameters[0].Constants.ShaderRegister = 0;  // Matches b0 in HLSL
         Parameters[0].Constants.RegisterSpace = 0;
         Parameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
 
+        // Descriptor table
+        Parameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+        Parameters[1].DescriptorTable.NumDescriptorRanges = CountOf(Ranges);
+        Parameters[1].DescriptorTable.pDescriptorRanges = Ranges;
+        Parameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+
         D3D12_ROOT_SIGNATURE_DESC Desc = {};
         Desc.NumParameters = CountOf(Parameters);
         Desc.pParameters = Parameters;
-        Desc.NumStaticSamplers = 0;
-        Desc.pStaticSamplers = nullptr;
+        Desc.NumStaticSamplers = 1;
+        Desc.pStaticSamplers = &Sampler;
         Desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
 
         // Root signature
@@ -527,7 +580,8 @@ static void DX12RendererInitializePipeline(dx12_game_renderer* Renderer)
             D3D12_INPUT_ELEMENT_DESC InputElementDescs[] =
             {
                 { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-                { "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }
+                { "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+                { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }
             };
 
             D3D12_GRAPHICS_PIPELINE_STATE_DESC PipelineDesc = {};
@@ -535,7 +589,7 @@ static void DX12RendererInitializePipeline(dx12_game_renderer* Renderer)
             // Rasterizer state
             PipelineDesc.RasterizerState = {};
             PipelineDesc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
-            PipelineDesc.RasterizerState.CullMode = D3D12_CULL_MODE_BACK;
+            PipelineDesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
             PipelineDesc.RasterizerState.FrontCounterClockwise = TRUE;
             PipelineDesc.RasterizerState.DepthBias = D3D12_DEFAULT_DEPTH_BIAS;
             PipelineDesc.RasterizerState.DepthBiasClamp = D3D12_DEFAULT_DEPTH_BIAS_CLAMP;
@@ -579,11 +633,15 @@ static void DX12RendererInitializePipeline(dx12_game_renderer* Renderer)
             PipelineDesc.SampleDesc.Count = 1;
 
             DxAssert(Device->CreateGraphicsPipelineState(&PipelineDesc, IID_PPV_ARGS(&Renderer->QuadPipelineState)));
+            DX12RendererDumpInfoQueue(Renderer->DebugInfoQueue);
         }
 
         // Quad
         {
-            Renderer->QuadVertexBuffer = DX12VertexBufferCreate(Device, sizeof(quad_vertex) * c_MaxQuadVertices);
+            for (u32 i = 0; i < FIF; i++)
+            {
+                Renderer->QuadVertexBuffer[i] = DX12VertexBufferCreate(Device, sizeof(quad_vertex) * c_MaxQuadVertices);
+            }
 
             u32 QuadIndices[c_MaxQuadIndices];
             u32 Offset = 0;
@@ -602,12 +660,6 @@ static void DX12RendererInitializePipeline(dx12_game_renderer* Renderer)
 
             Renderer->QuadIndexBuffer = DX12BufferCreate(Device, D3D12_RESOURCE_STATE_COMMON, D3D12_HEAP_TYPE_DEFAULT, c_MaxQuadIndices * sizeof(u32));
 
-            // Prepare for upload
-            D3D12_SUBRESOURCE_DATA SubresourceData = {};
-            SubresourceData.pData = QuadIndices;
-            SubresourceData.RowPitch = c_MaxQuadIndices * sizeof(u32);
-            SubresourceData.SlicePitch = SubresourceData.RowPitch;
-
             // Copy indices
             {
                 dx12_buffer Intermediate = DX12BufferCreate(Device, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_HEAP_TYPE_UPLOAD, c_MaxQuadIndices * sizeof(u32));
@@ -617,19 +669,34 @@ static void DX12RendererInitializePipeline(dx12_game_renderer* Renderer)
                 Intermediate.Resource->Unmap(0, nullptr);
 
                 Renderer->CopyCommandList->CopyBufferRegion(Renderer->QuadIndexBuffer.Resource, 0, Intermediate.Resource, 0, c_MaxQuadIndices * sizeof(u32));
-                Renderer->CopyCommandList->Close();
-                Renderer->CopyCommandQueue->ExecuteCommandLists(1, (ID3D12CommandList* const*)&Renderer->CopyCommandList);
+
+               
 
                 // TODO: Wait for copy command to finish
                 //DX12BufferDestroy(&Intermediate);
             }
         }
+
+        // White texture
+        {
+            Renderer->WhiteTexture = DX12TextureCreate(Device, Renderer->CopyCommandList, "Resources/Textures/background.png");
+            Renderer->CopyCommandList->Close();
+            Renderer->CopyCommandQueue->ExecuteCommandLists(1, (ID3D12CommandList* const*)&Renderer->CopyCommandList);
+
+            // Describe and create a SRV for the texture.
+            D3D12_SHADER_RESOURCE_VIEW_DESC SrvDesc = {};
+            SrvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+            SrvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+            SrvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+            SrvDesc.Texture2D.MipLevels = 1;
+            Device->CreateShaderResourceView(Renderer->WhiteTexture.Resource, &SrvDesc, Renderer->SRVDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
+        }
     }
 }
 
-static dx12_game_renderer CreateDX12GameRenderer(game_window Window)
+static game_renderer CreateDX12GameRenderer(game_window Window)
 {
-    dx12_game_renderer Renderer = {};
+    game_renderer Renderer = {};
 
     DX12RendererInitializeContext(&Renderer, Window);
     DX12RendererInitializePipeline(&Renderer);
@@ -637,7 +704,7 @@ static dx12_game_renderer CreateDX12GameRenderer(game_window Window)
     return Renderer;
 }
 
-static void DX12GameRendererDestroy(dx12_game_renderer* Renderer)
+static void DX12GameRendererDestroy(game_renderer* Renderer)
 {
     // Wait for GPU to finish
     DX12RendererFlush(Renderer);
@@ -650,7 +717,7 @@ static void DX12GameRendererDestroy(dx12_game_renderer* Renderer)
     }
 }
 
-static void DX12RendererResizeSwapChain(dx12_game_renderer* Renderer, u32 RequestWidth, u32 RequestHeight)
+static void DX12RendererResizeSwapChain(game_renderer* Renderer, u32 RequestWidth, u32 RequestHeight)
 {
     // Flush the GPU queue to make sure the swap chain's back buffers are not being referenced by an in-flight command list.
     DX12RendererFlush(Renderer);
@@ -660,44 +727,6 @@ static void DX12RendererResizeSwapChain(dx12_game_renderer* Renderer, u32 Reques
     {
         Renderer->BackBuffers[i]->Release();
         Renderer->FrameFenceValues[i] = Renderer->FrameFenceValues[Renderer->CurrentBackBufferIndex];
-    }
-
-    // Recreate depth buffer
-    {
-        Renderer->DepthBuffer->Release();
-
-        D3D12_CLEAR_VALUE OptimizedClearValue = {};
-        OptimizedClearValue.Format = DXGI_FORMAT_D32_FLOAT;
-        OptimizedClearValue.DepthStencil = { 1.0f, 0 };
-
-        auto HeapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
-
-        D3D12_RESOURCE_DESC DepthStencilDesc = {};
-        DepthStencilDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-        DepthStencilDesc.Width = RequestWidth;
-        DepthStencilDesc.Height = RequestHeight;
-        DepthStencilDesc.DepthOrArraySize = 1;
-        DepthStencilDesc.MipLevels = 1;
-        DepthStencilDesc.Format = DXGI_FORMAT_D32_FLOAT;
-        DepthStencilDesc.SampleDesc.Count = 1;  // No MSAA
-        DepthStencilDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
-        DxAssert(Renderer->Device->CreateCommittedResource(
-            &HeapProperties,
-            D3D12_HEAP_FLAG_NONE,
-            &DepthStencilDesc,
-            D3D12_RESOURCE_STATE_DEPTH_WRITE,
-            &OptimizedClearValue,
-            IID_PPV_ARGS(&Renderer->DepthBuffer)
-        ));
-
-        // Update the depth-stencil view.
-        D3D12_DEPTH_STENCIL_VIEW_DESC dsv = {};
-        dsv.Format = DXGI_FORMAT_D32_FLOAT;
-        dsv.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
-        dsv.Texture2D.MipSlice = 0;
-        dsv.Flags = D3D12_DSV_FLAG_NONE;
-
-        Renderer->Device->CreateDepthStencilView(Renderer->DepthBuffer, &dsv, Renderer->DepthStencilHeap->GetCPUDescriptorHandleForHeapStart());
     }
 
     DXGI_SWAP_CHAIN_DESC SwapChainDesc;
@@ -723,15 +752,65 @@ static void DX12RendererResizeSwapChain(dx12_game_renderer* Renderer, u32 Reques
         rtvHandle.ptr += Renderer->RTVDescriptorSize;
     }
 
+    // Recreate depth buffers
+    {
+        D3D12_CPU_DESCRIPTOR_HANDLE DsvHandle = Renderer->DSVDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
+        Renderer->DSVDescriptorSize = Renderer->Device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
+
+        // Create depth buffers
+        for (u32 i = 0; i < FIF; i++)
+        {
+            // Release the old one
+            Renderer->DepthBuffers[i]->Release();
+
+            D3D12_CLEAR_VALUE OptimizedClearValue = {};
+            OptimizedClearValue.Format = DXGI_FORMAT_D32_FLOAT;
+            OptimizedClearValue.DepthStencil = { 1.0f, 0 };
+
+            auto HeapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
+
+            D3D12_RESOURCE_DESC DepthStencilDesc = {};
+            DepthStencilDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+            DepthStencilDesc.Width = RequestWidth;
+            DepthStencilDesc.Height = RequestHeight;
+            DepthStencilDesc.DepthOrArraySize = 1;
+            DepthStencilDesc.MipLevels = 1;
+            DepthStencilDesc.Format = DXGI_FORMAT_D32_FLOAT;
+            DepthStencilDesc.SampleDesc.Count = 1;  // No MSAA
+            DepthStencilDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
+
+            DxAssert(Renderer->Device->CreateCommittedResource(
+                &HeapProperties,
+                D3D12_HEAP_FLAG_NONE,
+                &DepthStencilDesc,
+                D3D12_RESOURCE_STATE_DEPTH_WRITE,
+                &OptimizedClearValue,
+                IID_PPV_ARGS(&Renderer->DepthBuffers[i])
+            ));
+
+            // Update the depth-stencil view.
+            D3D12_DEPTH_STENCIL_VIEW_DESC dsv = {};
+            dsv.Format = DXGI_FORMAT_D32_FLOAT;
+            dsv.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
+            dsv.Texture2D.MipSlice = 0;
+            dsv.Flags = D3D12_DSV_FLAG_NONE;
+
+            Renderer->Device->CreateDepthStencilView(Renderer->DepthBuffers[i], &dsv, DsvHandle);
+
+            // Increment by the size of the dsv descriptor size
+            DsvHandle.ptr += Renderer->DSVDescriptorSize;
+        }
+    }
+
     Warn("SwapChain resized to %d %d", RequestWidth, RequestHeight);
 }
 
-static void SetViewProjection(dx12_game_renderer* Renderer, m4 ViewProjection)
+static void GameRendererSetViewProjection(game_renderer* Renderer, m4 ViewProjection)
 {
     Renderer->RootSignatureBuffer.ViewProjection = ViewProjection;
 }
 
-static void SubmitQuad(dx12_game_renderer* Renderer, v3 Translation, v3 Rotation, v3 Scale, v4 Color)
+static void GameRendererSubmitQuad(game_renderer* Renderer, v3 Translation, v3 Rotation, v3 Scale, v4 Color)
 {
     m4 Transform = bkm::Translate(m4(1.0f), Translation)
         * bkm::ToM4(qtn(Rotation))
@@ -747,24 +826,31 @@ static void SubmitQuad(dx12_game_renderer* Renderer, v3 Translation, v3 Rotation
     Renderer->QuadIndexCount += 6;
 }
 
-static void SubmitCube(dx12_game_renderer* Renderer, v3 Translation, v3 Rotation, v3 Scale, v4 Color)
+static void GameRendererSubmitCube(game_renderer* Renderer, v3 Translation, v3 Rotation, v3 Scale, v4 Color)
 {
     m4 Transform = bkm::Translate(m4(1.0f), Translation)
         * bkm::ToM4(qtn(Rotation))
         * bkm::Scale(m4(1.0f), Scale);
 
+    v2 Coords[4];
+    Coords[0] = { 0.0f, 0.0f };
+    Coords[1] = { 1.0f, 0.0f };
+    Coords[2] = { 1.0f, 1.0f };
+    Coords[3] = { 0.0f, 1.0f };
+
+
     for (u32 i = 0; i < CountOf(c_CubeVertexPositions); i++)
     {
         Renderer->QuadVertexDataPtr->Position = v3(Transform * c_CubeVertexPositions[i]);
-
         Renderer->QuadVertexDataPtr->Color = Color;
+        Renderer->QuadVertexDataPtr->TexCoord = Coords[i % 4];
         Renderer->QuadVertexDataPtr++;
     }
 
     Renderer->QuadIndexCount += 36;
 }
 
-static void DX12RendererRender(dx12_game_renderer* Renderer, u32 Width, u32 Height)
+static void DX12RendererRender(game_renderer* Renderer, u32 Width, u32 Height)
 {
     // End render
 
@@ -785,16 +871,20 @@ static void DX12RendererRender(dx12_game_renderer* Renderer, u32 Width, u32 Heig
     //v4 ClearColor = { 0.8f, 0.5f, 0.9f, 1.0f };
     v4 ClearColor = { 0.2f, 0.3f, 0.8f, 1.0f };
 
+    // Get current render target view
     auto RTV = Renderer->RTVDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
     RTV.ptr += u64(Renderer->CurrentBackBufferIndex * Renderer->RTVDescriptorSize);
 
-    auto DSV = Renderer->DepthStencilHeap->GetCPUDescriptorHandleForHeapStart();
+    // Get current depth stencil view
+    auto DSV = Renderer->DSVDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
+    DSV.ptr += u64(Renderer->CurrentBackBufferIndex * Renderer->DSVDescriptorSize);
+
     CommandList->ClearDepthStencilView(DSV, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
     // PrePass
     {
         // Copy vertex data to gpu buffer
-        DX12VertexBufferSendData(&Renderer->QuadVertexBuffer, Renderer->DirectCommandList, Renderer->QuadVertexDataBase, sizeof(quad_vertex) * Renderer->QuadIndexCount);
+        DX12VertexBufferSendData(&Renderer->QuadVertexBuffer[Renderer->CurrentBackBufferIndex], Renderer->DirectCommandList, Renderer->QuadVertexDataBase, sizeof(quad_vertex) * Renderer->QuadIndexCount);
     }
 
     // Render
@@ -822,6 +912,8 @@ static void DX12RendererRender(dx12_game_renderer* Renderer, u32 Width, u32 Heig
     // Set root constants
     // Number of 32 bit values - 16 floats in 4x4 matrix
     CommandList->SetGraphicsRootSignature(Renderer->RootSignature);
+
+    CommandList->SetDescriptorHeaps(1, (ID3D12DescriptorHeap* const*)&Renderer->SRVDescriptorHeap);
     CommandList->SetGraphicsRoot32BitConstants(0, 16, &Renderer->RootSignatureBuffer.ViewProjection, 0);
 
     // Quads
@@ -832,7 +924,7 @@ static void DX12RendererRender(dx12_game_renderer* Renderer, u32 Width, u32 Heig
 
         // Bind vertex buffer
         static D3D12_VERTEX_BUFFER_VIEW QuadVertexBufferView;
-        QuadVertexBufferView.BufferLocation = Renderer->QuadVertexBuffer.Buffer.Resource->GetGPUVirtualAddress();
+        QuadVertexBufferView.BufferLocation = Renderer->QuadVertexBuffer[Renderer->CurrentBackBufferIndex].Buffer.Resource->GetGPUVirtualAddress();
         QuadVertexBufferView.StrideInBytes = sizeof(quad_vertex);
         QuadVertexBufferView.SizeInBytes = Renderer->QuadIndexCount * sizeof(quad_vertex);
         CommandList->IASetVertexBuffers(0, 1, &QuadVertexBufferView);

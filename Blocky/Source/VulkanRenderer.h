@@ -61,6 +61,7 @@ struct quad_vertex
 {
     v3 Position;
     v4 Color;
+    v2 TexCoord;
 };
 
 struct queue_family_indices
@@ -1133,7 +1134,7 @@ static vulkan_game_renderer CreateVulkanGameRenderer(game_window Window)
     return Renderer;
 }
 
-static void SubmitCube(vulkan_game_renderer* Renderer, v3 Translation, v3 Rotation, v3 Scale, v4 Color)
+static void GameRendererSubmitCube(vulkan_game_renderer* Renderer, v3 Translation, v3 Rotation, v3 Scale, v4 Color)
 {
     m4 Transform = bkm::Translate(m4(1.0f), Translation)
         * bkm::ToM4(qtn(Rotation))

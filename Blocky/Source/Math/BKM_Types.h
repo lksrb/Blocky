@@ -448,7 +448,7 @@ struct qtn
     }
 };
 
-using V2 = v2b<f32>;
+using v2 = v2b<f32>;
 using V2i = v2b<i32>;
 
 // TODO: Should this be here? 
