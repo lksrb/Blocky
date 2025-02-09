@@ -3,7 +3,9 @@ project "Blocky"
 	cppdialect "C++20"
 	staticruntime "on"
 	floatingpoint "fast"
+
 	debugdir "%{wks.location}"
+	editandcontinue "off"
 
 	targetdir ("%{wks.location}/bin/" .. outputdir .. "/%{prj.name}")
 	objdir ("%{wks.location}/bin-obj/" .. outputdir .. "/%{prj.name}")
@@ -25,6 +27,10 @@ project "Blocky"
 	defines {
 		"_CRT_SECURE_NO_WARNINGS",
 		"NOMINMAX"
+	}
+
+	flags {
+		"NoIncrementalLink"
 	}
 
 	filter "system:windows"
@@ -51,6 +57,9 @@ project "Blocky"
 		defines { "BK_DEBUG", "ENABLE_VALIDATION_LAYERS=1" }
 		runtime "Debug"
 		symbols "on"
+		buildoptions { 
+			"/Zc:nrvo-" -- Stops compiler from optimizing return values
+		}
 
 	filter "configurations:Release"
 		kind "ConsoleApp"

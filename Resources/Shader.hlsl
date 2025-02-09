@@ -28,12 +28,15 @@ pixel_shader_input VSMain(vertex_shader_input In)
     return Out;
 }
 
-Texture2D g_texture : register(t0);
-SamplerState g_sampler : register(s0);
+Texture2D<float4> g_Texture : register(t0);
+SamplerState g_Sampler : register(s0);
 
 float4 PSMain(pixel_shader_input In) : SV_TARGET
 {
-    //return float4(In.TexCoord, 0.0f, 1.0f);
-    return g_texture.Sample(g_sampler, In.TexCoord);
-    //return mul(In.Color, );
+    float4 Result = In.Color * g_Texture.Sample(g_Sampler, In.TexCoord);
+    
+    if (Result.a == 0.0f)
+        discard;
+    
+    return Result;
 }

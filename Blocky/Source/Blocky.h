@@ -108,7 +108,7 @@ static void GameUpdateAndRender(game_renderer* Renderer, const game_input* Input
             v3 Dest = Translation + Forward * 5.0f;
             if (Input->MouseLeft)
             {
-   //             GameRendererSubmitCube(Renderer, Dest, v3(0), v3(1.0f), v4(0.0f, 0.0f, 0.0f, 1.0f));
+                GameRendererSubmitCube(Renderer, Dest, v3(0), v3(1.0f), v4(0.0f, 1.0f, 1.0f, 1.0f));
             }
         }
 
@@ -128,8 +128,8 @@ static void GameUpdateAndRender(game_renderer* Renderer, const game_input* Input
 
     Y = bkm::Sin(Time);
 
-    //GameRendererSubmitCube(Renderer, v3(0), v3(0), v3(1.0f), v4(0.0f, 1.0f, 0.0f, 1.0f));
+    GameRendererSubmitCube(Renderer, v3(0), v3(0), v3(1.0f), v4(0.0f, 1.0f, 0.0f, 1.0f));
     GameRendererSubmitCube(Renderer, v3(1, Y, 0), v3(0), v3(1.0f), v4(1.0f, 0.0f, 0.0f, 1.0f));
-    //GameRendererSubmitCube(Renderer, v3(2, 0, 0), v3(0), v3(1.0f), v4(1.0f, 1.0f, 0.0f, 1.0f));
-    //GameRendererSubmitCube(Renderer, v3(3, 0, 0), v3(0), v3(1.0f), v4(1.0f, 1.0f, 1.0f, 1.0f));
+    GameRendererSubmitCube(Renderer, v3(2, 0, 0), v3(0), v3(1.0f), v4(1.0f, 1.0f, 0.0f, 1.0f));
+    GameRendererSubmitCube(Renderer, v3(3, 0, 0), v3(0), v3(1.0f), v4(1.0f, 1.0f, 1.0f, 1.0f));
 }

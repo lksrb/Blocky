@@ -476,7 +476,7 @@ static game_window CreateGameWindow()
 
     // Create window
     WNDCLASSEX WindowClass = { sizeof(WindowClass) };
-    WindowClass.style = CS_HREDRAW | CS_VREDRAW; // Always redraw when client area size changes (TODO: confirm)
+    WindowClass.style = CS_HREDRAW | CS_VREDRAW | CS_OWNDC; // Always redraw when client area size changes (TODO: confirm)
     WindowClass.lpfnWndProc = Win32ProcedureHandler;
     WindowClass.hInstance = GetModuleHandle(nullptr);
     WindowClass.lpszClassName = L"BlockyWindowClass";

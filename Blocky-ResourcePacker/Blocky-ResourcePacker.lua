@@ -4,6 +4,7 @@ project "Blocky-ResourcePacker"
 	staticruntime "on"
 	floatingpoint "fast"
 	debugdir "%{wks.location}"
+	editandcontinue "off"
 
 	targetdir ("%{wks.location}/bin/" .. outputdir .. "/%{prj.name}")
 	objdir ("%{wks.location}/bin-obj/" .. outputdir .. "/%{prj.name}")
@@ -25,6 +26,10 @@ project "Blocky-ResourcePacker"
 	defines {
 		"_CRT_SECURE_NO_WARNINGS",
 		"NOMINMAX"
+	}
+
+	flags {
+		"NoIncrementalLink"
 	}
 
 	filter "system:windows"
