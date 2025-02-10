@@ -163,7 +163,6 @@ struct buffer
     u64 Size;
 };
 
-#include "VulkanRenderer.h"
 #include "DX12Renderer.h"
 
 // Game
@@ -523,8 +522,7 @@ int main(int argc, char** argv)
     // TODO: Figure out how to do this
     g_WindowHandle = Window.WindowHandle;
 
-#if 1
-    game_renderer Dx12Renderer = CreateDX12GameRenderer(Window);
+    game_renderer GameRenderer = GameRendererCreate(Window);
 
     // Show window after initialization
     ShowWindow(Window.WindowHandle, SW_SHOW);
@@ -551,17 +549,17 @@ int main(int argc, char** argv)
         {
             g_DoResize = false;
 
-            DX12RendererResizeSwapChain(&Dx12Renderer, g_ClientWidth, g_ClientHeight);
+            DX12RendererResizeSwapChain(&GameRenderer, g_ClientWidth, g_ClientHeight);
         }
 
         if (!IsMinimized)
         {
-            GameUpdateAndRender(&Dx12Renderer, &Input, TimeStep, g_ClientWidth, g_ClientHeight);
+            GameUpdateAndRender(&GameRenderer, &Input, TimeStep, g_ClientWidth, g_ClientHeight);
         }
 
         // Render stuff
-        DX12RendererRender(&Dx12Renderer, g_ClientWidth, g_ClientHeight);
-        DX12RendererDumpInfoQueue(Dx12Renderer.DebugInfoQueue);
+        DX12RendererRender(&GameRenderer, g_ClientWidth, g_ClientHeight);
+        DX12RendererDumpInfoQueue(GameRenderer.DebugInfoQueue);
 
         // Timestep
         LARGE_INTEGER EndCounter;
@@ -572,91 +570,7 @@ int main(int argc, char** argv)
         LastCounter = EndCounter;
     }
 
-    DX12GameRendererDestroy(&Dx12Renderer);
-
-#else
-    vulkan_game_renderer VulkanRenderer = CreateVulkanGameRenderer(Window);
-
-    // First resize
-    {
-        RecreateSwapChain(&VulkanRenderer, Window.ClientAreaWidth, Window.ClientAreaHeight);
-
-        // Shows the window
-        // Note that there are few transparent frames until we actually render something
-        // Sort of nit-picking here
-        ShowWindow(Window.WindowHandle, SW_SHOW);
-    }
-
-    // Timestep
-    f32 TimeStep = 0.0f;
-
-    LARGE_INTEGER LastCounter;
-    QueryPerformanceCounter(&LastCounter);
-
-    // NOTE: This value represent how many increments of performance counter is happening
-    LARGE_INTEGER CounterFrequency;
-    QueryPerformanceFrequency(&CounterFrequency);
-
-    // Game loop
-    bool g_IsRunning = true;
-    bool IsMinimized = false;
-    while (g_IsRunning)
-    {
-        // Process events
-        MSG Message;
-        while (PeekMessage(&Message, nullptr, 0, 0, PM_REMOVE))
-        {
-            if (Message.message == WM_QUIT)
-            {
-                g_IsRunning = false;
-            }
-
-            TranslateMessage(&Message);
-            DispatchMessage(&Message);
-        }
-
-        IsMinimized = IsIconic(Window.WindowHandle);
-
-        if (g_DoResize)
-        {
-            g_DoResize = false;
-
-            Camera.RecalculateProjectionPerspective(g_ClientWidth, g_ClientHeight);
-
-            RecreateSwapChain(&VulkanRenderer, g_ClientWidth, g_ClientHeight);
-        }
-
-        // Logic
-        {
-            Camera.View = bkm::Translate(m4(1.0f), Translation)
-                * bkm::ToM4(qtn(Rotation))
-                * bkm::Scale(m4(1.0f), Scale);
-
-            Camera.View = bkm::Inverse(Camera.View);
-        }
-
-        // Do not render when minimized
-        if (!IsMinimized)
-        {
-            BeginRender(&VulkanRenderer, Camera.GetViewProjection());
-
-            GameRendererSubmitCube(&VulkanRenderer, v3(0), v3(0), v3(1.0f), v4(1.0f, 0.0f, 0.0f, 1.0f));
-            GameRendererSubmitCube(&VulkanRenderer, v3(1, 0, 0), v3(0), v3(1.0f), v4(1.0f, 0.0f, 0.0f, 1.0f));
-            GameRendererSubmitCube(&VulkanRenderer, v3(2, 0, 0), v3(0), v3(1.0f), v4(1.0f, 1.0f, 0.0f, 1.0f));
-            GameRendererSubmitCube(&VulkanRenderer, v3(3, 0, 0), v3(0), v3(1.0f), v4(1.0f, 0.0f, 1.0f, 1.0f));
-
-            EndRender(&VulkanRenderer);
-        }
-
-        // Timestep
-        LARGE_INTEGER EndCounter;
-        QueryPerformanceCounter(&EndCounter);
-
-        i64 CounterElapsed = EndCounter.QuadPart - LastCounter.QuadPart;
-        TimeStep = (CounterElapsed / static_cast<f32>(CounterFrequency.QuadPart));
-        LastCounter = EndCounter;
-    }
-#endif
+    GameRendererDestroy(&GameRenderer);
 
     return 0;
 }

@@ -20,6 +20,7 @@
 #include <d3dx12.h>
 
 #define DxAssert(x) Assert(SUCCEEDED(x), #x) 
+#define FIF 2
 
 #if BK_DEBUG
 #define DX12_ENABLE_DEBUG_LAYER 1 
@@ -33,6 +34,58 @@
 
 #pragma comment(lib, "dxguid.lib")
 #endif
+
+struct quad_vertex
+{
+    v3 Position;
+    v4 Color;
+    v2 TexCoord;
+};
+
+static constexpr inline u32 c_MaxQuadsPerBatch = 1 << 8;
+static constexpr inline u32 c_MaxQuadVertices = c_MaxQuadsPerBatch * 4;
+static constexpr inline u32 c_MaxQuadIndices = c_MaxQuadsPerBatch * 6;
+static constexpr inline u32 c_MaxTexturesPerDrawCall = 32; // TODO: Get this from the driver
+
+// Each face has to have a normal vector, so unfortunately we cannot encode cube as 8 vertices
+static constexpr inline v4 c_CubeVertexPositions[24] =
+{
+    // Front face (+Z)
+    { -0.5f, -0.5f,  0.5f, 1.0f },
+    {  0.5f, -0.5f,  0.5f, 1.0f },
+    {  0.5f,  0.5f,  0.5f, 1.0f },
+    { -0.5f,  0.5f,  0.5f, 1.0f },
+
+    // Back face (-Z)
+    {  0.5f, -0.5f, -0.5f, 1.0f },
+    { -0.5f, -0.5f, -0.5f, 1.0f },
+    { -0.5f,  0.5f, -0.5f, 1.0f },
+    {  0.5f,  0.5f, -0.5f, 1.0f },
+
+    // Left face (-X)
+    { -0.5f, -0.5f, -0.5f, 1.0f },
+    { -0.5f, -0.5f,  0.5f, 1.0f },
+    { -0.5f,  0.5f,  0.5f, 1.0f },
+    { -0.5f,  0.5f, -0.5f, 1.0f },
+
+    // Right face (+X)
+    {  0.5f, -0.5f,  0.5f, 1.0f },
+    {  0.5f, -0.5f, -0.5f, 1.0f },
+    {  0.5f,  0.5f, -0.5f, 1.0f },
+    {  0.5f,  0.5f,  0.5f, 1.0f },
+
+    // Top face (+Y)
+    { -0.5f,  0.5f,  0.5f, 1.0f },
+    {  0.5f,  0.5f,  0.5f, 1.0f },
+    {  0.5f,  0.5f, -0.5f, 1.0f },
+    { -0.5f,  0.5f, -0.5f, 1.0f },
+
+    // Bottom face (-Y)
+    { -0.5f, -0.5f, -0.5f, 1.0f },
+    {  0.5f, -0.5f, -0.5f, 1.0f },
+    {  0.5f, -0.5f,  0.5f, 1.0f },
+    { -0.5f, -0.5f,  0.5f, 1.0f }
+};
 
 static constexpr inline v4 c_QuadVertexPositions[4]
 {
@@ -709,7 +762,7 @@ static void DX12RendererInitializePipeline(game_renderer* Renderer)
     }
 }
 
-static game_renderer CreateDX12GameRenderer(game_window Window)
+static game_renderer GameRendererCreate(game_window Window)
 {
     game_renderer Renderer = {};
 
@@ -719,7 +772,7 @@ static game_renderer CreateDX12GameRenderer(game_window Window)
     return Renderer;
 }
 
-static void DX12GameRendererDestroy(game_renderer* Renderer)
+static void GameRendererDestroy(game_renderer* Renderer)
 {
     // Wait for GPU to finish
     DX12RendererFlush(Renderer);
