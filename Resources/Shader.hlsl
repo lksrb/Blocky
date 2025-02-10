@@ -28,12 +28,13 @@ pixel_shader_input VSMain(vertex_shader_input In)
     return Out;
 }
 
-Texture2D<float4> g_Texture : register(t0);
+// Upper bound
+Texture2D<float4> g_Texture[32] : register(t0);
 SamplerState g_Sampler : register(s0);
 
 float4 PSMain(pixel_shader_input In) : SV_TARGET
 {
-    float4 Result = In.Color * g_Texture.Sample(g_Sampler, In.TexCoord);
+    float4 Result = In.Color * g_Texture[0].Sample(g_Sampler, In.TexCoord);
     
     if (Result.a == 0.0f)
         discard;

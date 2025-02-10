@@ -19,11 +19,11 @@
 // D3D12 extension
 #include <d3dx12.h>
 
-#define DxAssert(x) Assert(SUCCEEDED(x), #x) 
+#define DxAssert(x) Assert(SUCCEEDED(x), #x)
 #define FIF 2
 
 #if BK_DEBUG
-#define DX12_ENABLE_DEBUG_LAYER 1 
+#define DX12_ENABLE_DEBUG_LAYER 1
 #else
 #define DX12_ENABLE_DEBUG_LAYER 0
 #endif
@@ -172,8 +172,10 @@ struct game_renderer
     D3D12_VIEWPORT Viewport;
     D3D12_RECT ScissorRect;
 
+    // Textures
     ID3D12DescriptorHeap* SRVDescriptorHeap;
     dx12_texture WhiteTexture;
+    u32 CurrentTextureIndex = 0;
 
     // Quad
     ID3D12PipelineState* QuadPipelineState;
@@ -184,7 +186,7 @@ struct game_renderer
     u32 QuadIndexCount = 0;
 };
 
-static void DX12RendererDumpInfoQueue(ID3D12InfoQueue* InfoQueue)
+static void GameRendererDumpInfoQueue(ID3D12InfoQueue* InfoQueue)
 {
     if (!InfoQueue)
         return;
@@ -247,7 +249,7 @@ static void DX12RendererDumpInfoQueue(ID3D12InfoQueue* InfoQueue)
     InfoQueue->ClearStoredMessages();
 }
 
-static u64 DX12RendererSignal(ID3D12CommandQueue* CommandQueue, ID3D12Fence* Fence, u64* FenceValue)
+static u64 GameRendererSignal(ID3D12CommandQueue* CommandQueue, ID3D12Fence* Fence, u64* FenceValue)
 {
     u64& RefFenceValue = *FenceValue;
     u64 FenceValueForSignal = ++RefFenceValue;
@@ -255,7 +257,7 @@ static u64 DX12RendererSignal(ID3D12CommandQueue* CommandQueue, ID3D12Fence* Fen
     return FenceValueForSignal;
 }
 
-static void DX12RendererWaitForFenceValue(ID3D12Fence* Fence, u64 FenceValue, HANDLE FenceEvent, u32 Duration = UINT32_MAX)
+static void GameRendererWaitForFenceValue(ID3D12Fence* Fence, u64 FenceValue, HANDLE FenceEvent, u32 Duration = UINT32_MAX)
 {
     if (Fence->GetCompletedValue() < FenceValue)
     {
@@ -264,13 +266,13 @@ static void DX12RendererWaitForFenceValue(ID3D12Fence* Fence, u64 FenceValue, HA
     }
 }
 
-static void DX12RendererFlush(game_renderer* Renderer)
+static void GameRendererFlush(game_renderer* Renderer)
 {
-    u64 FenceValueForSignal = DX12RendererSignal(Renderer->DirectCommandQueue, Renderer->Fence, &Renderer->FenceValue);
-    DX12RendererWaitForFenceValue(Renderer->Fence, FenceValueForSignal, Renderer->DirectFenceEvent);
+    u64 FenceValueForSignal = GameRendererSignal(Renderer->DirectCommandQueue, Renderer->Fence, &Renderer->FenceValue);
+    GameRendererWaitForFenceValue(Renderer->Fence, FenceValueForSignal, Renderer->DirectFenceEvent);
 }
 
-static void DX12RendererInitializeContext(game_renderer* Renderer, game_window Window)
+static void GameRendererInit(game_renderer* Renderer, game_window Window)
 {
     // Enable debug layer
     if (DX12_ENABLE_DEBUG_LAYER)
@@ -418,7 +420,7 @@ static void DX12RendererInitializeContext(game_renderer* Renderer, game_window W
         SwapChain1->QueryInterface(IID_PPV_ARGS(&Renderer->SwapChain));
         SwapChain1->Release();
 
-        //Renderer->SwapChain->SetMaximumFrameLatency(FIF);
+        Renderer->SwapChain->SetMaximumFrameLatency(FIF);
 
         Renderer->CurrentBackBufferIndex = Renderer->SwapChain->GetCurrentBackBufferIndex();
     }
@@ -460,6 +462,8 @@ static void DX12RendererInitializeContext(game_renderer* Renderer, game_window W
 
         D3D12_CPU_DESCRIPTOR_HANDLE DsvHandle = Renderer->DSVDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
         u32 DSVDescriptorSize = Renderer->Device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
+
+        //dx12_texture DepthBuffer = DX12TextureCreate(Renderer->Device, Renderer->DirectCommandList, {}, Window.ClientAreaWidth, Window.ClientAreaHeight, DXGI_FORMAT_D32_FLOAT);
 
         // Create depth buffers
         for (u32 i = 0; i < FIF; i++)
@@ -508,7 +512,7 @@ static void DX12RendererInitializeContext(game_renderer* Renderer, game_window W
     }
 }
 
-static void DX12RendererInitializePipeline(game_renderer* Renderer)
+static void GameRendererInitPipeline(game_renderer* Renderer)
 {
     auto Device = Renderer->Device;
 
@@ -532,7 +536,7 @@ static void DX12RendererInitializePipeline(game_renderer* Renderer)
 
         D3D12_DESCRIPTOR_RANGE Ranges[1] = {};
         Ranges[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-        Ranges[0].NumDescriptors = 1;
+        Ranges[0].NumDescriptors = c_MaxTexturesPerDrawCall; // Find upper driver limit
         Ranges[0].BaseShaderRegister = 0;
         Ranges[0].RegisterSpace = 0;
         Ranges[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
@@ -669,12 +673,12 @@ static void DX12RendererInitializePipeline(game_renderer* Renderer)
             // wait for gpu
             {
                 auto commandAllocator = Renderer->DirectCommandAllocators[0];
-                auto commandList = Renderer->DirectCommandList;
+                auto CommandList = Renderer->DirectCommandList;
                 auto commandQueue = Renderer->DirectCommandQueue;
 
                 // Record commands
                 commandAllocator->Reset();
-                commandList->Reset(commandAllocator, nullptr);
+                CommandList->Reset(commandAllocator, nullptr);
 
                 // Your rendering commands go here...
 
@@ -701,15 +705,20 @@ static void DX12RendererInitializePipeline(game_renderer* Renderer)
                     memcpy(MappedPtr, QuadIndices, c_MaxQuadIndices * sizeof(u32));
                     Intermediate.Resource->Unmap(0, nullptr);
 
-                    commandList->CopyBufferRegion(Renderer->QuadIndexBuffer.Resource, 0, Intermediate.Resource, 0, c_MaxQuadIndices * sizeof(u32));
+                    CommandList->CopyBufferRegion(Renderer->QuadIndexBuffer.Resource, 0, Intermediate.Resource, 0, c_MaxQuadIndices * sizeof(u32));
                 }
 
-                Renderer->WhiteTexture = DX12TextureCreate(Device, commandList, "Resources/Textures/LevelBackground.png");
+                // Create white texture
+                {
+                    u32 WhiteColor = 0xffffffff;
+                    buffer Buffer = { &WhiteColor, sizeof(u32) };
+                    Renderer->WhiteTexture = DX12TextureCreate(Device, CommandList, Buffer, 1, 1, DXGI_FORMAT_R8G8B8A8_UNORM);
+                }
 
-                commandList->Close(); // Finish recording
+                CommandList->Close(); // Finish recording
 
                 // Execute command list
-                commandQueue->ExecuteCommandLists(1, (ID3D12CommandList* const*)&commandList);
+                commandQueue->ExecuteCommandLists(1, (ID3D12CommandList* const*)&CommandList);
 
                 // Wait for GPU to finish execution
                 {
@@ -735,13 +744,13 @@ static void DX12RendererInitializePipeline(game_renderer* Renderer)
                 // TODO: Wait for copy command to finish
                 DX12BufferDestroy(&Intermediate);
 
-                DX12RendererDumpInfoQueue(Renderer->DebugInfoQueue);
+                GameRendererDumpInfoQueue(Renderer->DebugInfoQueue);
             }
 
             // Creating the shader resource view descriptor
             {
                 D3D12_DESCRIPTOR_HEAP_DESC Desc = {};
-                Desc.NumDescriptors = 2;
+                Desc.NumDescriptors = c_MaxTexturesPerDrawCall;
                 Desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
                 Desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE; // Must be visible to shaders
                 Desc.NodeMask = 0;
@@ -766,8 +775,8 @@ static game_renderer GameRendererCreate(game_window Window)
 {
     game_renderer Renderer = {};
 
-    DX12RendererInitializeContext(&Renderer, Window);
-    DX12RendererInitializePipeline(&Renderer);
+    GameRendererInit(&Renderer, Window);
+    GameRendererInitPipeline(&Renderer);
 
     return Renderer;
 }
@@ -775,7 +784,7 @@ static game_renderer GameRendererCreate(game_window Window)
 static void GameRendererDestroy(game_renderer* Renderer)
 {
     // Wait for GPU to finish
-    DX12RendererFlush(Renderer);
+    GameRendererFlush(Renderer);
 
     for (u32 i = 0; i < FIF; i++)
     {
@@ -789,11 +798,13 @@ static void GameRendererDestroy(game_renderer* Renderer)
         DX12VertexBufferDestroy(&Renderer->QuadVertexBuffer[i]);
     }
 
+    Renderer->QuadPipelineState->Release();
     DX12BufferDestroy(&Renderer->QuadIndexBuffer);
     DX12TextureDestroy(&Renderer->WhiteTexture);
     Renderer->SwapChain->Release();
     Renderer->DSVDescriptorHeap->Release();
     Renderer->RTVDescriptorHeap->Release();
+    Renderer->SRVDescriptorHeap->Release();
     Renderer->Fence->Release();
     Renderer->DirectCommandList->Release();
     Renderer->CopyCommandList->Release();
@@ -806,14 +817,17 @@ static void GameRendererDestroy(game_renderer* Renderer)
 #if DX12_ENABLE_DEBUG_LAYER
     // Report all memory leaks
     Renderer->DxgiDebugInterface->ReportLiveObjects(DXGI_DEBUG_ALL, DXGI_DEBUG_RLO_FLAGS(DXGI_DEBUG_RLO_ALL | DXGI_DEBUG_RLO_IGNORE_INTERNAL));
-    DX12RendererDumpInfoQueue(Renderer->DebugInfoQueue);
+    GameRendererDumpInfoQueue(Renderer->DebugInfoQueue);
 #endif
+
+    // Zero everything to make sure nothing can reference this
+    memset(Renderer, 0, sizeof(game_renderer));
 }
 
-static void DX12RendererResizeSwapChain(game_renderer* Renderer, u32 RequestWidth, u32 RequestHeight)
+static void GameRendererResizeSwapChain(game_renderer* Renderer, u32 RequestWidth, u32 RequestHeight)
 {
     // Flush the GPU queue to make sure the swap chain's back buffers are not being referenced by an in-flight command list.
-    DX12RendererFlush(Renderer);
+    GameRendererFlush(Renderer);
 
     // Reset fence values and release back buffers
     for (u32 i = 0; i < FIF; i++)
@@ -942,7 +956,7 @@ static void GameRendererSubmitCube(game_renderer* Renderer, v3 Translation, v3 R
     Renderer->QuadIndexCount += 36;
 }
 
-static void DX12RendererRender(game_renderer* Renderer, u32 Width, u32 Height)
+static void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
 {
     // Get current frame stuff
     auto CommandList = Renderer->DirectCommandList;
@@ -965,13 +979,8 @@ static void DX12RendererRender(game_renderer* Renderer, u32 Width, u32 Height)
     v4 ClearColor = { 0.2f, 0.3f, 0.8f, 1.0f };
     CommandList->ClearDepthStencilView(DSV, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
-    // PrePass
-    {
-        // Copy vertex data to gpu buffer
-        DX12VertexBufferSendData(&QuadVertexBuffer, Renderer->DirectCommandList, Renderer->QuadVertexDataBase, sizeof(quad_vertex) * Renderer->QuadIndexCount);
-    }
-
-    // Render
+    // Copy vertex data to gpu buffer
+    DX12VertexBufferSendData(&QuadVertexBuffer, Renderer->DirectCommandList, Renderer->QuadVertexDataBase, sizeof(quad_vertex) * Renderer->QuadIndexCount);
 
     // Set and clear render target view
     CommandList->ClearRenderTargetView(RTV, &ClearColor.x, 0, nullptr);
@@ -1041,8 +1050,8 @@ static void DX12RendererRender(game_renderer* Renderer, u32 Width, u32 Height)
     Renderer->SwapChain->Present(Renderer->VSync, 0);
 
     // Wait for GPU to finish presenting
-    FrameFenceValue = DX12RendererSignal(Renderer->DirectCommandQueue, Renderer->Fence, &Renderer->FenceValue);
-    DX12RendererWaitForFenceValue(Renderer->Fence, FrameFenceValue, Renderer->DirectFenceEvent);
+    FrameFenceValue = GameRendererSignal(Renderer->DirectCommandQueue, Renderer->Fence, &Renderer->FenceValue);
+    GameRendererWaitForFenceValue(Renderer->Fence, FrameFenceValue, Renderer->DirectFenceEvent);
 
     // Reset indices
     Renderer->QuadIndexCount = 0;

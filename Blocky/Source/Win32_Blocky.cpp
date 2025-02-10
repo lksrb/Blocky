@@ -549,7 +549,7 @@ int main(int argc, char** argv)
         {
             g_DoResize = false;
 
-            DX12RendererResizeSwapChain(&GameRenderer, g_ClientWidth, g_ClientHeight);
+            GameRendererResizeSwapChain(&GameRenderer, g_ClientWidth, g_ClientHeight);
         }
 
         if (!IsMinimized)
@@ -558,8 +558,8 @@ int main(int argc, char** argv)
         }
 
         // Render stuff
-        DX12RendererRender(&GameRenderer, g_ClientWidth, g_ClientHeight);
-        DX12RendererDumpInfoQueue(GameRenderer.DebugInfoQueue);
+        GameRendererRender(&GameRenderer, g_ClientWidth, g_ClientHeight);
+        GameRendererDumpInfoQueue(GameRenderer.DebugInfoQueue);
 
         // Timestep
         LARGE_INTEGER EndCounter;
