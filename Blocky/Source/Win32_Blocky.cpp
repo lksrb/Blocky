@@ -522,7 +522,11 @@ int main(int argc, char** argv)
     // TODO: Figure out how to do this
     g_WindowHandle = Window.WindowHandle;
 
+    // Initialize renderer
     game_renderer GameRenderer = GameRendererCreate(Window);
+
+    // Initialize game
+    game Game = GameCreate(&GameRenderer);
 
     // Show window after initialization
     ShowWindow(Window.WindowHandle, SW_SHOW);
@@ -554,7 +558,7 @@ int main(int argc, char** argv)
 
         if (!IsMinimized)
         {
-            GameUpdateAndRender(&GameRenderer, &Input, TimeStep, g_ClientWidth, g_ClientHeight);
+            GameUpdateAndRender(&Game, &GameRenderer, &Input, TimeStep, g_ClientWidth, g_ClientHeight);
         }
 
         // Render stuff

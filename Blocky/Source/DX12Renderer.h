@@ -40,6 +40,7 @@ struct quad_vertex
     v3 Position;
     v4 Color;
     v2 TexCoord;
+    u32 TexIndex;
 };
 
 static constexpr inline u32 c_MaxQuadsPerBatch = 1 << 8;
@@ -174,17 +175,20 @@ struct game_renderer
 
     // Textures
     ID3D12DescriptorHeap* SRVDescriptorHeap;
-    dx12_texture WhiteTexture;
+    texture WhiteTexture;
     u32 CurrentTextureIndex = 0;
+    texture TextureStack[c_MaxTexturesPerDrawCall];
 
     // Quad
     ID3D12PipelineState* QuadPipelineState;
     dx12_vertex_buffer QuadVertexBuffer[FIF];
     dx12_buffer QuadIndexBuffer;
-    quad_vertex QuadVertexDataBase[c_MaxQuadVertices];
-    quad_vertex* QuadVertexDataPtr = QuadVertexDataBase;
+    quad_vertex* QuadVertexDataBase;
+    quad_vertex* QuadVertexDataPtr;
     u32 QuadIndexCount = 0;
 };
+
+#include "DX12Texture-Impl.cpp"
 
 static void GameRendererDumpInfoQueue(ID3D12InfoQueue* InfoQueue)
 {
@@ -270,6 +274,51 @@ static void GameRendererFlush(game_renderer* Renderer)
 {
     u64 FenceValueForSignal = GameRendererSignal(Renderer->DirectCommandQueue, Renderer->Fence, &Renderer->FenceValue);
     GameRendererWaitForFenceValue(Renderer->Fence, FenceValueForSignal, Renderer->DirectFenceEvent);
+}
+
+// Blocking API for submitting stuff to GPU
+// TODO: Create some form of queue and create it all at once
+template<typename F>
+static void GameRendererSubmitToQueueImmidiate(game_renderer* Renderer, F&& Func)
+{
+    auto CommandAllocator = Renderer->DirectCommandAllocators[Renderer->CurrentBackBufferIndex];
+    auto CommandList = Renderer->DirectCommandList;
+    auto CommandQueue = Renderer->DirectCommandQueue;
+
+    // Reset
+    CommandAllocator->Reset();
+    CommandList->Reset(CommandAllocator, nullptr);
+
+    // Record stuff
+    Func(CommandList);
+
+    // Finish recording
+    CommandList->Close();
+
+    // Execute command list
+    CommandQueue->ExecuteCommandLists(1, (ID3D12CommandList* const*)&CommandList);
+
+    // Wait for completion
+    {
+        UINT64 FenceValue = 0;
+        HANDLE FenceEvent = CreateEvent(nullptr, false, false, nullptr);
+
+        ID3D12Fence* Fence;
+
+        // Create a simple fence for synchronization
+        Renderer->Device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&Fence));
+
+        CommandQueue->Signal(Fence, ++FenceValue);
+
+        // Step 3: Wait until the GPU reaches the fence
+        if (SUCCEEDED(Fence->SetEventOnCompletion(FenceValue, FenceEvent)))
+        {
+            WaitForSingleObject(FenceEvent, INFINITE);
+        }
+        CloseHandle(FenceEvent);
+        
+        Fence->Release();
+    }
 }
 
 static void GameRendererInit(game_renderer* Renderer, game_window Window)
@@ -601,7 +650,8 @@ static void GameRendererInitPipeline(game_renderer* Renderer)
             {
                 { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
                 { "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-                { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }
+                { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+                { "TEXINDEX", 0, DXGI_FORMAT_R32_UINT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
             };
 
             D3D12_GRAPHICS_PIPELINE_STATE_DESC PipelineDesc = {};
@@ -657,6 +707,10 @@ static void GameRendererInitPipeline(game_renderer* Renderer)
 
         // Quad
         {
+            // TODO: Arena allocator
+            Renderer->QuadVertexDataBase = new quad_vertex[c_MaxQuadVertices];
+            Renderer->QuadVertexDataPtr = Renderer->QuadVertexDataBase;
+
             for (u32 i = 0; i < FIF; i++)
             {
                 Renderer->QuadVertexBuffer[i] = DX12VertexBufferCreate(Device, sizeof(quad_vertex) * c_MaxQuadVertices);
@@ -667,24 +721,11 @@ static void GameRendererInitPipeline(game_renderer* Renderer)
 
         // White texture
         {
-            //Renderer->CopyCommandList->Close();
-            //Renderer->CopyCommandQueue->ExecuteCommandLists(1, (ID3D12CommandList* const*)&Renderer->CopyCommandList);
-
             // wait for gpu
             {
-                auto commandAllocator = Renderer->DirectCommandAllocators[0];
-                auto CommandList = Renderer->DirectCommandList;
-                auto commandQueue = Renderer->DirectCommandQueue;
-
-                // Record commands
-                commandAllocator->Reset();
-                CommandList->Reset(commandAllocator, nullptr);
-
-                // Your rendering commands go here...
-
                 // Copy indices
-                dx12_buffer Intermediate = DX12BufferCreate(Device, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_HEAP_TYPE_UPLOAD, c_MaxQuadIndices * sizeof(u32));
                 {
+                    dx12_buffer Intermediate = DX12BufferCreate(Device, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_HEAP_TYPE_UPLOAD, c_MaxQuadIndices * sizeof(u32));
                     u32 QuadIndices[c_MaxQuadIndices];
                     u32 Offset = 0;
                     for (u32 i = 0; i < c_MaxQuadIndices; i += 6)
@@ -705,44 +746,54 @@ static void GameRendererInitPipeline(game_renderer* Renderer)
                     memcpy(MappedPtr, QuadIndices, c_MaxQuadIndices * sizeof(u32));
                     Intermediate.Resource->Unmap(0, nullptr);
 
-                    CommandList->CopyBufferRegion(Renderer->QuadIndexBuffer.Resource, 0, Intermediate.Resource, 0, c_MaxQuadIndices * sizeof(u32));
+                    GameRendererSubmitToQueueImmidiate(Renderer, [Renderer, &Intermediate](ID3D12GraphicsCommandList2* CommandList)
+                    {
+                        CommandList->CopyBufferRegion(Renderer->QuadIndexBuffer.Resource, 0, Intermediate.Resource, 0, c_MaxQuadIndices * sizeof(u32));
+                    });
+
+                    DX12BufferDestroy(&Intermediate);
                 }
+
+                auto CommandAllocator = Renderer->DirectCommandAllocators[0];
+                auto CommandList = Renderer->DirectCommandList;
+                auto CommandQueue = Renderer->DirectCommandQueue;
+
+                // Record commands
+                CommandAllocator->Reset();
+                CommandList->Reset(CommandAllocator, nullptr);
 
                 // Create white texture
                 {
                     u32 WhiteColor = 0xffffffff;
                     buffer Buffer = { &WhiteColor, sizeof(u32) };
-                    Renderer->WhiteTexture = DX12TextureCreate(Device, CommandList, Buffer, 1, 1, DXGI_FORMAT_R8G8B8A8_UNORM);
+                    Renderer->WhiteTexture = DX12TextureCreate(Renderer->Device, Renderer->DirectCommandList, Buffer, 1, 1, DXGI_FORMAT_R8G8B8A8_UNORM);
                 }
 
                 CommandList->Close(); // Finish recording
 
                 // Execute command list
-                commandQueue->ExecuteCommandLists(1, (ID3D12CommandList* const*)&CommandList);
+                CommandQueue->ExecuteCommandLists(1, (ID3D12CommandList* const*)&CommandList);
 
                 // Wait for GPU to finish execution
                 {
-                    UINT64 fenceValue = 0;
-                    HANDLE fenceEvent = CreateEvent(nullptr, false, false, nullptr);
+                    UINT64 FenceValue = 0;
+                    HANDLE FenceEvent = CreateEvent(nullptr, false, false, nullptr);
 
-                    ID3D12Fence* fence;
+                    ID3D12Fence* Fence;
 
                     // Create a simple fence for synchronization
-                    Device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence));
+                    Device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&Fence));
 
-                    commandQueue->Signal(fence, ++fenceValue);
+                    CommandQueue->Signal(Fence, ++FenceValue);
 
                     // Step 3: Wait until the GPU reaches the fence
-                    if (SUCCEEDED(fence->SetEventOnCompletion(fenceValue, fenceEvent)))
+                    if (SUCCEEDED(Fence->SetEventOnCompletion(FenceValue, FenceEvent)))
                     {
-                        WaitForSingleObject(fenceEvent, INFINITE);
+                        WaitForSingleObject(FenceEvent, INFINITE);
                     }
 
-                    fence->Release();
+                    Fence->Release();
                 }
-
-                // TODO: Wait for copy command to finish
-                DX12BufferDestroy(&Intermediate);
 
                 GameRendererDumpInfoQueue(Renderer->DebugInfoQueue);
             }
@@ -757,16 +808,18 @@ static void GameRendererInitPipeline(game_renderer* Renderer)
                 DxAssert(Renderer->Device->CreateDescriptorHeap(&Desc, IID_PPV_ARGS(&Renderer->SRVDescriptorHeap)));
             }
 
-            // Describe and create a SRV for the texture.
-            D3D12_SHADER_RESOURCE_VIEW_DESC SrvDesc = {};
-            SrvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-            SrvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-            SrvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-            SrvDesc.Texture2D.MipLevels = 1;
-            SrvDesc.Texture2D.MostDetailedMip = 0;
-            SrvDesc.Texture2D.PlaneSlice = 0;
-            SrvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
-            Device->CreateShaderResourceView(Renderer->WhiteTexture.Resource, &SrvDesc, Renderer->SRVDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
+            // Describe and create a SRV for the white texture.
+            {
+                D3D12_SHADER_RESOURCE_VIEW_DESC Desc = {};
+                Desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+                Desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+                Desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+                Desc.Texture2D.MipLevels = 1;
+                Desc.Texture2D.MostDetailedMip = 0;
+                Desc.Texture2D.PlaneSlice = 0;
+                Desc.Texture2D.ResourceMinLODClamp = 0.0f;
+                Device->CreateShaderResourceView(Renderer->WhiteTexture.Resource, &Desc, Renderer->SRVDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
+            }
         }
     }
 }
@@ -932,6 +985,47 @@ static void GameRendererSubmitQuad(game_renderer* Renderer, v3 Translation, v3 R
     Renderer->QuadIndexCount += 6;
 }
 
+static void GameRendererSubmitCube(game_renderer* Renderer, v3 Translation, v3 Rotation, v3 Scale, texture Texture, v4 Color)
+{
+    // TODO: ID system, pointers can be unreliable
+    u32 TextureIndex = 0;
+    for (u32 i = 1; i < c_MaxTexturesPerDrawCall; i++)
+    {
+        if (Renderer->TextureStack[i].Resource != Texture.Resource)
+        {
+            TextureIndex = i;
+            break;
+        }
+    }
+
+    if (TextureIndex != 0)
+    {
+        Assert(Renderer->CurrentTextureIndex < c_MaxTexturesPerDrawCall, "Renderer->TextureStackIndex < c_MaxTexturesPerDrawCall");
+        Renderer->TextureStack[Renderer->CurrentTextureIndex++] = Texture;
+    }
+
+    m4 Transform = bkm::Translate(m4(1.0f), Translation)
+        * bkm::ToM4(qtn(Rotation))
+        * bkm::Scale(m4(1.0f), Scale);
+
+    v2 Coords[4];
+    Coords[0] = { 0.0f, 0.0f };
+    Coords[1] = { 1.0f, 0.0f };
+    Coords[2] = { 1.0f, 1.0f };
+    Coords[3] = { 0.0f, 1.0f };
+
+    for (u32 i = 0; i < CountOf(c_CubeVertexPositions); i++)
+    {
+        Renderer->QuadVertexDataPtr->Position = v3(Transform * c_CubeVertexPositions[i]);
+        Renderer->QuadVertexDataPtr->Color = Color;
+        Renderer->QuadVertexDataPtr->TexCoord = Coords[i % 4];
+        Renderer->QuadVertexDataPtr->TexIndex = TextureIndex;
+        Renderer->QuadVertexDataPtr++;
+    }
+
+    Renderer->QuadIndexCount += 36;
+}
+
 static void GameRendererSubmitCube(game_renderer* Renderer, v3 Translation, v3 Rotation, v3 Scale, v4 Color)
 {
     m4 Transform = bkm::Translate(m4(1.0f), Translation)
@@ -944,12 +1038,12 @@ static void GameRendererSubmitCube(game_renderer* Renderer, v3 Translation, v3 R
     Coords[2] = { 1.0f, 1.0f };
     Coords[3] = { 0.0f, 1.0f };
 
-
     for (u32 i = 0; i < CountOf(c_CubeVertexPositions); i++)
     {
         Renderer->QuadVertexDataPtr->Position = v3(Transform * c_CubeVertexPositions[i]);
         Renderer->QuadVertexDataPtr->Color = Color;
         Renderer->QuadVertexDataPtr->TexCoord = Coords[i % 4];
+        Renderer->QuadVertexDataPtr->TexIndex = 0;
         Renderer->QuadVertexDataPtr++;
     }
 
@@ -966,6 +1060,11 @@ static void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
     auto RTV = Renderer->RTVHandles[Renderer->CurrentBackBufferIndex];
     auto DSV = Renderer->DSVHandles[Renderer->CurrentBackBufferIndex];
     auto& FrameFenceValue = Renderer->FrameFenceValues[Renderer->CurrentBackBufferIndex];
+
+    // Create
+    {
+
+    }
 
     // Reset state
     DirectCommandAllocator->Reset();
@@ -1008,7 +1107,6 @@ static void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
     CommandList->SetDescriptorHeaps(1, (ID3D12DescriptorHeap* const*)&Renderer->SRVDescriptorHeap);
     CommandList->SetGraphicsRoot32BitConstants(0, 16, &Renderer->RootSignatureBuffer.ViewProjection, 0);
     CommandList->SetGraphicsRootDescriptorTable(1, Renderer->SRVDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
-
 
     // Quads
     if (Renderer->QuadIndexCount > 0)

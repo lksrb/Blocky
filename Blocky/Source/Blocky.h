@@ -32,9 +32,23 @@ struct camera
     m4 GetViewProjection() const { return Projection * View; }
 };
 
-static void GameUpdateAndRender(game_renderer* Renderer, const game_input* Input, f32 TimeStep, u32 ClientAreaWidth, u32 ClientAreaHeight)
+struct game
 {
     camera Camera;
+    texture TestTexture;
+};
+
+static game GameCreate(game_renderer* Renderer)
+{
+    game Game = {};
+
+    // Game.TestTexture = DX12TextureCreate(Renderer->Device, Renderer->DirectCommandList, "Resources/Textures/LevelBackground.png");
+
+    return Game;
+}
+
+static void GameUpdateAndRender(game* Game, game_renderer* Renderer, const game_input* Input, f32 TimeStep, u32 ClientAreaWidth, u32 ClientAreaHeight)
+{
     {
         static v3 Translation{ 0.0f, 1.0f, 3.0f };
         static v3 Rotation{ 0.0f };
@@ -112,15 +126,16 @@ static void GameUpdateAndRender(game_renderer* Renderer, const game_input* Input
             }
         }
 
-        Camera.View = bkm::Translate(m4(1.0f), Translation)
+        // Update camera
+        Game->Camera.View = bkm::Translate(m4(1.0f), Translation)
             * bkm::ToM4(qtn(Rotation));
 
-        Camera.View = bkm::Inverse(Camera.View);
+        Game->Camera.View = bkm::Inverse(Game->Camera.View);
 
-        Camera.RecalculateProjectionPerspective(ClientAreaWidth, ClientAreaHeight);
+        Game->Camera.RecalculateProjectionPerspective(ClientAreaWidth, ClientAreaHeight);
     }
 
-    GameRendererSetViewProjection(Renderer, Camera.GetViewProjection());
+    GameRendererSetViewProjection(Renderer, Game->Camera.GetViewProjection());
 
     static f32 Y = 0.0f;
     static f32 Time = 0.0f;
@@ -129,6 +144,8 @@ static void GameUpdateAndRender(game_renderer* Renderer, const game_input* Input
     Y = bkm::Sin(Time);
 
     GameRendererSubmitCube(Renderer, v3(0), v3(0), v3(1.0f), v4(0.0f, 1.0f, 0.0f, 1.0f));
+    //GameRendererSubmitCube(Renderer, v3(1, Y, 0), v3(0), v3(1.0f), v4(1.0f, 0.0f, 0.0f, 1.0f));
+
     GameRendererSubmitCube(Renderer, v3(1, Y, 0), v3(0), v3(1.0f), v4(1.0f, 0.0f, 0.0f, 1.0f));
     GameRendererSubmitCube(Renderer, v3(2, 0, 0), v3(0), v3(1.0f), v4(1.0f, 1.0f, 0.0f, 1.0f));
     GameRendererSubmitCube(Renderer, v3(3, 0, 0), v3(0), v3(1.0f), v4(1.0f, 1.0f, 1.0f, 1.0f));
