@@ -142,8 +142,9 @@ struct game_window
 struct game_input
 {
     bool W, S, A, D;
-
     bool MouseLeft, MouseMiddle, MouseRight;
+
+    bool MouseLeftPressed;
 
     bool IsCursorLocked;
     bool IsCursorVisible = true;
@@ -164,9 +165,10 @@ struct buffer
 };
 
 #include "DX12Renderer.h"
-
-// Game
 #include "Blocky.h"
+
+#include "DX12Renderer.cpp"
+#include "Blocky.cpp"
 
 static u32 g_ClientWidth = 0;
 static u32 g_ClientHeight = 0;
@@ -248,6 +250,9 @@ static void Win32ProcessEvents(game_input* Input)
     bool DoSetShowCursor = false;
 
     MSG Message;
+
+    // Pressed states gets to get "click" behaviour
+    Input->MouseLeftPressed = false;
 
     // Win32 message queue
     while (PeekMessage(&Message, nullptr, 0, 0, PM_REMOVE))
@@ -351,6 +356,7 @@ static void Win32ProcessEvents(game_input* Input)
             case WM_LBUTTONDBLCLK:
             {
                 Input->MouseLeft = true;
+                Input->MouseLeftPressed = true;
                 break;
             }
             case WM_RBUTTONDOWN:

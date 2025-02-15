@@ -1,6 +1,9 @@
 #include "DX12Texture.h"
 
-static texture DX12TextureCreate(ID3D12Device* Device, ID3D12GraphicsCommandList* CommandList, buffer Pixels, u32 Width, u32 Height, DXGI_FORMAT Format = DXGI_FORMAT_R8G8B8A8_UNORM)
+static ID3D12DescriptorHeap* g_OfflineTextureHeap = nullptr;
+static u32 g_OfflineTextureHeapIndex = 0; // Simply increment every time a texture is created. TODO: Freelist allocator
+
+static texture DX12TextureCreate(ID3D12Device* Device, ID3D12CommandAllocator* CommandAllocator, ID3D12GraphicsCommandList* CommandList, ID3D12CommandQueue* CommandQueue, buffer Pixels, u32 Width, u32 Height, DXGI_FORMAT Format)
 {
     Assert(Pixels.Data && Pixels.Size, "Cannot create texture from empty buffer!");
     Assert(Pixels.Size <= Width * Height * 4, "Buffer is larger than Width * Height * FormatChannels!"); // TODO: Support more formats
@@ -109,16 +112,49 @@ static texture DX12TextureCreate(ID3D12Device* Device, ID3D12GraphicsCommandList
         }
         UploadBuffer->Unmap(0, nullptr);
 
-        CommandList->CopyTextureRegion(&Dst, 0, 0, 0, &Src, nullptr);
+        GameRendererSubmitToQueueImmidiate(Device, CommandAllocator, CommandList, CommandQueue, [&](ID3D12GraphicsCommandList* CommandList)
+        {
+            CommandList->CopyTextureRegion(&Dst, 0, 0, 0, &Src, nullptr);
+            auto Barrier = GameRendererTransition(Texture.Resource, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+            CommandList->ResourceBarrier(1, &Barrier);
+        });
+    }
 
-        auto Barrier = DX12RendererTransition(Texture.Resource, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-        CommandList->ResourceBarrier(1, &Barrier);
+    // Hacky but will work for some time
+    if (!g_OfflineTextureHeap)
+    {
+        D3D12_DESCRIPTOR_HEAP_DESC Desc = {};
+        Desc.NumDescriptors = 1024; // TODO: Some sufficient number
+        Desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+        Desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE; // Invisible to shaders
+        Desc.NodeMask = 0;
+        DxAssert(Device->CreateDescriptorHeap(&Desc, IID_PPV_ARGS(&g_OfflineTextureHeap)));
+    }
+
+    Assert(g_OfflineTextureHeapIndex < 1024, "Descriptor heap reached maximum capacity!");
+
+    // Describe and create a SRV for the white texture.
+    Texture.SRVDescriptor = g_OfflineTextureHeap->GetCPUDescriptorHandleForHeapStart();
+    auto DescriptorSize = Device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+    {
+        D3D12_SHADER_RESOURCE_VIEW_DESC Desc = {};
+        Desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+        Desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        Desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+        Desc.Texture2D.MipLevels = 1;
+        Desc.Texture2D.MostDetailedMip = 0;
+        Desc.Texture2D.PlaneSlice = 0;
+        Desc.Texture2D.ResourceMinLODClamp = 0.0f;
+        Texture.SRVDescriptor.ptr += g_OfflineTextureHeapIndex * DescriptorSize; // Free slot
+        Device->CreateShaderResourceView(Texture.Resource, &Desc, Texture.SRVDescriptor);
+
+        g_OfflineTextureHeapIndex++;
     }
 
     return Texture;
 }
 
-static texture DX12TextureCreate(ID3D12Device* Device, ID3D12GraphicsCommandList* CommandList, const char* Path)
+static texture DX12TextureCreate(ID3D12Device* Device, ID3D12CommandAllocator* CommandAllocator, ID3D12GraphicsCommandList* CommandList, ID3D12CommandQueue* CommandQueue, const char* Path)
 {
     // Load the image into memory
     int Width, Height, Channels;
@@ -128,11 +164,12 @@ static texture DX12TextureCreate(ID3D12Device* Device, ID3D12GraphicsCommandList
     u8* Pixels = stbi_load(Path, &Width, &Height, &Channels, 4);
     Assert(Channels == 4, "Failed to enforce 4 channels!");
 
-    return DX12TextureCreate(Device, CommandList, buffer{ Pixels, (u64)Width * Height * 4 }, Width, Height);
+    return DX12TextureCreate(Device, CommandAllocator, CommandList, CommandQueue, buffer{ Pixels, (u64)Width * Height * 4 }, Width, Height);
 }
 
 static void DX12TextureDestroy(texture* Texture)
 {
+    // TODO: Freelist
     Texture->Resource->Release();
     Texture->Resource = nullptr;
     Texture->Width = 0;
