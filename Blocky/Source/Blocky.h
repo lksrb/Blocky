@@ -1,5 +1,7 @@
 #pragma once
 
+#include <vector>
+
 struct camera
 {
     m4 Projection{ 1.0f };
@@ -32,9 +34,18 @@ struct camera
     m4 GetViewProjection() const { return Projection * View; }
 };
 
+struct block
+{
+    v3 Translation;
+    texture Texture;
+};
+
 struct game
 {
     camera Camera;
+
+    std::vector<block> Blocks;
+
     texture TestTexture;
     texture ContainerTexture;
 };

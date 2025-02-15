@@ -1,7 +1,5 @@
 #include "Blocky.h"
 
-#include <vector>
-
 static game GameCreate(game_renderer* Renderer)
 {
     game Game = {};
@@ -9,6 +7,9 @@ static game GameCreate(game_renderer* Renderer)
     Game.TestTexture = DX12TextureCreate(Renderer->Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, "Resources/Textures/LevelBackground.png");
 
     Game.ContainerTexture = DX12TextureCreate(Renderer->Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, "Resources/Textures/container.png");
+
+    auto& Block = Game.Blocks.emplace_back();
+    Block.Texture = Game.ContainerTexture;
 
     return Game;
 }
@@ -81,49 +82,56 @@ static void GameUpdateAndRender(game* Game, game_renderer* Renderer, const game_
 
         Translation += Direction * Speed * TimeStep;
     }
-
-    struct Block
+    
+    for (auto& Block : Game->Blocks)
     {
-        v3 Translation;
-    };
+        v3 Dest = Translation + Forward * 3.0f;
 
-    static std::vector<v3> s_Blocks;
-
-    // Raycast
-    if (Input->MouseLeft)
-    {
-        v3 Dest = Translation + Forward * 1.0f + Right * 2.0f + Up * -1.0f;
-        //GameRendererSubmitCube(Renderer, Dest, Rotation, v3(1.0f), Game->ContainerTexture, v4(1.0f, 1.0f, 1.0f, 1.0f));
+        if (bkm::Length(Dest - Block.Translation) < 1.0f)
+        {
+            Block.Texture = {};
+        }
+        else
+        {
+            Block.Texture = Game->ContainerTexture;
+        }
     }
 
     if (Input->MouseLeftPressed)
     {
+        //v3 Dest = Translation + Forward * 1.0f + Right * 2.0f + Up * -1.0f;
         v3 Dest = Translation + Forward * 3.0f;
-        s_Blocks.push_back(Dest);
+
+        auto& Block = Game->Blocks.emplace_back();
+        Block.Translation = Dest;
+        Block.Texture = Game->ContainerTexture;
     }
 
     // Update camera
-    Game->Camera.View = bkm::Translate(m4(1.0f), Translation)
-        * bkm::ToM4(qtn(Rotation));
-
-    Game->Camera.View = bkm::Inverse(Game->Camera.View);
-
-    Game->Camera.RecalculateProjectionPerspective(ClientAreaWidth, ClientAreaHeight);
-
-    // Render stuff
-    for (auto& block : s_Blocks)
     {
-        GameRendererSubmitCube(Renderer, block, v3(0.0f), v3(1.0f), Game->ContainerTexture, v4(1.0f, 1.0f, 1.0f, 1.0f));
+        Game->Camera.View = bkm::Translate(m4(1.0f), Translation)
+            * bkm::ToM4(qtn(Rotation));
+
+        Game->Camera.View = bkm::Inverse(Game->Camera.View);
+        Game->Camera.RecalculateProjectionPerspective(ClientAreaWidth, ClientAreaHeight);
     }
 
+    // Render
     GameRendererSetViewProjection(Renderer, Game->Camera.GetViewProjection());
+    for (auto& Block : Game->Blocks)
+    {
+        if (Block.Texture.Resource)
+        {
+            GameRendererSubmitCube(Renderer, Block.Translation, v3(0.0f), v3(1.0f), Block.Texture, v4(1.0f, 1.0f, 1.0f, 1.0f));
+        }
+        else
+        {
+            GameRendererSubmitCube(Renderer, Block.Translation, v3(0.0f), v3(1.0f), v4(1.0f, 1.0f, 1.0f, 1.0f));
+        }
+    }
 
-    static f32 Y = 0.0f;
-    static f32 Time = 0.0f;
-    Time += TimeStep;
-
-    Y = bkm::Sin(Time);
-    GameRendererSubmitCube(Renderer, v3(0), v3(0), v3(1.0f), v4(0.0f, 1.0f, 0.0f, 1.0f));
-    GameRendererSubmitCube(Renderer, v3(1, Y, 0), v3(0), v3(1.0f), Game->TestTexture, v4(1.0f, 0.0f, 0.0f, 1.0f));
-    GameRendererSubmitCube(Renderer, v3(3, 0, 0), v3(0), v3(1.0f), v4(1.0f, 1.0f, 1.0f, 1.0f));
+    {
+        v3 Dest = Translation + Forward * 3.0f;
+        GameRendererSubmitQuad(Renderer, Dest, Rotation, v3(0.2f), v4(0.0f, 0.0f, 0.0f, 1.0f));
+    }
 }
