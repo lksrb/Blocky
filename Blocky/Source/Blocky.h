@@ -66,5 +66,5 @@ struct game
     texture ContainerTexture;
 };
 
-static game GameCreate(game_renderer* Renderer);
-static void GameUpdateAndRender(game* Game, game_renderer* Renderer, const game_input* Input, f32 TimeStep, u32 ClientAreaWidth, u32 ClientAreaHeight);
+internal game GameCreate(game_renderer* Renderer);
+internal void GameUpdateAndRender(game* Game, game_renderer* Renderer, const game_input* Input, f32 TimeStep, u32 ClientAreaWidth, u32 ClientAreaHeight);

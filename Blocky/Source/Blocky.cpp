@@ -1,6 +1,6 @@
 #include "Blocky.h"
 
-static bool RayIntersectsAABB(const ray& Ray, const aabb& Box, f32& Near, f32& Far)
+internal bool RayIntersectsAABB(const ray& Ray, const aabb& Box, f32& Near, f32& Far)
 {
     f32 Min = -FLT_MAX;
     f32 Max = FLT_MAX;
@@ -23,7 +23,7 @@ static bool RayIntersectsAABB(const ray& Ray, const aabb& Box, f32& Near, f32& F
     return true;
 }
 
-static game GameCreate(game_renderer* Renderer)
+internal game GameCreate(game_renderer* Renderer)
 {
     game Game = {};
 
@@ -40,10 +40,10 @@ static game GameCreate(game_renderer* Renderer)
     return Game;
 }
 
-static void GameUpdateAndRender(game* Game, game_renderer* Renderer, const game_input* Input, f32 TimeStep, u32 ClientAreaWidth, u32 ClientAreaHeight)
+internal void GameUpdateAndRender(game* Game, game_renderer* Renderer, const game_input* Input, f32 TimeStep, u32 ClientAreaWidth, u32 ClientAreaHeight)
 {
-    static v3 Translation{ 0.0f, 1.0f, 3.0f };
-    static v3 Rotation{ 0.0f };
+    local_persist v3 Translation{ 0.0f, 1.0f, 3.0f };
+    local_persist v3 Rotation{ 0.0f };
 
     v3 Up = { 0.0f, 1.0, 0.0f };
     v3 Forward = { 0.0f, 0.0, -1.0f };
@@ -51,7 +51,7 @@ static void GameUpdateAndRender(game* Game, game_renderer* Renderer, const game_
 
     // Rotating
     {
-        static V2i OldMousePos;
+        local_persist V2i OldMousePos;
         V2i MousePos = (Input->IsCursorLocked ? Input->VirtualMousePosition : Input->LastMousePosition);
 
         V2i MouseDelta = MousePos - OldMousePos;

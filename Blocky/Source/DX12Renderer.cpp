@@ -3,7 +3,7 @@
 #include "DX12Texture.cpp"
 #include "DX12Buffer.cpp"
 
-static game_renderer GameRendererCreate(game_window Window)
+internal game_renderer GameRendererCreate(game_window Window)
 {
     game_renderer Renderer = {};
 
@@ -13,7 +13,7 @@ static game_renderer GameRendererCreate(game_window Window)
     return Renderer;
 }
 
-static void GameRendererDestroy(game_renderer* Renderer)
+internal void GameRendererDestroy(game_renderer* Renderer)
 {
     // Wait for GPU to finish
     GameRendererFlush(Renderer);
@@ -30,8 +30,8 @@ static void GameRendererDestroy(game_renderer* Renderer)
         DX12VertexBufferDestroy(&Renderer->QuadVertexBuffer[i]);
     }
 
-    Renderer->QuadPipelineState->Release();
-    DX12BufferDestroy(&Renderer->QuadIndexBuffer);
+    DX12PipelineDestroy(&Renderer->QuadPipeline);
+    DX12IndexBufferDestroy(&Renderer->QuadIndexBuffer);
     DX12TextureDestroy(&Renderer->WhiteTexture);
     Renderer->SwapChain->Release();
     Renderer->DSVDescriptorHeap->Release();
@@ -56,7 +56,7 @@ static void GameRendererDestroy(game_renderer* Renderer)
     memset(Renderer, 0, sizeof(game_renderer));
 }
 
-static void GameRendererInitD3D(game_renderer* Renderer, game_window Window)
+internal void GameRendererInitD3D(game_renderer* Renderer, game_window Window)
 {
     // Enable debug layer
     if (DX12_ENABLE_DEBUG_LAYER)
@@ -296,7 +296,7 @@ static void GameRendererInitD3D(game_renderer* Renderer, game_window Window)
     }
 }
 
-static void GameRendererInitD3DPipeline(game_renderer* Renderer)
+internal void GameRendererInitD3DPipeline(game_renderer* Renderer)
 {
     auto Device = Renderer->Device;
 
@@ -352,93 +352,9 @@ static void GameRendererInitD3DPipeline(game_renderer* Renderer)
         DxAssert(Device->CreateRootSignature(0, Signature->GetBufferPointer(), Signature->GetBufferSize(), IID_PPV_ARGS(&Renderer->RootSignature)));
     }
 
-#if defined(BK_DEBUG)
-    // Enable better shader debugging with the graphics debugging tools.
-    const UINT CompileFlags = D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
-#else
-    const UINT CompileFlags = 0;
-#endif
-
     // Quad Pipeline
     {
-        // Graphics Pipeline State
-        {
-            ID3DBlob* VertexShader;
-            ID3DBlob* PixelShader;
-
-            ID3DBlob* ErrorMessage;
-
-            if (FAILED(D3DCompileFromFile(L"Resources/Shader.hlsl", nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "VSMain", "vs_5_1", CompileFlags, 0, &VertexShader, &ErrorMessage)))
-            {
-                Err("%s", (const char*)ErrorMessage->GetBufferPointer());
-                Assert(false, "");
-            }
-
-            if (FAILED(D3DCompileFromFile(L"Resources/Shader.hlsl", nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "PSMain", "ps_5_1", CompileFlags, 0, &PixelShader, &ErrorMessage)))
-            {
-                Err("%s", (const char*)ErrorMessage->GetBufferPointer());
-                Assert(false, "");
-            }
-
-            // Define the vertex input layout.
-            D3D12_INPUT_ELEMENT_DESC InputElementDescs[] =
-            {
-                { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-                { "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-                { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-                { "TEXINDEX", 0, DXGI_FORMAT_R32_UINT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-            };
-
-            D3D12_GRAPHICS_PIPELINE_STATE_DESC PipelineDesc = {};
-
-            // Rasterizer state
-            PipelineDesc.RasterizerState = {};
-            PipelineDesc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
-            PipelineDesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
-            PipelineDesc.RasterizerState.FrontCounterClockwise = TRUE;
-            PipelineDesc.RasterizerState.DepthBias = D3D12_DEFAULT_DEPTH_BIAS;
-            PipelineDesc.RasterizerState.DepthBiasClamp = D3D12_DEFAULT_DEPTH_BIAS_CLAMP;
-            PipelineDesc.RasterizerState.SlopeScaledDepthBias = D3D12_DEFAULT_SLOPE_SCALED_DEPTH_BIAS;
-            PipelineDesc.RasterizerState.DepthClipEnable = TRUE;
-            PipelineDesc.RasterizerState.MultisampleEnable = FALSE;
-            PipelineDesc.RasterizerState.AntialiasedLineEnable = FALSE;
-            PipelineDesc.RasterizerState.ForcedSampleCount = 0;
-            PipelineDesc.RasterizerState.ConservativeRaster = D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF;
-
-            // Depth and stencil state
-            PipelineDesc.DepthStencilState.DepthEnable = TRUE;
-            PipelineDesc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
-            PipelineDesc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS;  // Closer pixels are drawn
-            PipelineDesc.DepthStencilState.StencilEnable = FALSE;  // Stencil disabled for now
-            PipelineDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;  // Must match depth buffer format
-
-            // Blend state
-            PipelineDesc.BlendState = {};
-            PipelineDesc.BlendState.AlphaToCoverageEnable = FALSE;
-            PipelineDesc.BlendState.IndependentBlendEnable = FALSE;
-            const D3D12_RENDER_TARGET_BLEND_DESC DefaultRenderTargetBlendDesc =
-            {
-                FALSE,FALSE,
-                D3D12_BLEND_ONE, D3D12_BLEND_ZERO, D3D12_BLEND_OP_ADD,
-                D3D12_BLEND_ONE, D3D12_BLEND_ZERO, D3D12_BLEND_OP_ADD,
-                D3D12_LOGIC_OP_NOOP,
-                D3D12_COLOR_WRITE_ENABLE_ALL,
-            };
-            for (UINT i = 0; i < D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT; ++i)
-                PipelineDesc.BlendState.RenderTarget[i] = DefaultRenderTargetBlendDesc;
-
-            PipelineDesc.InputLayout = { InputElementDescs, CountOf(InputElementDescs) };
-            PipelineDesc.pRootSignature = Renderer->RootSignature;
-            PipelineDesc.VS = CD3DX12_SHADER_BYTECODE(VertexShader);
-            PipelineDesc.PS = CD3DX12_SHADER_BYTECODE(PixelShader);
-            PipelineDesc.SampleMask = UINT_MAX;
-            PipelineDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-            PipelineDesc.NumRenderTargets = 1;
-            PipelineDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
-            PipelineDesc.SampleDesc.Count = 1;
-
-            DxAssert(Device->CreateGraphicsPipelineState(&PipelineDesc, IID_PPV_ARGS(&Renderer->QuadPipelineState)));
-        }
+        Renderer->QuadPipeline = DX12PipelineCreate(Device, Renderer->RootSignature);
 
         // Quad vertex bufer
         {
@@ -450,13 +366,10 @@ static void GameRendererInitD3DPipeline(game_renderer* Renderer)
             {
                 Renderer->QuadVertexBuffer[i] = DX12VertexBufferCreate(Device, sizeof(quad_vertex) * c_MaxQuadVertices);
             }
-
-            Renderer->QuadIndexBuffer = DX12BufferCreate(Device, D3D12_RESOURCE_STATE_COMMON, D3D12_HEAP_TYPE_DEFAULT, c_MaxQuadIndices * sizeof(u32));
         }
 
         // Quad Index buffer
         {
-            dx12_buffer Intermediate = DX12BufferCreate(Device, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_HEAP_TYPE_UPLOAD, c_MaxQuadIndices * sizeof(u32));
             u32* QuadIndices = new u32[c_MaxQuadIndices];
             u32 Offset = 0;
             for (u32 i = 0; i < c_MaxQuadIndices; i += 6)
@@ -471,20 +384,7 @@ static void GameRendererInitD3DPipeline(game_renderer* Renderer)
 
                 Offset += 4;
             }
-
-            void* MappedPtr = nullptr;
-            Intermediate.Resource->Map(0, nullptr, &MappedPtr);
-            memcpy(MappedPtr, QuadIndices, c_MaxQuadIndices * sizeof(u32));
-            Intermediate.Resource->Unmap(0, nullptr);
-
-            GameRendererSubmitToQueueImmidiate(Renderer->Device,
-                 Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue,
-                 [Renderer, &Intermediate](ID3D12GraphicsCommandList* CommandList)
-            {
-                CommandList->CopyBufferRegion(Renderer->QuadIndexBuffer.Resource, 0, Intermediate.Resource, 0, c_MaxQuadIndices * sizeof(u32));
-            });
-
-            DX12BufferDestroy(&Intermediate);
+            Renderer->QuadIndexBuffer = DX12IndexBufferCreate(Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, QuadIndices, c_MaxQuadIndices);
         }
     }
 
@@ -529,7 +429,7 @@ static void GameRendererInitD3DPipeline(game_renderer* Renderer)
     }
 }
 
-static void GameRendererResizeSwapChain(game_renderer* Renderer, u32 RequestWidth, u32 RequestHeight)
+internal void GameRendererResizeSwapChain(game_renderer* Renderer, u32 RequestWidth, u32 RequestHeight)
 {
     // Flush the GPU queue to make sure the swap chain's back buffers are not being referenced by an in-flight command list.
     GameRendererFlush(Renderer);
@@ -616,12 +516,12 @@ static void GameRendererResizeSwapChain(game_renderer* Renderer, u32 RequestWidt
     Warn("SwapChain resized to %d %d", RequestWidth, RequestHeight);
 }
 
-static void GameRendererSetViewProjection(game_renderer* Renderer, m4 ViewProjection)
+internal void GameRendererSetViewProjection(game_renderer* Renderer, m4 ViewProjection)
 {
     Renderer->RootSignatureBuffer.ViewProjection = ViewProjection;
 }
 
-static void GameRendererSubmitQuad(game_renderer* Renderer, v3 Translation, v3 Rotation, v2 Scale, v4 Color)
+internal void GameRendererSubmitQuad(game_renderer* Renderer, v3 Translation, v3 Rotation, v2 Scale, v4 Color)
 {
     m4 Transform = bkm::Translate(m4(1.0f), Translation)
         * bkm::ToM4(qtn(Rotation))
@@ -646,7 +546,7 @@ static void GameRendererSubmitQuad(game_renderer* Renderer, v3 Translation, v3 R
     Renderer->QuadIndexCount += 6;
 }
 
-static void GameRendererSubmitQuad(game_renderer* Renderer, v3 Translation, v3 Rotation, v2 Scale, texture Texture, v4 Color)
+internal void GameRendererSubmitQuad(game_renderer* Renderer, v3 Translation, v3 Rotation, v2 Scale, texture Texture, v4 Color)
 {
     Assert(Texture.Resource != nullptr, "Texture is invalid!");
 
@@ -691,7 +591,7 @@ static void GameRendererSubmitQuad(game_renderer* Renderer, v3 Translation, v3 R
     Renderer->QuadIndexCount += 6;
 }
 
-static void GameRendererSubmitCube(game_renderer* Renderer, v3 Translation, v3 Rotation, v3 Scale, texture Texture, v4 Color)
+internal void GameRendererSubmitCube(game_renderer* Renderer, v3 Translation, v3 Rotation, v3 Scale, texture Texture, v4 Color)
 {
     Assert(Texture.Resource != nullptr, "Texture is invalid!");
 
@@ -736,7 +636,7 @@ static void GameRendererSubmitCube(game_renderer* Renderer, v3 Translation, v3 R
     Renderer->QuadIndexCount += 36;
 }
 
-static void GameRendererSubmitCube(game_renderer* Renderer, v3 Translation, v3 Rotation, v3 Scale, v4 Color)
+internal void GameRendererSubmitCube(game_renderer* Renderer, v3 Translation, v3 Rotation, v3 Scale, v4 Color)
 {
     m4 Transform = bkm::Translate(m4(1.0f), Translation)
         * bkm::ToM4(qtn(Rotation))
@@ -760,7 +660,7 @@ static void GameRendererSubmitCube(game_renderer* Renderer, v3 Translation, v3 R
     Renderer->QuadIndexCount += 36;
 }
 
-static void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
+internal void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
 {
     // Get current frame stuff
     auto CommandList = Renderer->DirectCommandList;
@@ -785,7 +685,7 @@ static void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
 
     // Reset state
     DirectCommandAllocator->Reset();
-    CommandList->Reset(DirectCommandAllocator, Renderer->QuadPipelineState);
+    CommandList->Reset(DirectCommandAllocator, Renderer->QuadPipeline.Handle);
 
     // Frame that was presented needs to be set to render target again
     auto Barrier = GameRendererTransition(BackBuffer, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
@@ -829,19 +729,20 @@ static void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
     if (Renderer->QuadIndexCount > 0)
     {
         CommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
         // Bind pipeline
-        CommandList->SetPipelineState(Renderer->QuadPipelineState);
+        CommandList->SetPipelineState(Renderer->QuadPipeline.Handle);
 
         // Bind vertex buffer
-        static D3D12_VERTEX_BUFFER_VIEW QuadVertexBufferView;
-        QuadVertexBufferView.BufferLocation = QuadVertexBuffer.Buffer.Resource->GetGPUVirtualAddress();
+        local_persist D3D12_VERTEX_BUFFER_VIEW QuadVertexBufferView;
+        QuadVertexBufferView.BufferLocation = QuadVertexBuffer.Buffer.Handle->GetGPUVirtualAddress();
         QuadVertexBufferView.StrideInBytes = sizeof(quad_vertex);
         QuadVertexBufferView.SizeInBytes = Renderer->QuadIndexCount * sizeof(quad_vertex);
         CommandList->IASetVertexBuffers(0, 1, &QuadVertexBufferView);
 
         // Bind index buffer
-        static D3D12_INDEX_BUFFER_VIEW QuadIndexBufferView;
-        QuadIndexBufferView.BufferLocation = Renderer->QuadIndexBuffer.Resource->GetGPUVirtualAddress();
+        local_persist D3D12_INDEX_BUFFER_VIEW QuadIndexBufferView;
+        QuadIndexBufferView.BufferLocation = Renderer->QuadIndexBuffer.Buffer.Handle->GetGPUVirtualAddress();
         QuadIndexBufferView.Format = DXGI_FORMAT_R32_UINT;
         QuadIndexBufferView.SizeInBytes = Renderer->QuadIndexCount * sizeof(u32);
         CommandList->IASetIndexBuffer(&QuadIndexBufferView);
@@ -884,7 +785,7 @@ static void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
     Renderer->CurrentBackBufferIndex = Renderer->SwapChain->GetCurrentBackBufferIndex();
 }
 
-static D3D12_RESOURCE_BARRIER GameRendererTransition(
+internal D3D12_RESOURCE_BARRIER GameRendererTransition(
    ID3D12Resource* pResource,
    D3D12_RESOURCE_STATES stateBefore,
    D3D12_RESOURCE_STATES stateAfter,
@@ -901,7 +802,7 @@ static D3D12_RESOURCE_BARRIER GameRendererTransition(
     return Result;
 };
 
-static void GameRendererDumpInfoQueue(ID3D12InfoQueue* InfoQueue)
+internal void GameRendererDumpInfoQueue(ID3D12InfoQueue* InfoQueue)
 {
     if (!InfoQueue)
         return;
@@ -964,7 +865,7 @@ static void GameRendererDumpInfoQueue(ID3D12InfoQueue* InfoQueue)
     InfoQueue->ClearStoredMessages();
 }
 
-static u64 GameRendererSignal(ID3D12CommandQueue* CommandQueue, ID3D12Fence* Fence, u64* FenceValue)
+internal u64 GameRendererSignal(ID3D12CommandQueue* CommandQueue, ID3D12Fence* Fence, u64* FenceValue)
 {
     u64& RefFenceValue = *FenceValue;
     u64 FenceValueForSignal = ++RefFenceValue;
@@ -972,7 +873,7 @@ static u64 GameRendererSignal(ID3D12CommandQueue* CommandQueue, ID3D12Fence* Fen
     return FenceValueForSignal;
 }
 
-static void GameRendererWaitForFenceValue(ID3D12Fence* Fence, u64 FenceValue, HANDLE FenceEvent, u32 Duration)
+internal void GameRendererWaitForFenceValue(ID3D12Fence* Fence, u64 FenceValue, HANDLE FenceEvent, u32 Duration)
 {
     if (Fence->GetCompletedValue() < FenceValue)
     {
@@ -981,14 +882,14 @@ static void GameRendererWaitForFenceValue(ID3D12Fence* Fence, u64 FenceValue, HA
     }
 }
 
-static void GameRendererFlush(game_renderer* Renderer)
+internal void GameRendererFlush(game_renderer* Renderer)
 {
     u64 FenceValueForSignal = GameRendererSignal(Renderer->DirectCommandQueue, Renderer->Fence, &Renderer->FenceValue);
     GameRendererWaitForFenceValue(Renderer->Fence, FenceValueForSignal, Renderer->DirectFenceEvent);
 }
 
 template<typename F>
-static void GameRendererSubmitToQueueImmidiate(ID3D12Device* Device, ID3D12CommandAllocator* CommandAllocator, ID3D12GraphicsCommandList* CommandList, ID3D12CommandQueue* CommandQueue, F&& Func)
+internal void GameRendererSubmitToQueueImmidiate(ID3D12Device* Device, ID3D12CommandAllocator* CommandAllocator, ID3D12GraphicsCommandList* CommandList, ID3D12CommandQueue* CommandQueue, F&& Func)
 {
     // Reset
     CommandAllocator->Reset();

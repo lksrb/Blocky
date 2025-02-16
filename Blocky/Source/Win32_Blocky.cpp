@@ -21,6 +21,9 @@
 #define Assert(...)
 #endif
 
+#define internal static
+#define local_persist static
+
 // Win32 assert
 #define WAssert(__cond__, ...) Assert(SUCCEEDED(__cond__), __VA_ARGS__)
 
@@ -170,12 +173,12 @@ struct buffer
 #include "DX12Renderer.cpp"
 #include "Blocky.cpp"
 
-static u32 g_ClientWidth = 0;
-static u32 g_ClientHeight = 0;
-static bool g_DoResize = false;
-static bool g_IsRunning = false;
-static bool g_IsFocused = false;
-static HWND g_WindowHandle;
+internal u32 g_ClientWidth = 0;
+internal u32 g_ClientHeight = 0;
+internal bool g_DoResize = false;
+internal bool g_IsRunning = false;
+internal bool g_IsFocused = false;
+internal HWND g_WindowHandle;
 
 LRESULT Win32ProcedureHandler(HWND WindowHandle, UINT Message, WPARAM WParam, LPARAM LParam)
 {
@@ -244,7 +247,7 @@ LRESULT Win32ProcedureHandler(HWND WindowHandle, UINT Message, WPARAM WParam, LP
     return Result;
 }
 
-static void Win32ProcessEvents(game_input* Input)
+internal void Win32ProcessEvents(game_input* Input)
 {
     bool DoSetCursorLock = false;
     bool DoSetShowCursor = false;
@@ -461,7 +464,7 @@ static void Win32ProcessEvents(game_input* Input)
     }
 }
 
-static game_window CreateGameWindow()
+internal game_window CreateGameWindow()
 {
     game_window Window;
     const u32 DefaultWindowWidth = u32(1600 * 1.3f);

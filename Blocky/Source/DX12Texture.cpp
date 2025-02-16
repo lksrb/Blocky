@@ -1,9 +1,9 @@
 #include "DX12Texture.h"
 
-static ID3D12DescriptorHeap* g_OfflineTextureHeap = nullptr;
-static u32 g_OfflineTextureHeapIndex = 0; // Simply increment every time a texture is created. TODO: Freelist allocator
+internal ID3D12DescriptorHeap* g_OfflineTextureHeap = nullptr;
+internal u32 g_OfflineTextureHeapIndex = 0; // Simply increment every time a texture is created. TODO: Freelist allocator
 
-static texture DX12TextureCreate(ID3D12Device* Device, ID3D12CommandAllocator* CommandAllocator, ID3D12GraphicsCommandList* CommandList, ID3D12CommandQueue* CommandQueue, buffer Pixels, u32 Width, u32 Height, DXGI_FORMAT Format)
+internal texture DX12TextureCreate(ID3D12Device* Device, ID3D12CommandAllocator* CommandAllocator, ID3D12GraphicsCommandList* CommandList, ID3D12CommandQueue* CommandQueue, buffer Pixels, u32 Width, u32 Height, DXGI_FORMAT Format)
 {
     Assert(Pixels.Data && Pixels.Size, "Cannot create texture from empty buffer!");
     Assert(Pixels.Size <= Width * Height * 4, "Buffer is larger than Width * Height * FormatChannels!"); // TODO: Support more formats
@@ -154,7 +154,7 @@ static texture DX12TextureCreate(ID3D12Device* Device, ID3D12CommandAllocator* C
     return Texture;
 }
 
-static texture DX12TextureCreate(ID3D12Device* Device, ID3D12CommandAllocator* CommandAllocator, ID3D12GraphicsCommandList* CommandList, ID3D12CommandQueue* CommandQueue, const char* Path)
+internal texture DX12TextureCreate(ID3D12Device* Device, ID3D12CommandAllocator* CommandAllocator, ID3D12GraphicsCommandList* CommandList, ID3D12CommandQueue* CommandQueue, const char* Path)
 {
     // Load the image into memory
     int Width, Height, Channels;
@@ -167,7 +167,7 @@ static texture DX12TextureCreate(ID3D12Device* Device, ID3D12CommandAllocator* C
     return DX12TextureCreate(Device, CommandAllocator, CommandList, CommandQueue, buffer{ Pixels, (u64)Width * Height * 4 }, Width, Height);
 }
 
-static void DX12TextureDestroy(texture* Texture)
+internal void DX12TextureDestroy(texture* Texture)
 {
     // TODO: Freelist
     Texture->Resource->Release();
