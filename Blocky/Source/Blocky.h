@@ -13,7 +13,7 @@ struct camera
     f32 AspectRatio = 0.0f;
 
     f32 PerspectiveFOV = bkm::PI_HALF;
-    f32 PerspectiveNear = 0.01f, PerspectiveFar = 1000.0f;
+    f32 PerspectiveNear = 0.1f, PerspectiveFar = 1000.0f;
 
     void RecalculateProjectionOrtho(u32 Width, u32 Height)
     {
@@ -25,19 +25,33 @@ struct camera
         Projection = bkm::Ortho(OrthoLeft, OrthoRight, OrthoBottom, OrthoTop, OrthographicNear, OrthographicFar);
     }
 
-    void RecalculateProjectionPerspective(u32 width, u32 height)
+    void RecalculateProjectionPerspective(u32 Width, u32 Height)
     {
-        AspectRatio = static_cast<f32>(width) / height;
+        AspectRatio = static_cast<f32>(Width) / Height;
         Projection = bkm::Perspective(PerspectiveFOV, AspectRatio, PerspectiveNear, PerspectiveFar);
     }
 
     m4 GetViewProjection() const { return Projection * View; }
 };
 
+struct ray
+{
+    v3 Origin;
+    v3 Direction;
+};
+
+struct aabb
+{
+    v3 Min;
+    v3 Max;
+};
+
 struct block
 {
-    v3 Translation;
-    texture Texture;
+    v3 Translation = {};
+    v3 Scale = v3(1.0f);
+    texture Texture = {};
+    v4 Color = v4(1.0f);
 };
 
 struct game
@@ -45,7 +59,9 @@ struct game
     camera Camera;
 
     std::vector<block> Blocks;
+    std::vector<block> Intersections;
 
+    texture CrosshairTexture;
     texture TestTexture;
     texture ContainerTexture;
 };

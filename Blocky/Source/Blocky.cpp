@@ -1,5 +1,28 @@
 #include "Blocky.h"
 
+static bool RayIntersectsAABB(const ray& Ray, const aabb& Box, f32& Near, f32& Far)
+{
+    f32 Min = -FLT_MAX;
+    f32 Max = FLT_MAX;
+    for (u32 i = 0; i < 3; ++i)
+    {
+        f32 invD = 1.0f / (i == 0 ? Ray.Direction.x : (i == 1 ? Ray.Direction.y : Ray.Direction.z));
+        f32 t0 = ((i == 0 ? Box.Min.x : (i == 1 ? Box.Min.y : Box.Min.z)) - (i == 0 ? Ray.Origin.x : (i == 1 ? Ray.Origin.y : Ray.Origin.z))) * invD;
+        f32 t1 = ((i == 0 ? Box.Max.x : (i == 1 ? Box.Max.y : Box.Max.z)) - (i == 0 ? Ray.Origin.x : (i == 1 ? Ray.Origin.y : Ray.Origin.z))) * invD;
+
+        if (invD < 0.0f) std::swap(t0, t1);
+
+        Min = std::max(Min, t0);
+        Max = std::min(Max, t1);
+
+        if (Max < Min) return false;
+    }
+
+    Near = Min;
+    Far = Max;
+    return true;
+}
+
 static game GameCreate(game_renderer* Renderer)
 {
     game Game = {};
@@ -8,8 +31,11 @@ static game GameCreate(game_renderer* Renderer)
 
     Game.ContainerTexture = DX12TextureCreate(Renderer->Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, "Resources/Textures/container.png");
 
+    Game.CrosshairTexture = DX12TextureCreate(Renderer->Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, "Resources/Textures/Crosshair.png");
+
     auto& Block = Game.Blocks.emplace_back();
     Block.Texture = Game.ContainerTexture;
+    Block.Color = v4(1.0f);
 
     return Game;
 }
@@ -82,29 +108,78 @@ static void GameUpdateAndRender(game* Game, game_renderer* Renderer, const game_
 
         Translation += Direction * Speed * TimeStep;
     }
-    
-    for (auto& Block : Game->Blocks)
-    {
-        v3 Dest = Translation + Forward * 3.0f;
 
-        if (bkm::Length(Dest - Block.Translation) < 1.0f)
+    // Place a block
+    if (Input->MouseLeftPressed && false)
+    {
+        // Raycast from LIDL
+        // TODO: Proper raycast
+        if (0)
         {
-            Block.Texture = {};
+            for (auto& Block : Game->Blocks)
+            {
+                v3 Src = Translation;
+                v3 Dest = Src + Forward * 3.0f;
+
+                // Sphere collision
+                if (bkm::Length(Dest - Block.Translation) < 0.5f)
+                {
+                    Block.Color = v4(0.6f, 0.6f, 0.6f, 1.0f);
+                }
+                else
+                {
+                    Block.Color = v4(1.0f);
+                }
+            }
         }
         else
         {
-            Block.Texture = Game->ContainerTexture;
-        }
-    }
 
-    if (Input->MouseLeftPressed)
-    {
+        }
+
         //v3 Dest = Translation + Forward * 1.0f + Right * 2.0f + Up * -1.0f;
         v3 Dest = Translation + Forward * 3.0f;
 
         auto& Block = Game->Blocks.emplace_back();
         Block.Translation = Dest;
         Block.Texture = Game->ContainerTexture;
+        Block.Color = v4(1.0f);
+    }
+
+    if (Input->MouseLeftPressed)
+    {
+        // Slab method raycast
+        {
+            ray Ray;
+            Ray.Origin = Translation;
+            Ray.Direction = bkm::Normalize(Forward);
+            for (auto& Block : Game->Blocks)
+            {
+                aabb Box;
+                Box.Min = Block.Translation - v3(0.5f);
+                Box.Max = Block.Translation + v3(0.5f);
+
+                f32 Near, Far;
+                if (RayIntersectsAABB(Ray, Box, Near, Far))
+                {
+                    if (Near < 3.0f)
+                    {
+                        v3 Intersection1 = Ray.Origin + Near * Ray.Direction;
+                        v3 Intersection2 = Ray.Origin + Far * Ray.Direction;
+
+                        auto& Block = Game->Intersections.emplace_back();
+                        Block.Translation = Intersection1;
+                        Block.Color = v4(1.0f);
+                        Block.Scale = v3(0.1f);
+                        //Block.Color = v4(0.6f, 0.6f, 0.6f, 1.0f);
+                    }
+                }
+                else
+                {
+                    //Block.Color = v4(1.0f);
+                }
+            }
+        }
     }
 
     // Update camera
@@ -122,16 +197,30 @@ static void GameUpdateAndRender(game* Game, game_renderer* Renderer, const game_
     {
         if (Block.Texture.Resource)
         {
-            GameRendererSubmitCube(Renderer, Block.Translation, v3(0.0f), v3(1.0f), Block.Texture, v4(1.0f, 1.0f, 1.0f, 1.0f));
+            GameRendererSubmitCube(Renderer, Block.Translation, v3(0.0f), Block.Scale, Block.Texture, Block.Color);
         }
         else
         {
-            GameRendererSubmitCube(Renderer, Block.Translation, v3(0.0f), v3(1.0f), v4(1.0f, 1.0f, 1.0f, 1.0f));
+            GameRendererSubmitCube(Renderer, Block.Translation, v3(0.0f), Block.Scale, Block.Color);
         }
     }
 
+    for (auto& Block : Game->Intersections)
+    {
+        if (Block.Texture.Resource)
+        {
+            GameRendererSubmitCube(Renderer, Block.Translation, v3(0.0f), Block.Scale, Block.Texture, Block.Color);
+        }
+        else
+        {
+            GameRendererSubmitCube(Renderer, Block.Translation, v3(0.0f), Block.Scale, Block.Color);
+        }
+    }
+
+    // TODO: HUD
+    // Render crosshair
     {
         v3 Dest = Translation + Forward * 3.0f;
-        GameRendererSubmitQuad(Renderer, Dest, Rotation, v3(0.2f), v4(0.0f, 0.0f, 0.0f, 1.0f));
+        GameRendererSubmitQuad(Renderer, Dest, Rotation, v2(0.1f, 0.1f), v4(1.0f, 1.0f, 1.0f, 1.0f));
     }
 }

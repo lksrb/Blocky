@@ -181,7 +181,8 @@ static void GameRendererResizeSwapChain(game_renderer* Renderer, u32 RequestWidt
 
 // API-agnostic used in game code
 static void GameRendererSetViewProjection(game_renderer* Renderer, m4 ViewProjection);
-static void GameRendererSubmitQuad(game_renderer* Renderer, v3 Translation, v3 Rotation, v3 Scale, v4 Color);
+static void GameRendererSubmitQuad(game_renderer* Renderer, v3 Translation, v3 Rotation, v2 Scale, v4 Color);
+static void GameRendererSubmitQuad(game_renderer* Renderer, v3 Translation, v3 Rotation, v2 Scale, texture Texture, v4 Color);
 static void GameRendererSubmitCube(game_renderer* Renderer, v3 Translation, v3 Rotation, v3 Scale, texture Texture, v4 Color);
 static void GameRendererSubmitCube(game_renderer* Renderer, v3 Translation, v3 Rotation, v3 Scale, v4 Color);
 

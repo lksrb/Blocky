@@ -621,11 +621,11 @@ static void GameRendererSetViewProjection(game_renderer* Renderer, m4 ViewProjec
     Renderer->RootSignatureBuffer.ViewProjection = ViewProjection;
 }
 
-static void GameRendererSubmitQuad(game_renderer* Renderer, v3 Translation, v3 Rotation, v3 Scale, v4 Color)
+static void GameRendererSubmitQuad(game_renderer* Renderer, v3 Translation, v3 Rotation, v2 Scale, v4 Color)
 {
     m4 Transform = bkm::Translate(m4(1.0f), Translation)
         * bkm::ToM4(qtn(Rotation))
-        * bkm::Scale(m4(1.0f), Scale);
+        * bkm::Scale(m4(1.0f), v3(Scale, 1.0f));
 
     v2 Coords[4];
     Coords[0] = { 0.0f, 0.0f };
@@ -640,6 +640,51 @@ static void GameRendererSubmitQuad(game_renderer* Renderer, v3 Translation, v3 R
         Renderer->QuadVertexDataPtr->TexCoord = Coords[i];
         Renderer->QuadVertexDataPtr->TexIndex = 0;
 
+        Renderer->QuadVertexDataPtr++;
+    }
+
+    Renderer->QuadIndexCount += 6;
+}
+
+static void GameRendererSubmitQuad(game_renderer* Renderer, v3 Translation, v3 Rotation, v2 Scale, texture Texture, v4 Color)
+{
+    Assert(Texture.Resource != nullptr, "Texture is invalid!");
+
+    // TODO: ID system, pointers are unreliable
+    u32 TextureIndex = 0;
+    for (u32 i = 1; i < Renderer->CurrentTextureStackIndex; i++)
+    {
+        if (Renderer->TextureStack[i].Resource == Texture.Resource)
+        {
+            TextureIndex = i;
+            break;
+        }
+    }
+
+    if (TextureIndex == 0)
+    {
+        Assert(Renderer->CurrentTextureStackIndex < c_MaxTexturesPerDrawCall, "Renderer->TextureStackIndex < c_MaxTexturesPerDrawCall");
+        TextureIndex = Renderer->CurrentTextureStackIndex;
+        Renderer->TextureStack[TextureIndex] = Texture;
+        Renderer->CurrentTextureStackIndex++;
+    }
+
+    m4 Transform = bkm::Translate(m4(1.0f), Translation)
+        * bkm::ToM4(qtn(Rotation))
+        * bkm::Scale(m4(1.0f), v3(Scale, 1.0f));
+
+    v2 Coords[4];
+    Coords[0] = { 0.0f, 0.0f };
+    Coords[1] = { 1.0f, 0.0f };
+    Coords[2] = { 1.0f, 1.0f };
+    Coords[3] = { 0.0f, 1.0f };
+
+    for (u32 i = 0; i < CountOf(c_QuadVertexPositions); i++)
+    {
+        Renderer->QuadVertexDataPtr->Position = v3(Transform * c_QuadVertexPositions[i]);
+        Renderer->QuadVertexDataPtr->Color = Color;
+        Renderer->QuadVertexDataPtr->TexCoord = Coords[i];
+        Renderer->QuadVertexDataPtr->TexIndex = TextureIndex;
         Renderer->QuadVertexDataPtr++;
     }
 
@@ -798,7 +843,7 @@ static void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
         static D3D12_INDEX_BUFFER_VIEW QuadIndexBufferView;
         QuadIndexBufferView.BufferLocation = Renderer->QuadIndexBuffer.Resource->GetGPUVirtualAddress();
         QuadIndexBufferView.Format = DXGI_FORMAT_R32_UINT;
-        QuadIndexBufferView.SizeInBytes = c_MaxQuadIndices * sizeof(u32); // Maybe we could assign this value to match indices drawn instead of viewing the whole buffer
+        QuadIndexBufferView.SizeInBytes = Renderer->QuadIndexCount * sizeof(u32);
         CommandList->IASetIndexBuffer(&QuadIndexBufferView);
 
         // Issue draw call
