@@ -27,7 +27,12 @@ internal void GameRendererDestroy(game_renderer* Renderer)
         // Depth testing
         Renderer->DepthBuffers[i]->Release();
         Renderer->BackBuffers[i]->Release();
-        DX12VertexBufferDestroy(&Renderer->QuadVertexBuffer[i]);
+
+        for (auto& DrawLayer : Renderer->QuadDrawLayers)
+        {
+            DX12VertexBufferDestroy(&DrawLayer.VertexBuffer[i]);
+        }
+
     }
 
     DX12PipelineDestroy(&Renderer->QuadPipeline);
@@ -305,12 +310,12 @@ internal void GameRendererInitD3DPipeline(game_renderer* Renderer)
         // Sampler
         D3D12_STATIC_SAMPLER_DESC Sampler = {};
         Sampler.Filter = D3D12_FILTER_MIN_MAG_MIP_POINT;
-        Sampler.AddressU = D3D12_TEXTURE_ADDRESS_MODE_BORDER;
-        Sampler.AddressV = D3D12_TEXTURE_ADDRESS_MODE_BORDER;
-        Sampler.AddressW = D3D12_TEXTURE_ADDRESS_MODE_BORDER;
+        Sampler.AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+        Sampler.AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+        Sampler.AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
         Sampler.MipLODBias = 0;
-        Sampler.MaxAnisotropy = 0;
-        Sampler.ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
+        Sampler.MaxAnisotropy = 1;
+        Sampler.ComparisonFunc = D3D12_COMPARISON_FUNC_ALWAYS;
         Sampler.BorderColor = D3D12_STATIC_BORDER_COLOR_TRANSPARENT_BLACK;
         Sampler.MinLOD = 0.0f;
         Sampler.MaxLOD = D3D12_FLOAT32_MAX;
@@ -354,17 +359,19 @@ internal void GameRendererInitD3DPipeline(game_renderer* Renderer)
 
     // Quad Pipeline
     {
-        Renderer->QuadPipeline = DX12PipelineCreate(Device, Renderer->RootSignature);
+        Renderer->QuadPipeline = DX12PipelineCreate(Device, Renderer->RootSignature, L"Resources/Quad.hlsl");
 
-        // Quad vertex bufer
+        // Quad vertex buffer
+        for (u32 i = 0; i < DRAW_LAYER_COUNT; i++)
         {
-            // TODO: Arena allocator
-            Renderer->QuadVertexDataBase = new quad_vertex[c_MaxQuadVertices];
-            Renderer->QuadVertexDataPtr = Renderer->QuadVertexDataBase;
+            auto& Layer = Renderer->QuadDrawLayers[i];
+            Layer.VertexDataBase = new quad_vertex[c_MaxQuadVertices]; // TODO: Arena allocator
+            Layer.VertexDataPtr = Layer.VertexDataBase;
+            memset(Layer.VertexDataBase, 0, sizeof(quad_vertex) * c_MaxQuadVertices);
 
             for (u32 i = 0; i < FIF; i++)
             {
-                Renderer->QuadVertexBuffer[i] = DX12VertexBufferCreate(Device, sizeof(quad_vertex) * c_MaxQuadVertices);
+                Layer.VertexBuffer[i] = DX12VertexBufferCreate(Device, sizeof(quad_vertex) * c_MaxQuadVertices);
             }
         }
 
@@ -397,8 +404,6 @@ internal void GameRendererInitD3DPipeline(game_renderer* Renderer)
         // First element of the texture stack will be the white texture
         Renderer->TextureStack[0] = Renderer->WhiteTexture;
     }
-
-    GameRendererDumpInfoQueue(Renderer->DebugInfoQueue);
 
     // Creating the shader resource view descriptor
     {
@@ -521,8 +526,10 @@ internal void GameRendererSetViewProjection(game_renderer* Renderer, m4 ViewProj
     Renderer->RootSignatureBuffer.ViewProjection = ViewProjection;
 }
 
-internal void GameRendererSubmitQuad(game_renderer* Renderer, v3 Translation, v3 Rotation, v2 Scale, v4 Color)
+internal void GameRendererSubmitQuad(game_renderer* Renderer, v3 Translation, v3 Rotation, v2 Scale, v4 Color, draw_layer Layer)
 {
+    auto& DrawLayer = Renderer->QuadDrawLayers[(u32)Layer];
+
     m4 Transform = bkm::Translate(m4(1.0f), Translation)
         * bkm::ToM4(qtn(Rotation))
         * bkm::Scale(m4(1.0f), v3(Scale, 1.0f));
@@ -535,20 +542,21 @@ internal void GameRendererSubmitQuad(game_renderer* Renderer, v3 Translation, v3
 
     for (u32 i = 0; i < CountOf(c_QuadVertexPositions); i++)
     {
-        Renderer->QuadVertexDataPtr->Position = v3(Transform * c_QuadVertexPositions[i]);
-        Renderer->QuadVertexDataPtr->Color = Color;
-        Renderer->QuadVertexDataPtr->TexCoord = Coords[i];
-        Renderer->QuadVertexDataPtr->TexIndex = 0;
-
-        Renderer->QuadVertexDataPtr++;
+        DrawLayer.VertexDataPtr->Position = v3(Transform * c_QuadVertexPositions[i]);
+        DrawLayer.VertexDataPtr->Color = Color;
+        DrawLayer.VertexDataPtr->TexCoord = Coords[i];
+        DrawLayer.VertexDataPtr->TexIndex = 0;
+        DrawLayer.VertexDataPtr++;
     }
 
-    Renderer->QuadIndexCount += 6;
+    DrawLayer.IndexCount += 6;
 }
 
-internal void GameRendererSubmitQuad(game_renderer* Renderer, v3 Translation, v3 Rotation, v2 Scale, texture Texture, v4 Color)
+internal void GameRendererSubmitQuad(game_renderer* Renderer, v3 Translation, v3 Rotation, v2 Scale, texture Texture, v4 Color, draw_layer Layer)
 {
     Assert(Texture.Resource != nullptr, "Texture is invalid!");
+
+    auto& DrawLayer = Renderer->QuadDrawLayers[(u32)Layer];
 
     // TODO: ID system, pointers are unreliable
     u32 TextureIndex = 0;
@@ -581,19 +589,21 @@ internal void GameRendererSubmitQuad(game_renderer* Renderer, v3 Translation, v3
 
     for (u32 i = 0; i < CountOf(c_QuadVertexPositions); i++)
     {
-        Renderer->QuadVertexDataPtr->Position = v3(Transform * c_QuadVertexPositions[i]);
-        Renderer->QuadVertexDataPtr->Color = Color;
-        Renderer->QuadVertexDataPtr->TexCoord = Coords[i];
-        Renderer->QuadVertexDataPtr->TexIndex = TextureIndex;
-        Renderer->QuadVertexDataPtr++;
+        DrawLayer.VertexDataPtr->Position = v3(Transform * c_QuadVertexPositions[i]);
+        DrawLayer.VertexDataPtr->Color = Color;
+        DrawLayer.VertexDataPtr->TexCoord = Coords[i];
+        DrawLayer.VertexDataPtr->TexIndex = TextureIndex;
+        DrawLayer.VertexDataPtr++;
     }
 
-    Renderer->QuadIndexCount += 6;
+    DrawLayer.IndexCount += 6;
 }
 
-internal void GameRendererSubmitCube(game_renderer* Renderer, v3 Translation, v3 Rotation, v3 Scale, texture Texture, v4 Color)
+internal void GameRendererSubmitCube(game_renderer* Renderer, v3 Translation, v3 Rotation, v3 Scale, texture Texture, v4 Color, draw_layer Layer)
 {
     Assert(Texture.Resource != nullptr, "Texture is invalid!");
+
+    auto& DrawLayer = Renderer->QuadDrawLayers[(u32)Layer];
 
     // TODO: ID system, pointers are unreliable
     u32 TextureIndex = 0;
@@ -626,18 +636,20 @@ internal void GameRendererSubmitCube(game_renderer* Renderer, v3 Translation, v3
 
     for (u32 i = 0; i < CountOf(c_CubeVertexPositions); i++)
     {
-        Renderer->QuadVertexDataPtr->Position = v3(Transform * c_CubeVertexPositions[i]);
-        Renderer->QuadVertexDataPtr->Color = Color;
-        Renderer->QuadVertexDataPtr->TexCoord = Coords[i % 4];
-        Renderer->QuadVertexDataPtr->TexIndex = TextureIndex;
-        Renderer->QuadVertexDataPtr++;
+        DrawLayer.VertexDataPtr->Position = v3(Transform * c_CubeVertexPositions[i]);
+        DrawLayer.VertexDataPtr->Color = Color;
+        DrawLayer.VertexDataPtr->TexCoord = Coords[i % 4];
+        DrawLayer.VertexDataPtr->TexIndex = TextureIndex;
+        DrawLayer.VertexDataPtr++;
     }
 
-    Renderer->QuadIndexCount += 36;
+    DrawLayer.IndexCount += 36;
 }
 
-internal void GameRendererSubmitCube(game_renderer* Renderer, v3 Translation, v3 Rotation, v3 Scale, v4 Color)
+internal void GameRendererSubmitCube(game_renderer* Renderer, v3 Translation, v3 Rotation, v3 Scale, v4 Color, draw_layer Layer)
 {
+    auto& DrawLayer = Renderer->QuadDrawLayers[(u32)Layer];
+
     m4 Transform = bkm::Translate(m4(1.0f), Translation)
         * bkm::ToM4(qtn(Rotation))
         * bkm::Scale(m4(1.0f), Scale);
@@ -650,26 +662,27 @@ internal void GameRendererSubmitCube(game_renderer* Renderer, v3 Translation, v3
 
     for (u32 i = 0; i < CountOf(c_CubeVertexPositions); i++)
     {
-        Renderer->QuadVertexDataPtr->Position = v3(Transform * c_CubeVertexPositions[i]);
-        Renderer->QuadVertexDataPtr->Color = Color;
-        Renderer->QuadVertexDataPtr->TexCoord = Coords[i % 4];
-        Renderer->QuadVertexDataPtr->TexIndex = 0;
-        Renderer->QuadVertexDataPtr++;
+        DrawLayer.VertexDataPtr->Position = v3(Transform * c_CubeVertexPositions[i]);
+        DrawLayer.VertexDataPtr->Color = Color;
+        DrawLayer.VertexDataPtr->TexCoord = Coords[i % 4];
+        DrawLayer.VertexDataPtr->TexIndex = 0;
+        DrawLayer.VertexDataPtr++;
     }
 
-    Renderer->QuadIndexCount += 36;
+    DrawLayer.IndexCount += 36;
 }
 
 internal void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
 {
     // Get current frame stuff
     auto CommandList = Renderer->DirectCommandList;
-    auto DirectCommandAllocator = Renderer->DirectCommandAllocators[Renderer->CurrentBackBufferIndex];
-    auto BackBuffer = Renderer->BackBuffers[Renderer->CurrentBackBufferIndex];
-    auto QuadVertexBuffer = Renderer->QuadVertexBuffer[Renderer->CurrentBackBufferIndex];
-    auto RTV = Renderer->RTVHandles[Renderer->CurrentBackBufferIndex];
-    auto DSV = Renderer->DSVHandles[Renderer->CurrentBackBufferIndex];
-    auto& FrameFenceValue = Renderer->FrameFenceValues[Renderer->CurrentBackBufferIndex];
+    auto CurrentBackBufferIndex = Renderer->CurrentBackBufferIndex;
+
+    auto DirectCommandAllocator = Renderer->DirectCommandAllocators[CurrentBackBufferIndex];
+    auto BackBuffer = Renderer->BackBuffers[CurrentBackBufferIndex];
+    auto RTV = Renderer->RTVHandles[CurrentBackBufferIndex];
+    auto DSV = Renderer->DSVHandles[CurrentBackBufferIndex];
+    auto& FrameFenceValue = Renderer->FrameFenceValues[CurrentBackBufferIndex];
 
     // Copy texture's descriptor to our renderer's descriptor
     {
@@ -691,15 +704,16 @@ internal void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
     auto Barrier = GameRendererTransition(BackBuffer, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
     CommandList->ResourceBarrier(1, &Barrier);
 
-    //v4 ClearColor = { 0.8f, 0.5f, 0.9f, 1.0f };
-    v4 ClearColor = { 0.2f, 0.3f, 0.8f, 1.0f };
-    CommandList->ClearDepthStencilView(DSV, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
-
     // Copy vertex data to gpu buffer
-    DX12VertexBufferSendData(&QuadVertexBuffer, Renderer->DirectCommandList, Renderer->QuadVertexDataBase, sizeof(quad_vertex) * Renderer->QuadIndexCount);
+    for (auto& DrawLayer : Renderer->QuadDrawLayers)
+    {
+        DX12VertexBufferSendData(&DrawLayer.VertexBuffer[CurrentBackBufferIndex], Renderer->DirectCommandList, DrawLayer.VertexDataBase, sizeof(quad_vertex) * DrawLayer.IndexCount);
+    }
 
     // Set and clear render target view
+    v4 ClearColor = { 0.2f, 0.3f, 0.8f, 1.0f };
     CommandList->ClearRenderTargetView(RTV, &ClearColor.x, 0, nullptr);
+    //CommandList->ClearDepthStencilView(DSV, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
     CommandList->OMSetRenderTargets(1, &RTV, false, &DSV);
 
     D3D12_VIEWPORT Viewport;
@@ -726,29 +740,33 @@ internal void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
     CommandList->SetGraphicsRootDescriptorTable(1, Renderer->SRVDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
 
     // Quads
-    if (Renderer->QuadIndexCount > 0)
+    CommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    CommandList->SetPipelineState(Renderer->QuadPipeline.Handle);
+
+    for (auto& DrawLayer : Renderer->QuadDrawLayers)
     {
-        CommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+        if (DrawLayer.IndexCount > 0)
+        {
+            // Draw layers do not share depth 
+            CommandList->ClearDepthStencilView(DSV, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
-        // Bind pipeline
-        CommandList->SetPipelineState(Renderer->QuadPipeline.Handle);
+            // Bind vertex buffer
+            local_persist D3D12_VERTEX_BUFFER_VIEW QuadVertexBufferView;
+            QuadVertexBufferView.BufferLocation = DrawLayer.VertexBuffer[CurrentBackBufferIndex].Buffer.Handle->GetGPUVirtualAddress();
+            QuadVertexBufferView.StrideInBytes = sizeof(quad_vertex);
+            QuadVertexBufferView.SizeInBytes = DrawLayer.IndexCount * sizeof(quad_vertex);
+            CommandList->IASetVertexBuffers(0, 1, &QuadVertexBufferView);
 
-        // Bind vertex buffer
-        local_persist D3D12_VERTEX_BUFFER_VIEW QuadVertexBufferView;
-        QuadVertexBufferView.BufferLocation = QuadVertexBuffer.Buffer.Handle->GetGPUVirtualAddress();
-        QuadVertexBufferView.StrideInBytes = sizeof(quad_vertex);
-        QuadVertexBufferView.SizeInBytes = Renderer->QuadIndexCount * sizeof(quad_vertex);
-        CommandList->IASetVertexBuffers(0, 1, &QuadVertexBufferView);
+            // Bind index buffer
+            local_persist D3D12_INDEX_BUFFER_VIEW QuadIndexBufferView;
+            QuadIndexBufferView.BufferLocation = Renderer->QuadIndexBuffer.Buffer.Handle->GetGPUVirtualAddress();
+            QuadIndexBufferView.Format = DXGI_FORMAT_R32_UINT;
+            QuadIndexBufferView.SizeInBytes = DrawLayer.IndexCount * sizeof(u32);
+            CommandList->IASetIndexBuffer(&QuadIndexBufferView);
 
-        // Bind index buffer
-        local_persist D3D12_INDEX_BUFFER_VIEW QuadIndexBufferView;
-        QuadIndexBufferView.BufferLocation = Renderer->QuadIndexBuffer.Buffer.Handle->GetGPUVirtualAddress();
-        QuadIndexBufferView.Format = DXGI_FORMAT_R32_UINT;
-        QuadIndexBufferView.SizeInBytes = Renderer->QuadIndexCount * sizeof(u32);
-        CommandList->IASetIndexBuffer(&QuadIndexBufferView);
-
-        // Issue draw call
-        CommandList->DrawIndexedInstanced(Renderer->QuadIndexCount, 1, 0, 0, 0);
+            // Issue draw call
+            CommandList->DrawIndexedInstanced(DrawLayer.IndexCount, 1, 0, 0, 0);
+        }
     }
 
     // Present transition
@@ -770,8 +788,13 @@ internal void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
     GameRendererWaitForFenceValue(Renderer->Fence, FrameFenceValue, Renderer->DirectFenceEvent);
 
     // Reset indices
-    Renderer->QuadIndexCount = 0;
-    Renderer->QuadVertexDataPtr = Renderer->QuadVertexDataBase;
+
+    for (auto& DrawLayer : Renderer->QuadDrawLayers)
+    {
+        DrawLayer.IndexCount = 0;
+        DrawLayer.VertexDataPtr = DrawLayer.VertexDataBase;
+    }
+
 
     // Reset textures
     Renderer->CurrentTextureStackIndex = 1;
@@ -786,19 +809,19 @@ internal void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
 }
 
 internal D3D12_RESOURCE_BARRIER GameRendererTransition(
-   ID3D12Resource* pResource,
-   D3D12_RESOURCE_STATES stateBefore,
-   D3D12_RESOURCE_STATES stateAfter,
-   UINT subresource,
-   D3D12_RESOURCE_BARRIER_FLAGS flags)
+   ID3D12Resource* Resource,
+   D3D12_RESOURCE_STATES StateBefore,
+   D3D12_RESOURCE_STATES StateAfter,
+   UINT Subresource,
+   D3D12_RESOURCE_BARRIER_FLAGS Flags)
 {
     D3D12_RESOURCE_BARRIER Result;
     Result.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-    Result.Flags = flags;
-    Result.Transition.pResource = pResource;
-    Result.Transition.StateBefore = stateBefore;
-    Result.Transition.StateAfter = stateAfter;
-    Result.Transition.Subresource = subresource;
+    Result.Flags = Flags;
+    Result.Transition.pResource = Resource;
+    Result.Transition.StateBefore = StateBefore;
+    Result.Transition.StateAfter = StateAfter;
+    Result.Transition.Subresource = Subresource;
     return Result;
 };
 

@@ -156,7 +156,7 @@ inline m3 operator*(const m3& m1, const m3& m2)
     v3 SrcA0 = m1[0];
     v3 SrcA1 = m1[1];
     v3 SrcA2 = m1[2];
-     
+
     v3 SrcB0 = m2[0];
     v3 SrcB1 = m2[1];
     v3 SrcB2 = m2[2];

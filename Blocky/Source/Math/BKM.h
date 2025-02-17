@@ -6,8 +6,6 @@
 #include <cmath>
 #endif
 
-//#include "Core.h"
-
 // Mostly imported from glm library to reduce compile times
 namespace bkm {
     inline constexpr f32 PI = 3.1415927f;
@@ -40,6 +38,11 @@ namespace bkm {
 
         return scalar;
 #endif
+    }
+
+    inline bool Equals(f32 x, f32 y) noexcept
+    {
+        return Abs(x - y) < EPSILON;
     }
 
     inline f32 Sqrt(f32 x) noexcept

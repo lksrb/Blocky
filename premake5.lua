@@ -22,9 +22,7 @@ workspace "Blocky"
 		".gitignore",
 		"Dependencies.lua",
 		"premake5.lua",
-		"Resources/Quad.glsl",
-		"Resources/SimpleQuad.glsl",
-		"Resources/Shader.hlsl",
+		"Resources/Quad.hlsl",
 		"Blocky/Blocky.lua",
 		"Blocky-ResourcePacker/Blocky-ResourcePacker.lua",
 	}

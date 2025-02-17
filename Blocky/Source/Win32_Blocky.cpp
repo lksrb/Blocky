@@ -64,6 +64,8 @@
     printf(BK_RESET_COLOR "\n"); \
 } while(0)
 
+#define InfoV3(__V3) Info("(%.3f, %.3f, %.3f)", __V3.x, __V3.y, __V3.z)
+
 #define ENABLE_BITWISE_OPERATORS(Enum, SizeOfEnum)                   \
 constexpr Enum operator|(Enum inLHS, Enum inRHS)                     \
 {                                                                    \
@@ -144,10 +146,10 @@ struct game_window
 
 struct game_input
 {
-    bool W, S, A, D;
+    bool W, S, A, D, Q, E;
     bool MouseLeft, MouseMiddle, MouseRight;
 
-    bool MouseLeftPressed;
+    bool MouseLeftPressed, MouseMiddlePressed, MouseRightPressed;
 
     bool IsCursorLocked;
     bool IsCursorVisible = true;
@@ -254,8 +256,10 @@ internal void Win32ProcessEvents(game_input* Input)
 
     MSG Message;
 
-    // Pressed states gets to get "click" behaviour
+    // Pressed states to get the "click" behaviour
     Input->MouseLeftPressed = false;
+    Input->MouseMiddlePressed = false;
+    Input->MouseRightPressed = false;
 
     // Win32 message queue
     while (PeekMessage(&Message, nullptr, 0, 0, PM_REMOVE))
@@ -278,26 +282,12 @@ internal void Win32ProcessEvents(game_input* Input)
                 {
                     switch (VkCode)
                     {
-                        case 'W':
-                        {
-                            Input->W = IsDown;
-                            break;
-                        }
-                        case 'S':
-                        {
-                            Input->S = IsDown;
-                            break;
-                        }
-                        case 'A':
-                        {
-                            Input->A = IsDown;
-                            break;
-                        }
-                        case 'D':
-                        {
-                            Input->D = IsDown;
-                            break;
-                        }
+                        case 'W': { Input->W = IsDown; break; }
+                        case 'S': { Input->S = IsDown; break; }
+                        case 'A': { Input->A = IsDown; break; }
+                        case 'D': { Input->D = IsDown; break; }
+                        case 'Q': { Input->Q = IsDown; break; }
+                        case 'E': { Input->E = IsDown; break; }
                         case 'T':
                         {
                             if (IsDown)
@@ -366,12 +356,14 @@ internal void Win32ProcessEvents(game_input* Input)
             case WM_RBUTTONDBLCLK:
             {
                 Input->MouseRight = true;
+                Input->MouseRightPressed = true;
                 break;
             }
             case WM_MBUTTONDOWN:
             case WM_MBUTTONDBLCLK:
             {
                 Input->MouseMiddle = true;
+                Input->MouseMiddlePressed = true;
                 break;
             }
             case WM_LBUTTONUP:

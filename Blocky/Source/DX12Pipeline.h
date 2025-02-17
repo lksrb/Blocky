@@ -5,7 +5,8 @@ struct dx12_pipeline
     ID3D12PipelineState* Handle;
 };
 
-internal dx12_pipeline DX12PipelineCreate(ID3D12Device* Device, ID3D12RootSignature* RootSignature)
+// TODO: Make more generic 
+internal dx12_pipeline DX12PipelineCreate(ID3D12Device* Device, ID3D12RootSignature* RootSignature, const wchar_t* ShaderPath)
 {
     dx12_pipeline Pipeline = {};
 #if defined(BK_DEBUG)
@@ -15,20 +16,23 @@ internal dx12_pipeline DX12PipelineCreate(ID3D12Device* Device, ID3D12RootSignat
     const UINT CompileFlags = 0;
 #endif
 
-    ID3DBlob* VertexShader;
-    ID3DBlob* PixelShader;
+    ID3DBlob* VertexShader = nullptr;
+    ID3DBlob* PixelShader = nullptr;
 
-    ID3DBlob* ErrorMessage;
+    ID3DBlob* ErrorMessage = nullptr;
 
-    if (FAILED(D3DCompileFromFile(L"Resources/Shader.hlsl", nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "VSMain", "vs_5_1", CompileFlags, 0, &VertexShader, &ErrorMessage)))
+    // Really? Why isn't there some ANSI version?
+    if (FAILED(D3DCompileFromFile(ShaderPath, nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "VSMain", "vs_5_1", CompileFlags, 0, &VertexShader, &ErrorMessage)))
     {
-        Err("%s", (const char*)ErrorMessage->GetBufferPointer());
+        if (ErrorMessage)
+            Err("%s", (const char*)ErrorMessage->GetBufferPointer());
         Assert(false, "");
     }
 
-    if (FAILED(D3DCompileFromFile(L"Resources/Shader.hlsl", nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "PSMain", "ps_5_1", CompileFlags, 0, &PixelShader, &ErrorMessage)))
+    if (FAILED(D3DCompileFromFile(ShaderPath, nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "PSMain", "ps_5_1", CompileFlags, 0, &PixelShader, &ErrorMessage)))
     {
-        Err("%s", (const char*)ErrorMessage->GetBufferPointer());
+        if (ErrorMessage)
+            Err("%s", (const char*)ErrorMessage->GetBufferPointer());
         Assert(false, "");
     }
 
@@ -68,16 +72,18 @@ internal dx12_pipeline DX12PipelineCreate(ID3D12Device* Device, ID3D12RootSignat
     PipelineDesc.BlendState = {};
     PipelineDesc.BlendState.AlphaToCoverageEnable = FALSE;
     PipelineDesc.BlendState.IndependentBlendEnable = FALSE;
-    const D3D12_RENDER_TARGET_BLEND_DESC DefaultRenderTargetBlendDesc =
-    {
-        FALSE,FALSE,
-        D3D12_BLEND_ONE, D3D12_BLEND_ZERO, D3D12_BLEND_OP_ADD,
-        D3D12_BLEND_ONE, D3D12_BLEND_ZERO, D3D12_BLEND_OP_ADD,
-        D3D12_LOGIC_OP_NOOP,
-        D3D12_COLOR_WRITE_ENABLE_ALL,
-    };
     for (UINT i = 0; i < D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT; ++i)
-        PipelineDesc.BlendState.RenderTarget[i] = DefaultRenderTargetBlendDesc;
+    {
+        auto& Desc = PipelineDesc.BlendState.RenderTarget[i];
+        Desc.BlendEnable = TRUE;
+        Desc.SrcBlend = D3D12_BLEND_SRC_ALPHA;       // Use source alpha
+        Desc.DestBlend = D3D12_BLEND_INV_SRC_ALPHA;  // 1 - source alpha
+        Desc.BlendOp = D3D12_BLEND_OP_ADD;
+        Desc.SrcBlendAlpha = D3D12_BLEND_ONE;
+        Desc.DestBlendAlpha = D3D12_BLEND_ZERO;
+        Desc.BlendOpAlpha = D3D12_BLEND_OP_ADD;
+        Desc.RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+    }
 
     PipelineDesc.InputLayout = { InputElementDescs, CountOf(InputElementDescs) };
     PipelineDesc.pRootSignature = RootSignature;

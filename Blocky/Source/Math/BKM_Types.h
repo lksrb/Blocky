@@ -193,7 +193,7 @@ struct v3
     // Equality operators
     bool operator==(const v3& other) const
     {
-        return x == other.x && y == other.y && z == other.z;
+        return bkm::Equals(x, other.x) && bkm::Equals(y, other.y) && bkm::Equals(z, other.z);
     }
 
     bool operator!=(const v3& other) const

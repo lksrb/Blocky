@@ -97,7 +97,6 @@ internal constexpr inline v4 c_QuadVertexPositions[4]
 #include "DX12Buffer.h"
 #include "DX12Texture.h"
 #include "DX12Pipeline.h"
-#include "DX12IndexBuffer.h"
 
 // Strong-typed int
 enum class draw_layer : u32
@@ -109,13 +108,12 @@ enum class draw_layer : u32
 };
 #define DRAW_LAYER_COUNT (u32)draw_layer::COUNT
 
-struct draw_layer_data
+struct quad_draw_layer_data
 {
-    dx12_vertex_buffer VertexBuffers[FIF];
-    dx12_buffer IndexBuffer;
+    dx12_vertex_buffer VertexBuffer[FIF];
     quad_vertex* VertexDataBase;
     quad_vertex* VertexDataPtr;
-    u32 QuadIndexCount = 0;
+    u32 IndexCount = 0;
 };
 
 // Basically a push constant
@@ -185,11 +183,8 @@ struct game_renderer
 
     // Quad
     dx12_pipeline QuadPipeline;
-    dx12_vertex_buffer QuadVertexBuffer[FIF];
-    quad_vertex* QuadVertexDataBase;
-    quad_vertex* QuadVertexDataPtr;
     dx12_index_buffer QuadIndexBuffer;
-    u32 QuadIndexCount = 0;
+    quad_draw_layer_data QuadDrawLayers[DRAW_LAYER_COUNT] = {};
 };
 
 // Init / Destroy functions
@@ -202,18 +197,13 @@ internal void GameRendererResizeSwapChain(game_renderer* Renderer, u32 RequestWi
 
 // API-agnostic used in game code
 internal void GameRendererSetViewProjection(game_renderer* Renderer, m4 ViewProjection);
-internal void GameRendererSubmitQuad(game_renderer* Renderer, v3 Translation, v3 Rotation, v2 Scale, v4 Color);
-internal void GameRendererSubmitQuad(game_renderer* Renderer, v3 Translation, v3 Rotation, v2 Scale, texture Texture, v4 Color);
-internal void GameRendererSubmitCube(game_renderer* Renderer, v3 Translation, v3 Rotation, v3 Scale, texture Texture, v4 Color);
-internal void GameRendererSubmitCube(game_renderer* Renderer, v3 Translation, v3 Rotation, v3 Scale, v4 Color);
+internal void GameRendererSubmitQuad(game_renderer* Renderer, v3 Translation, v3 Rotation, v2 Scale, v4 Color, draw_layer Layer = draw_layer::First);
+internal void GameRendererSubmitQuad(game_renderer* Renderer, v3 Translation, v3 Rotation, v2 Scale, texture Texture, v4 Color, draw_layer Layer = draw_layer::First);
+internal void GameRendererSubmitCube(game_renderer* Renderer, v3 Translation, v3 Rotation, v3 Scale, texture Texture, v4 Color, draw_layer Layer = draw_layer::First);
+internal void GameRendererSubmitCube(game_renderer* Renderer, v3 Translation, v3 Rotation, v3 Scale, v4 Color, draw_layer Layer = draw_layer::First);
 
 // Helpers
-internal D3D12_RESOURCE_BARRIER GameRendererTransition(
-   ID3D12Resource* pResource,
-   D3D12_RESOURCE_STATES stateBefore,
-   D3D12_RESOURCE_STATES stateAfter,
-   UINT subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,
-   D3D12_RESOURCE_BARRIER_FLAGS flags = D3D12_RESOURCE_BARRIER_FLAG_NONE);
+internal D3D12_RESOURCE_BARRIER GameRendererTransition(ID3D12Resource* Resource, D3D12_RESOURCE_STATES StateBefore, D3D12_RESOURCE_STATES StateAfter, UINT Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_BARRIER_FLAGS Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE);
 
 internal void GameRendererDumpInfoQueue(ID3D12InfoQueue* InfoQueue);
 internal u64 GameRendererSignal(ID3D12CommandQueue* CommandQueue, ID3D12Fence* Fence, u64* FenceValue);
