@@ -147,6 +147,7 @@ struct game_window
 struct game_input
 {
     bool W, S, A, D, Q, E;
+    bool Shift, Control, BackSpace, Space;
     bool MouseLeft, MouseMiddle, MouseRight;
 
     bool MouseLeftPressed, MouseMiddlePressed, MouseRightPressed;
@@ -301,6 +302,10 @@ internal void Win32ProcessEvents(game_input* Input)
                             }
                             break;
                         }
+                        case VK_CONTROL: { Input->Control = IsDown; break; }
+                        case VK_SHIFT: { Input->Shift = IsDown; break; }
+                        case VK_SPACE: { Input->Space = IsDown; break; }
+                        case VK_BACK: { Input->BackSpace = IsDown; break; }
                         case VK_F4:
                         {
                             if (AltKeyWasDown)
@@ -418,23 +423,23 @@ internal void Win32ProcessEvents(game_input* Input)
             ::GetClientRect(g_WindowHandle, &Rect);
 
             // Store cursor position
-            //::GetCursorPos(&Input->RestoreMousePosition);
-            //::ScreenToClient(g_WindowHandle, &Input->RestoreMousePosition);
+            ::GetCursorPos(&Input->RestoreMousePosition);
+            ::ScreenToClient(g_WindowHandle, &Input->RestoreMousePosition);
 
-            //// Center cursor position
-            //POINT CenterCursor = { (LONG)g_ClientWidth / 2, (LONG)g_ClientHeight / 2 };
-            //::ClientToScreen(g_WindowHandle, &CenterCursor);
-            //::SetCursorPos(CenterCursor.x, CenterCursor.y);
+            // Center cursor position
+            POINT CenterCursor = { (LONG)g_ClientWidth / 2, (LONG)g_ClientHeight / 2 };
+            ::ClientToScreen(g_WindowHandle, &CenterCursor);
+            ::SetCursorPos(CenterCursor.x, CenterCursor.y);
         }
         else // Unlock
         {
             Trace("Cursor unlocked.");
 
             // Set last cursor position from the stored one
-          /*  POINT LastCursorPos = Input->RestoreMousePosition;
+            POINT LastCursorPos = Input->RestoreMousePosition;
             ::ClientToScreen(g_WindowHandle, &LastCursorPos);
             ::SetCursorPos(LastCursorPos.x, LastCursorPos.y);
-            Input->LastMousePosition = { LastCursorPos.x, LastCursorPos.y };*/
+            Input->LastMousePosition = { LastCursorPos.x, LastCursorPos.y };
         }
     }
 
@@ -459,8 +464,8 @@ internal void Win32ProcessEvents(game_input* Input)
 internal game_window CreateGameWindow()
 {
     game_window Window;
-    const u32 DefaultWindowWidth = u32(1600 * 1.3f);
-    const u32 DefaultWindowHeight = u32(900 * 1.3f);
+    const u32 DefaultWindowWidth = u32(1600);
+    const u32 DefaultWindowHeight = u32(900);
 
     // Show window on primary window
     // TODO: User should choose on which monitor to display

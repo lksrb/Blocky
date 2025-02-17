@@ -310,9 +310,9 @@ internal void GameRendererInitD3DPipeline(game_renderer* Renderer)
         // Sampler
         D3D12_STATIC_SAMPLER_DESC Sampler = {};
         Sampler.Filter = D3D12_FILTER_MIN_MAG_MIP_POINT;
-        Sampler.AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
-        Sampler.AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
-        Sampler.AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+        Sampler.AddressU = D3D12_TEXTURE_ADDRESS_MODE_MIRROR;
+        Sampler.AddressV = D3D12_TEXTURE_ADDRESS_MODE_MIRROR;
+        Sampler.AddressW = D3D12_TEXTURE_ADDRESS_MODE_MIRROR;
         Sampler.MipLODBias = 0;
         Sampler.MaxAnisotropy = 1;
         Sampler.ComparisonFunc = D3D12_COMPARISON_FUNC_ALWAYS;
@@ -521,9 +521,9 @@ internal void GameRendererResizeSwapChain(game_renderer* Renderer, u32 RequestWi
     Warn("SwapChain resized to %d %d", RequestWidth, RequestHeight);
 }
 
-internal void GameRendererSetViewProjection(game_renderer* Renderer, m4 ViewProjection)
+internal void GameRendererSetViewProjection(game_renderer* Renderer, m4 ViewProjection, draw_layer Layer)
 {
-    Renderer->RootSignatureBuffer.ViewProjection = ViewProjection;
+    Renderer->QuadDrawLayers[(u32)Layer].RootSignatureBuffer.ViewProjection = ViewProjection;
 }
 
 internal void GameRendererSubmitQuad(game_renderer* Renderer, v3 Translation, v3 Rotation, v2 Scale, v4 Color, draw_layer Layer)
@@ -736,7 +736,6 @@ internal void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
     // Number of 32 bit values - 16 floats in 4x4 matrix
     CommandList->SetGraphicsRootSignature(Renderer->RootSignature);
     CommandList->SetDescriptorHeaps(1, (ID3D12DescriptorHeap* const*)&Renderer->SRVDescriptorHeap);
-    CommandList->SetGraphicsRoot32BitConstants(0, 16, &Renderer->RootSignatureBuffer.ViewProjection, 0);
     CommandList->SetGraphicsRootDescriptorTable(1, Renderer->SRVDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
 
     // Quads
@@ -763,6 +762,8 @@ internal void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
             QuadIndexBufferView.Format = DXGI_FORMAT_R32_UINT;
             QuadIndexBufferView.SizeInBytes = DrawLayer.IndexCount * sizeof(u32);
             CommandList->IASetIndexBuffer(&QuadIndexBufferView);
+
+            CommandList->SetGraphicsRoot32BitConstants(0, 16, &DrawLayer.RootSignatureBuffer.ViewProjection, 0);
 
             // Issue draw call
             CommandList->DrawIndexedInstanced(DrawLayer.IndexCount, 1, 0, 0, 0);

@@ -9,6 +9,7 @@
 #include <d3d12.h>
 #include <dxgi1_6.h>
 #include <d3dcompiler.h>
+#include <DirectXMath.h>
 
 #pragma comment(lib, "d3d12.lib")
 #pragma comment(lib, "d3dcompiler.lib")
@@ -108,19 +109,20 @@ enum class draw_layer : u32
 };
 #define DRAW_LAYER_COUNT (u32)draw_layer::COUNT
 
+// Basically a push constant
+// TODO: Standardized push constant minimum value
+struct dx12_root_signature_constant_buffer
+{
+    m4 ViewProjection;
+};
+
 struct quad_draw_layer_data
 {
     dx12_vertex_buffer VertexBuffer[FIF];
     quad_vertex* VertexDataBase;
     quad_vertex* VertexDataPtr;
     u32 IndexCount = 0;
-};
-
-// Basically a push constant
-// TODO: Standardized push constant minimum value
-struct dx12_root_signature_constant_buffer
-{
-    m4 ViewProjection;
+    dx12_root_signature_constant_buffer RootSignatureBuffer;
 };
 
 // API-agnostic type definition
@@ -170,7 +172,6 @@ struct game_renderer
 
     // Describes resources used in the shader
     ID3D12RootSignature* RootSignature;
-    dx12_root_signature_constant_buffer RootSignatureBuffer;
 
     D3D12_VIEWPORT Viewport;
     D3D12_RECT ScissorRect;
@@ -196,11 +197,11 @@ internal void GameRendererInitD3DPipeline(game_renderer* Renderer);
 internal void GameRendererResizeSwapChain(game_renderer* Renderer, u32 RequestWidth, u32 RequestHeight);
 
 // API-agnostic used in game code
-internal void GameRendererSetViewProjection(game_renderer* Renderer, m4 ViewProjection);
-internal void GameRendererSubmitQuad(game_renderer* Renderer, v3 Translation, v3 Rotation, v2 Scale, v4 Color, draw_layer Layer = draw_layer::First);
-internal void GameRendererSubmitQuad(game_renderer* Renderer, v3 Translation, v3 Rotation, v2 Scale, texture Texture, v4 Color, draw_layer Layer = draw_layer::First);
-internal void GameRendererSubmitCube(game_renderer* Renderer, v3 Translation, v3 Rotation, v3 Scale, texture Texture, v4 Color, draw_layer Layer = draw_layer::First);
-internal void GameRendererSubmitCube(game_renderer* Renderer, v3 Translation, v3 Rotation, v3 Scale, v4 Color, draw_layer Layer = draw_layer::First);
+internal void GameRendererSetViewProjection(game_renderer* Renderer, m4 ViewProjection, draw_layer Layer);
+internal void GameRendererSubmitQuad(game_renderer* Renderer, v3 Translation, v3 Rotation, v2 Scale, v4 Color, draw_layer Layer);
+internal void GameRendererSubmitQuad(game_renderer* Renderer, v3 Translation, v3 Rotation, v2 Scale, texture Texture, v4 Color, draw_layer Layer);
+internal void GameRendererSubmitCube(game_renderer* Renderer, v3 Translation, v3 Rotation, v3 Scale, texture Texture, v4 Color, draw_layer Layer);
+internal void GameRendererSubmitCube(game_renderer* Renderer, v3 Translation, v3 Rotation, v3 Scale, v4 Color, draw_layer Layer);
 
 // Helpers
 internal D3D12_RESOURCE_BARRIER GameRendererTransition(ID3D12Resource* Resource, D3D12_RESOURCE_STATES StateBefore, D3D12_RESOURCE_STATES StateAfter, UINT Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_BARRIER_FLAGS Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE);
