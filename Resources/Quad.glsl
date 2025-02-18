@@ -9,7 +9,6 @@ layout(location = 0) in vec3 a_Position;
 layout(location = 1) in vec4 a_Color;
 layout(location = 2) in vec2 a_TextureCoord;
 layout(location = 3) in uint a_TextureIndex;
-layout(location = 4) in vec2 a_TextureTiling;
 
 layout(push_constant) uniform PC_Camera
 {
@@ -26,7 +25,7 @@ layout(location = 1) out VertexOutput
 void main()
 {
     o_Color = a_Color;
-    o_TextureCoord = a_TextureCoord * a_TextureTiling;
+    o_TextureCoord = a_TextureCoord;
 	o_TextureIndex = a_TextureIndex;
     gl_Position = pc_ViewProjection * vec4(a_Position, 1.0);
 }

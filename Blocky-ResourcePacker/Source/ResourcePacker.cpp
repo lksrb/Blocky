@@ -301,8 +301,7 @@ int main()
     OutStream << "BLPF";
 
     // Quad shader 
-    //WriteShader(OutStream, "Resources/Quad.glsl");
-    WriteShader(OutStream, "Resources/SimpleQuad.glsl");
+    WriteShader(OutStream, "Resources/Quad.glsl");
 
     // Write it all at once
     {

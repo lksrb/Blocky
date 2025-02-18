@@ -31,9 +31,6 @@
 #define GET_X_LPARAM(lp) ((int)(short)LOWORD(lp))
 #define GET_Y_LPARAM(lp) ((int)(short)HIWORD(lp))
 
-// Vulkan assert
-#define VkAssert(__vulkan_func) do { VkResult __result = (__vulkan_func); Assert(__result  == VK_SUCCESS, "%d", static_cast<u32>(__result)); } while(0)
-
 // Log
 #define BK_RESET_COLOR "\033[0m"
 #define BK_GREEN_COLOR "\033[32m"
@@ -170,10 +167,16 @@ struct buffer
     u64 Size;
 };
 
-#include "DX12Renderer.h"
-#include "Blocky.h"
+#define USE_VULKAN_RENDERER 0
 
-#include "DX12Renderer.cpp"
+#if USE_VULKAN_RENDERER
+    #include "Vulkan/VulkanRenderer.h"
+#else
+    #include "DX12/DX12Renderer.h"
+    #include "DX12/DX12Renderer.cpp"
+#endif
+
+#include "Blocky.h"
 #include "Blocky.cpp"
 
 internal u32 g_ClientWidth = 0;
@@ -569,7 +572,6 @@ int main(int argc, char** argv)
 
         // Render stuff
         GameRendererRender(&GameRenderer, g_ClientWidth, g_ClientHeight);
-        GameRendererDumpInfoQueue(GameRenderer.DebugInfoQueue);
 
         // Timestep
         LARGE_INTEGER EndCounter;

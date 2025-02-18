@@ -16,7 +16,7 @@
 #pragma comment(lib, "dxgi.lib")
 
 // D3D12 extension
-#include <d3dx12.h>
+#include "d3dx12.h"
 
 #define DxAssert(x) Assert(SUCCEEDED(x), #x)
 #define FIF 2

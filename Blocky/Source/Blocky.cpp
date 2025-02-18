@@ -98,11 +98,15 @@ internal game GameCreate(game_renderer* Renderer)
 {
     game Game = {};
 
+    /*
     Game.TestTexture = DX12TextureCreate(Renderer->Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, "Resources/Textures/LevelBackground.png");
+    */
 
-    Game.ContainerTexture = DX12TextureCreate(Renderer->Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, "Resources/Textures/MC/dirt_2.png");
+#if !USE_VULKAN_RENDERER
+    Game.ContainerTexture = TextureCreate(Renderer->Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, "Resources/Textures/MC/dirt_2.png");
 
-    Game.CrosshairTexture = DX12TextureCreate(Renderer->Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, "Resources/Textures/Crosshair.png");
+    Game.CrosshairTexture = TextureCreate(Renderer->Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, "Resources/Textures/MC/Crosshair.png");
+#endif
 
     {
         auto& Block = Game.Blocks.emplace_back();
@@ -243,6 +247,7 @@ internal void GameUpdateAndRender(game* Game, game_renderer* Renderer, const gam
 
         Game->Camera.View = bkm::Inverse(Game->Camera.View);
         Game->Camera.RecalculateProjectionPerspective(ClientAreaWidth, ClientAreaHeight);
+        //Game->Camera.RecalculateProjectionOrtho_V2(ClientAreaWidth, ClientAreaHeight);
     }
 
     // Render
@@ -251,7 +256,7 @@ internal void GameUpdateAndRender(game* Game, game_renderer* Renderer, const gam
     GameRendererSetViewProjection(Renderer, Game->Camera.GetViewProjection(), draw_layer::First);
     for (auto& Block : Game->Blocks)
     {
-        if (Block.Texture.Resource)
+        if (Block.Texture.Handle)
         {
             GameRendererSubmitCube(Renderer, Block.Translation, v3(0.0f), Block.Scale, Block.Texture, Block.Color, draw_layer::First);
         }
@@ -265,7 +270,7 @@ internal void GameUpdateAndRender(game* Game, game_renderer* Renderer, const gam
     // TODO: Delete
     for (auto& Block : Game->Intersections)
     {
-        if (Block.Texture.Resource)
+        if (Block.Texture.Handle)
         {
             GameRendererSubmitCube(Renderer, Block.Translation, v3(0.0f), Block.Scale, Block.Texture, Block.Color, draw_layer::First);
         }
@@ -275,31 +280,95 @@ internal void GameUpdateAndRender(game* Game, game_renderer* Renderer, const gam
         }
     }
 
-    // TODO: HUD
-
     // HUD
 
     // Orthographic projection
-
-    {
-        //f32 AspectRatio = static_cast<f32>(ClientAreaWidth) / ClientAreaHeight;
-        //f32 OrthoLeft = -0.5f * AspectRatio * OrthographicSize;
-        //f32 OrthoRight = 0.5f * AspectRatio * OrthographicSize;
-        //f32 OrthoBottom = -0.5f * OrthographicSize;
-        //f32 OrthoTop = 0.5f * OrthographicSize;
-        Game->Camera.RecalculateProjectionOrtho(ClientAreaWidth, ClientAreaHeight);
-    }
-
-    using namespace DirectX;
-
-    //XMMATRIX Ortho = XMMatrixOrthographicOffCenterLH(0.0f, ClientAreaWidth, ClientAreaHeight, 0.0f, 0.0f, 3.0f);
-    //memcpy(&Game->Camera.Projection, &Ortho, sizeof(XMMATRIX));
+    Game->Camera.RecalculateProjectionOrtho_V2(ClientAreaWidth, ClientAreaHeight);
 
     GameRendererSetViewProjection(Renderer, Game->Camera.Projection, draw_layer::Second);
+
+    // RENDERING PIXEL PERFECT STUFF
+    // RENDERING PIXEL PERFECT STUFF
+    // RENDERING PIXEL PERFECT STUFF
+    // RENDERING PIXEL PERFECT STUFF
+
+    f32 crosshairSize = 15.0f * 2;
+    f32 centerX = ClientAreaWidth / 2.0f - crosshairSize / 2.0f;
+    f32 centerY = ClientAreaHeight / 2.0f - crosshairSize / 2.0f;
+
+    f32 vertices[] = {
+        centerX,          centerY,          0.0f, 0.0f, 0.0f,  // Top-left
+        centerX + crosshairSize, centerY,          0.0f, 1.0f, 0.0f,  // Top-right
+        centerX + crosshairSize, centerY + crosshairSize,  0.0f, 1.0f, 1.0f,  // Bottom-right
+        centerX,          centerY + crosshairSize,  0.0f, 0.0f, 1.0f   // Bottom-left
+    };
+
+    v3 Positions[4];
+    Positions[0] = { centerX, centerY, 0.0f };
+    Positions[1] = { centerX + crosshairSize, centerY, 0.0f };
+    Positions[2] = { centerX + crosshairSize, centerY + crosshairSize, 0.0f };
+    Positions[3] = { centerX, centerY + crosshairSize, 0.0f };
+
+    v2 Coords[4];
+    Coords[0] = { 0.0f, 0.0f };
+    Coords[1] = { 1.0f, 0.0f };
+    Coords[2] = { 1.0f, 1.0f };
+    Coords[3] = { 0.0f, 1.0f };
+
+#if USE_VULKAN_RENDERER
     // Render crosshair
     {
-        v3 Dest = PlayerTranslation + Forward * 3.0f;
+       
+        {
+            for (u32 i = 0; i < CountOf(c_QuadVertexPositions); i++)
+            {
+                Renderer->QuadVertexDataPtr->Position = Positions[i];
+                Renderer->QuadVertexDataPtr->Color = v4(1.0f, 1.0f, 1.0f, 0.6f);
+                Renderer->QuadVertexDataPtr->TexCoord = Coords[i];
+                Renderer->QuadVertexDataPtr->TextureIndex = 0;
+                Renderer->QuadVertexDataPtr++;
+            }
+
+            Renderer->QuadIndexCount += 6;
+        }
+
         //v3 Dest = PlayerTranslation;
-        GameRendererSubmitQuad(Renderer, v3(0.0f, 0.0f, 0.0f), v3(0.0f), v2(0.1f, 0.1f), Game->CrosshairTexture, v4(1.0f, 1.0f, 1.0f, 0.6f), draw_layer::Second);
+        //GameRendererSubmitQuad(Renderer, v3(0.0f, 0.0f, 0.0f), v3(0.0f), v2(1.0f, 1.0f), Game->CrosshairTexture, v4(1.0f, 1.0f, 1.0f, 0.6f), draw_layer::Second);
     }
+
+#else // DirectX 12 renderer
+
+    // TODO: ID system, pointers are unreliable
+    u32 TextureIndex = 0;
+    for (u32 i = 1; i < Renderer->CurrentTextureStackIndex; i++)
+    {
+        if (Renderer->TextureStack[i].Handle == Game->CrosshairTexture.Handle)
+        {
+            TextureIndex = i;
+            break;
+        }
+    }
+
+    if (TextureIndex == 0)
+    {
+        Assert(Renderer->CurrentTextureStackIndex < c_MaxTexturesPerDrawCall, "Renderer->TextureStackIndex < c_MaxTexturesPerDrawCall");
+        TextureIndex = Renderer->CurrentTextureStackIndex;
+        Renderer->TextureStack[TextureIndex] = Game->CrosshairTexture;
+        Renderer->CurrentTextureStackIndex++;
+    }
+
+    auto& DrawLayer = Renderer->QuadDrawLayers[(u32)draw_layer::Second];
+
+    for (u32 i = 0; i < CountOf(c_QuadVertexPositions); i++)
+    {
+        DrawLayer.VertexDataPtr->Position = Positions[i];
+        DrawLayer.VertexDataPtr->Color = v4(1.0f, 1.0f, 1.0f, 0.6f);
+        DrawLayer.VertexDataPtr->TexCoord = Coords[i];
+        DrawLayer.VertexDataPtr->TexIndex = TextureIndex;
+        DrawLayer.VertexDataPtr++;
+    }
+
+    DrawLayer.IndexCount += 6;
+#endif
+
 }

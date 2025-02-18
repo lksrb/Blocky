@@ -37,7 +37,7 @@ internal void GameRendererDestroy(game_renderer* Renderer)
 
     DX12PipelineDestroy(&Renderer->QuadPipeline);
     DX12IndexBufferDestroy(&Renderer->QuadIndexBuffer);
-    DX12TextureDestroy(&Renderer->WhiteTexture);
+    TextureDestroy(&Renderer->WhiteTexture);
     Renderer->SwapChain->Release();
     Renderer->DSVDescriptorHeap->Release();
     Renderer->RTVDescriptorHeap->Release();
@@ -399,7 +399,7 @@ internal void GameRendererInitD3DPipeline(game_renderer* Renderer)
     {
         u32 WhiteColor = 0xffffffff;
         buffer Buffer = { &WhiteColor, sizeof(u32) };
-        Renderer->WhiteTexture = DX12TextureCreate(Renderer->Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, Buffer, 1, 1, DXGI_FORMAT_R8G8B8A8_UNORM);
+        Renderer->WhiteTexture = TextureCreate(Renderer->Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, Buffer, 1, 1, DXGI_FORMAT_R8G8B8A8_UNORM);
 
         // First element of the texture stack will be the white texture
         Renderer->TextureStack[0] = Renderer->WhiteTexture;
@@ -428,7 +428,7 @@ internal void GameRendererInitD3DPipeline(game_renderer* Renderer)
         Desc.Texture2D.MostDetailedMip = 0;
         Desc.Texture2D.PlaneSlice = 0;
         Desc.Texture2D.ResourceMinLODClamp = 0.0f;
-        Device->CreateShaderResourceView(Renderer->WhiteTexture.Resource, &Desc, SRV);
+        Device->CreateShaderResourceView(Renderer->WhiteTexture.Handle, &Desc, SRV);
 
         SRV.ptr += Increment;
     }
@@ -554,7 +554,7 @@ internal void GameRendererSubmitQuad(game_renderer* Renderer, v3 Translation, v3
 
 internal void GameRendererSubmitQuad(game_renderer* Renderer, v3 Translation, v3 Rotation, v2 Scale, texture Texture, v4 Color, draw_layer Layer)
 {
-    Assert(Texture.Resource != nullptr, "Texture is invalid!");
+    Assert(Texture.Handle != nullptr, "Texture is invalid!");
 
     auto& DrawLayer = Renderer->QuadDrawLayers[(u32)Layer];
 
@@ -562,7 +562,7 @@ internal void GameRendererSubmitQuad(game_renderer* Renderer, v3 Translation, v3
     u32 TextureIndex = 0;
     for (u32 i = 1; i < Renderer->CurrentTextureStackIndex; i++)
     {
-        if (Renderer->TextureStack[i].Resource == Texture.Resource)
+        if (Renderer->TextureStack[i].Handle == Texture.Handle)
         {
             TextureIndex = i;
             break;
@@ -601,7 +601,7 @@ internal void GameRendererSubmitQuad(game_renderer* Renderer, v3 Translation, v3
 
 internal void GameRendererSubmitCube(game_renderer* Renderer, v3 Translation, v3 Rotation, v3 Scale, texture Texture, v4 Color, draw_layer Layer)
 {
-    Assert(Texture.Resource != nullptr, "Texture is invalid!");
+    Assert(Texture.Handle != nullptr, "Texture is invalid!");
 
     auto& DrawLayer = Renderer->QuadDrawLayers[(u32)Layer];
 
@@ -609,7 +609,7 @@ internal void GameRendererSubmitCube(game_renderer* Renderer, v3 Translation, v3
     u32 TextureIndex = 0;
     for (u32 i = 1; i < Renderer->CurrentTextureStackIndex; i++)
     {
-        if (Renderer->TextureStack[i].Resource == Texture.Resource)
+        if (Renderer->TextureStack[i].Handle == Texture.Handle)
         {
             TextureIndex = i;
             break;
@@ -807,6 +807,9 @@ internal void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
 
     // Move to another back buffer
     Renderer->CurrentBackBufferIndex = Renderer->SwapChain->GetCurrentBackBufferIndex();
+
+    // Log dx12 stuff
+    GameRendererDumpInfoQueue(Renderer->DebugInfoQueue);
 }
 
 internal D3D12_RESOURCE_BARRIER GameRendererTransition(

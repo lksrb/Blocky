@@ -3,7 +3,7 @@
 internal ID3D12DescriptorHeap* g_OfflineTextureHeap = nullptr;
 internal u32 g_OfflineTextureHeapIndex = 0; // Simply increment every time a texture is created. TODO: Freelist allocator
 
-internal texture DX12TextureCreate(ID3D12Device* Device, ID3D12CommandAllocator* CommandAllocator, ID3D12GraphicsCommandList* CommandList, ID3D12CommandQueue* CommandQueue, buffer Pixels, u32 Width, u32 Height, DXGI_FORMAT Format)
+internal texture TextureCreate(ID3D12Device* Device, ID3D12CommandAllocator* CommandAllocator, ID3D12GraphicsCommandList* CommandList, ID3D12CommandQueue* CommandQueue, buffer Pixels, u32 Width, u32 Height, DXGI_FORMAT Format)
 {
     Assert(Pixels.Data && Pixels.Size, "Cannot create texture from empty buffer!");
     Assert(Pixels.Size <= Width * Height * 4, "Buffer is larger than Width * Height * FormatChannels!"); // TODO: Support more formats
@@ -41,11 +41,11 @@ internal texture DX12TextureCreate(ID3D12Device* Device, ID3D12CommandAllocator*
             &TextureDesc,
             D3D12_RESOURCE_STATE_COPY_DEST,
             nullptr,
-            IID_PPV_ARGS(&Texture.Resource)));
+            IID_PPV_ARGS(&Texture.Handle)));
 
         Texture.Width = Width;
         Texture.Height = Height;
-        Texture.Resource->SetName(L"DX12Texture");
+        Texture.Handle->SetName(L"DX12Texture");
     }
 
     // Create the GPU upload buffer.
@@ -82,7 +82,7 @@ internal texture DX12TextureCreate(ID3D12Device* Device, ID3D12CommandAllocator*
     {
         D3D12_TEXTURE_COPY_LOCATION Dst = {};
         {
-            Dst.pResource = Texture.Resource;
+            Dst.pResource = Texture.Handle;
             Dst.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
             Dst.SubresourceIndex = 0;
         }
@@ -115,7 +115,7 @@ internal texture DX12TextureCreate(ID3D12Device* Device, ID3D12CommandAllocator*
         GameRendererSubmitToQueueImmidiate(Device, CommandAllocator, CommandList, CommandQueue, [&](ID3D12GraphicsCommandList* CommandList)
         {
             CommandList->CopyTextureRegion(&Dst, 0, 0, 0, &Src, nullptr);
-            auto Barrier = GameRendererTransition(Texture.Resource, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+            auto Barrier = GameRendererTransition(Texture.Handle, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
             CommandList->ResourceBarrier(1, &Barrier);
         });
     }
@@ -146,7 +146,7 @@ internal texture DX12TextureCreate(ID3D12Device* Device, ID3D12CommandAllocator*
         Desc.Texture2D.PlaneSlice = 0;
         Desc.Texture2D.ResourceMinLODClamp = 0.0f;
         Texture.SRVDescriptor.ptr += g_OfflineTextureHeapIndex * DescriptorSize; // Free slot
-        Device->CreateShaderResourceView(Texture.Resource, &Desc, Texture.SRVDescriptor);
+        Device->CreateShaderResourceView(Texture.Handle, &Desc, Texture.SRVDescriptor);
 
         g_OfflineTextureHeapIndex++;
     }
@@ -154,7 +154,7 @@ internal texture DX12TextureCreate(ID3D12Device* Device, ID3D12CommandAllocator*
     return Texture;
 }
 
-internal texture DX12TextureCreate(ID3D12Device* Device, ID3D12CommandAllocator* CommandAllocator, ID3D12GraphicsCommandList* CommandList, ID3D12CommandQueue* CommandQueue, const char* Path)
+internal texture TextureCreate(ID3D12Device* Device, ID3D12CommandAllocator* CommandAllocator, ID3D12GraphicsCommandList* CommandList, ID3D12CommandQueue* CommandQueue, const char* Path)
 {
     // Load the image into memory
     int Width, Height, Channels;
@@ -164,14 +164,14 @@ internal texture DX12TextureCreate(ID3D12Device* Device, ID3D12CommandAllocator*
     u8* Pixels = stbi_load(Path, &Width, &Height, &Channels, 4);
     Assert(Channels == 4, "Failed to enforce 4 channels!");
 
-    return DX12TextureCreate(Device, CommandAllocator, CommandList, CommandQueue, buffer{ Pixels, (u64)Width * Height * 4 }, Width, Height);
+    return TextureCreate(Device, CommandAllocator, CommandList, CommandQueue, buffer{ Pixels, (u64)Width * Height * 4 }, Width, Height);
 }
 
-internal void DX12TextureDestroy(texture* Texture)
+internal void TextureDestroy(texture* Texture)
 {
     // TODO: Freelist
-    Texture->Resource->Release();
-    Texture->Resource = nullptr;
+    Texture->Handle->Release();
+    Texture->Handle = nullptr;
     Texture->Width = 0;
     Texture->Height = 0;
 }
