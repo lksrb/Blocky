@@ -102,15 +102,13 @@ internal game GameCreate(game_renderer* Renderer)
     Game.TestTexture = DX12TextureCreate(Renderer->Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, "Resources/Textures/LevelBackground.png");
     */
 
-#if !USE_VULKAN_RENDERER
-    Game.ContainerTexture = TextureCreate(Renderer->Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, "Resources/Textures/MC/dirt_2.png");
+    Game.DirtTexture = TextureCreate(Renderer->Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, "Resources/Textures/MC/dirt_2.png");
 
     Game.CrosshairTexture = TextureCreate(Renderer->Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, "Resources/Textures/MC/Crosshair.png");
-#endif
 
     {
         auto& Block = Game.Blocks.emplace_back();
-        Block.Texture = Game.ContainerTexture;
+        Block.Texture = Game.DirtTexture;
         Block.Color = v4(1.0f);
         Block.Translation = v3(0.0f, 0.0f, 0.0f);
     }
@@ -161,33 +159,33 @@ internal void GameUpdateAndRender(game* Game, game_renderer* Renderer, const gam
     // Movement
     {
         f32 Speed = 10.0f;
-        if (Input->W)
+        if (Input->IsKeyDown(key::W))
         {
             Direction += v3(Forward.x, 0.0f, Forward.z);
         }
 
-        if (Input->S)
+        if (Input->IsKeyDown(key::S))
         {
             Direction -= v3(Forward.x, 0.0f, Forward.z);
         }
 
-        if (Input->A)
+        if (Input->IsKeyDown(key::A))
         {
             Direction -= Right;
         }
 
-        if (Input->D)
+        if (Input->IsKeyDown(key::D))
         {
             Direction += Right;
         }
 
         // TODO: What happens on simultaneously press?
-        if (Input->Q || Input->BackSpace || Input->Space)
+        if (Input->IsKeyDown(key::Q) || Input->IsKeyDown(key::BackSpace) || Input->IsKeyDown(key::Space))
         {
             Direction += v3(0.0f, 1.0f, 0.0f);;
         }
 
-        if (Input->E || Input->Control || Input->Shift)
+        if (Input->IsKeyDown(key::E) || Input->IsKeyDown(key::Control) || Input->IsKeyDown(key::Shift))
         {
             Direction -= v3(0.0f, 1.0f, 0.0f);;
         }
@@ -199,7 +197,7 @@ internal void GameUpdateAndRender(game* Game, game_renderer* Renderer, const gam
     }
 
     // Place a block
-    if (Input->MouseRightPressed)
+    if (Input->IsMousePressed(mouse::Right))
     {
         ray Ray;
         Ray.Origin = PlayerTranslation;
@@ -213,14 +211,14 @@ internal void GameUpdateAndRender(game* Game, game_renderer* Renderer, const gam
         {
             block NewBlock;
             NewBlock.Translation = HitBlock.Translation + HitNormal;
-            NewBlock.Texture = Game->ContainerTexture;
+            NewBlock.Texture = Game->DirtTexture;
             Game->Blocks.push_back(NewBlock);
             Info("New block added");
         }
     }
 
     // Destroy a block
-    if (Input->MouseLeftPressed)
+    if (Input->IsMousePressed(mouse::Left))
     {
         ray Ray;
         Ray.Origin = PlayerTranslation;
@@ -234,7 +232,7 @@ internal void GameUpdateAndRender(game* Game, game_renderer* Renderer, const gam
         {
             block NewBlock;
             NewBlock.Translation = HitBlock.Translation + HitNormal;
-            NewBlock.Texture = Game->ContainerTexture;
+            NewBlock.Texture = Game->DirtTexture;
             Game->Blocks.erase(Game->Blocks.begin() + HitIndex);
             Info("Block destroyed.");
         }
@@ -253,17 +251,36 @@ internal void GameUpdateAndRender(game* Game, game_renderer* Renderer, const gam
     // Render
 
     // Render blocks
-    GameRendererSetViewProjection(Renderer, Game->Camera.GetViewProjection(), draw_layer::First);
+    GameRendererSetViewProjection(Renderer, Game->Camera.GetViewProjection(), draw_layer::Main);
     for (auto& Block : Game->Blocks)
     {
         if (Block.Texture.Handle)
         {
-            GameRendererSubmitCube(Renderer, Block.Translation, v3(0.0f), Block.Scale, Block.Texture, Block.Color, draw_layer::First);
+            GameRendererSubmitCube(Renderer, Block.Translation, v3(0.0f), Block.Scale, Block.Texture, Block.Color, draw_layer::Main);
         }
         else
         {
-            GameRendererSubmitCube(Renderer, Block.Translation, v3(0.0f), Block.Scale, Block.Color, draw_layer::First);
+            GameRendererSubmitCube(Renderer, Block.Translation, v3(0.0f), Block.Scale, Block.Color, draw_layer::Main);
         }
+    }
+
+    if (Input->IsMouseDown(mouse::Middle))
+    {
+        static v3 Pos = v3(0.0f, 10.0f, 0.0f);
+        static v3 Vel = v3(0.0f);
+        f32 G = -9.81;
+
+        Vel.y += G * TimeStep;
+
+        Pos += Vel * TimeStep;
+
+        if (Pos.y < 1)
+        {
+            Pos.y = 1;
+            Vel.y = 0;
+        }
+
+        GameRendererSubmitCube(Renderer, Pos, v3(0.0f), v3(1.0f), Game->DirtTexture, v4(1.0), draw_layer::Main);
     }
 
     // Render intersections
@@ -272,36 +289,24 @@ internal void GameUpdateAndRender(game* Game, game_renderer* Renderer, const gam
     {
         if (Block.Texture.Handle)
         {
-            GameRendererSubmitCube(Renderer, Block.Translation, v3(0.0f), Block.Scale, Block.Texture, Block.Color, draw_layer::First);
+            GameRendererSubmitCube(Renderer, Block.Translation, v3(0.0f), Block.Scale, Block.Texture, Block.Color, draw_layer::Main);
         }
         else
         {
-            GameRendererSubmitCube(Renderer, Block.Translation, v3(0.0f), Block.Scale, Block.Color, draw_layer::First);
+            GameRendererSubmitCube(Renderer, Block.Translation, v3(0.0f), Block.Scale, Block.Color, draw_layer::Main);
         }
     }
 
     // HUD
+    // HUD
+    // HUD
 
-    // Orthographic projection
+    // Orthographic projection: 0, 0, ClientAreaWidth, ClientAreaHeight
     Game->Camera.RecalculateProjectionOrtho_V2(ClientAreaWidth, ClientAreaHeight);
-
-    GameRendererSetViewProjection(Renderer, Game->Camera.Projection, draw_layer::Second);
-
-    // RENDERING PIXEL PERFECT STUFF
-    // RENDERING PIXEL PERFECT STUFF
-    // RENDERING PIXEL PERFECT STUFF
-    // RENDERING PIXEL PERFECT STUFF
-
-    f32 crosshairSize = 15.0f * 2;
+    GameRendererSetViewProjection(Renderer, Game->Camera.Projection, draw_layer::HUD);
+    f32 crosshairSize = 15.0f * 2.0f;
     f32 centerX = ClientAreaWidth / 2.0f - crosshairSize / 2.0f;
     f32 centerY = ClientAreaHeight / 2.0f - crosshairSize / 2.0f;
-
-    f32 vertices[] = {
-        centerX,          centerY,          0.0f, 0.0f, 0.0f,  // Top-left
-        centerX + crosshairSize, centerY,          0.0f, 1.0f, 0.0f,  // Top-right
-        centerX + crosshairSize, centerY + crosshairSize,  0.0f, 1.0f, 1.0f,  // Bottom-right
-        centerX,          centerY + crosshairSize,  0.0f, 0.0f, 1.0f   // Bottom-left
-    };
 
     v3 Positions[4];
     Positions[0] = { centerX, centerY, 0.0f };
@@ -309,66 +314,5 @@ internal void GameUpdateAndRender(game* Game, game_renderer* Renderer, const gam
     Positions[2] = { centerX + crosshairSize, centerY + crosshairSize, 0.0f };
     Positions[3] = { centerX, centerY + crosshairSize, 0.0f };
 
-    v2 Coords[4];
-    Coords[0] = { 0.0f, 0.0f };
-    Coords[1] = { 1.0f, 0.0f };
-    Coords[2] = { 1.0f, 1.0f };
-    Coords[3] = { 0.0f, 1.0f };
-
-#if USE_VULKAN_RENDERER
-    // Render crosshair
-    {
-       
-        {
-            for (u32 i = 0; i < CountOf(c_QuadVertexPositions); i++)
-            {
-                Renderer->QuadVertexDataPtr->Position = Positions[i];
-                Renderer->QuadVertexDataPtr->Color = v4(1.0f, 1.0f, 1.0f, 0.6f);
-                Renderer->QuadVertexDataPtr->TexCoord = Coords[i];
-                Renderer->QuadVertexDataPtr->TextureIndex = 0;
-                Renderer->QuadVertexDataPtr++;
-            }
-
-            Renderer->QuadIndexCount += 6;
-        }
-
-        //v3 Dest = PlayerTranslation;
-        //GameRendererSubmitQuad(Renderer, v3(0.0f, 0.0f, 0.0f), v3(0.0f), v2(1.0f, 1.0f), Game->CrosshairTexture, v4(1.0f, 1.0f, 1.0f, 0.6f), draw_layer::Second);
-    }
-
-#else // DirectX 12 renderer
-
-    // TODO: ID system, pointers are unreliable
-    u32 TextureIndex = 0;
-    for (u32 i = 1; i < Renderer->CurrentTextureStackIndex; i++)
-    {
-        if (Renderer->TextureStack[i].Handle == Game->CrosshairTexture.Handle)
-        {
-            TextureIndex = i;
-            break;
-        }
-    }
-
-    if (TextureIndex == 0)
-    {
-        Assert(Renderer->CurrentTextureStackIndex < c_MaxTexturesPerDrawCall, "Renderer->TextureStackIndex < c_MaxTexturesPerDrawCall");
-        TextureIndex = Renderer->CurrentTextureStackIndex;
-        Renderer->TextureStack[TextureIndex] = Game->CrosshairTexture;
-        Renderer->CurrentTextureStackIndex++;
-    }
-
-    auto& DrawLayer = Renderer->QuadDrawLayers[(u32)draw_layer::Second];
-
-    for (u32 i = 0; i < CountOf(c_QuadVertexPositions); i++)
-    {
-        DrawLayer.VertexDataPtr->Position = Positions[i];
-        DrawLayer.VertexDataPtr->Color = v4(1.0f, 1.0f, 1.0f, 0.6f);
-        DrawLayer.VertexDataPtr->TexCoord = Coords[i];
-        DrawLayer.VertexDataPtr->TexIndex = TextureIndex;
-        DrawLayer.VertexDataPtr++;
-    }
-
-    DrawLayer.IndexCount += 6;
-#endif
-
+    GameRendererSubmitQuadCustom(Renderer, Positions, Game->CrosshairTexture, v4(1.0f, 1.0f, 1.0f, 0.7f), draw_layer::HUD);
 }

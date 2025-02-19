@@ -102,8 +102,8 @@ internal constexpr inline v4 c_QuadVertexPositions[4]
 // Strong-typed int
 enum class draw_layer : u32
 {
-    First = 0,
-    Second,
+    Main = 0,
+    HUD,
 
     COUNT
 };
@@ -202,6 +202,7 @@ internal void GameRendererSubmitQuad(game_renderer* Renderer, v3 Translation, v3
 internal void GameRendererSubmitQuad(game_renderer* Renderer, v3 Translation, v3 Rotation, v2 Scale, texture Texture, v4 Color, draw_layer Layer);
 internal void GameRendererSubmitCube(game_renderer* Renderer, v3 Translation, v3 Rotation, v3 Scale, texture Texture, v4 Color, draw_layer Layer);
 internal void GameRendererSubmitCube(game_renderer* Renderer, v3 Translation, v3 Rotation, v3 Scale, v4 Color, draw_layer Layer);
+internal void GameRendererSubmitQuadCustom(game_renderer* Renderer, v3 VertexPositions[4], texture Texture, v4 Color, draw_layer Layer);
 
 // Helpers
 internal D3D12_RESOURCE_BARRIER GameRendererTransition(ID3D12Resource* Resource, D3D12_RESOURCE_STATES StateBefore, D3D12_RESOURCE_STATES StateAfter, UINT Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_BARRIER_FLAGS Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE);

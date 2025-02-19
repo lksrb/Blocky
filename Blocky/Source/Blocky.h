@@ -27,7 +27,7 @@ struct camera
 
     void RecalculateProjectionOrtho_V2(u32 Width, u32 Height)
     {
-        Projection = bkm::Ortho(0, Width, Height, 0, -1.0f, 1.0f);
+        Projection = bkm::Ortho(0, (f32)Width, (f32)Height, 0, -1.0f, 1.0f);
     }
 
     void RecalculateProjectionPerspective(u32 Width, u32 Height)
@@ -68,7 +68,7 @@ struct game
 
     texture CrosshairTexture;
     texture TestTexture;
-    texture ContainerTexture;
+    texture DirtTexture;
 };
 
 internal game GameCreate(game_renderer* Renderer);

@@ -1164,8 +1164,8 @@ static void GameRendererDestroy(game_renderer* Renderer)
 
 enum class draw_layer
 {
-    First,
-    Second
+    Main,
+    HUD
 };
 
 static void GameRendererSubmitCube(game_renderer* Renderer, v3 Translation, v3 Rotation, v3 Scale, texture Texture, v4 Color, draw_layer Layer)

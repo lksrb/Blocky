@@ -672,6 +672,49 @@ internal void GameRendererSubmitCube(game_renderer* Renderer, v3 Translation, v3
     DrawLayer.IndexCount += 36;
 }
 
+internal void GameRendererSubmitQuadCustom(game_renderer* Renderer, v3 VertexPositions[4], texture Texture, v4 Color, draw_layer Layer)
+{
+    Assert(Texture.Handle != nullptr, "Texture handle is nullptr!");
+
+    // TODO: ID system, pointers are unreliable
+    u32 TextureIndex = 0;
+    for (u32 i = 1; i < Renderer->CurrentTextureStackIndex; i++)
+    {
+        if (Renderer->TextureStack[i].Handle == Texture.Handle)
+        {
+            TextureIndex = i;
+            break;
+        }
+    }
+
+    if (TextureIndex == 0)
+    {
+        Assert(Renderer->CurrentTextureStackIndex < c_MaxTexturesPerDrawCall, "Renderer->TextureStackIndex < c_MaxTexturesPerDrawCall");
+        TextureIndex = Renderer->CurrentTextureStackIndex;
+        Renderer->TextureStack[TextureIndex] = Texture;
+        Renderer->CurrentTextureStackIndex++;
+    }
+
+    v2 Coords[4];
+    Coords[0] = { 0.0f, 0.0f };
+    Coords[1] = { 1.0f, 0.0f };
+    Coords[2] = { 1.0f, 1.0f };
+    Coords[3] = { 0.0f, 1.0f };
+
+    auto& DrawLayer = Renderer->QuadDrawLayers[(u32)Layer];
+
+    for (u32 i = 0; i < 4; i++)
+    {
+        DrawLayer.VertexDataPtr->Position = VertexPositions[i];
+        DrawLayer.VertexDataPtr->Color = Color;
+        DrawLayer.VertexDataPtr->TexCoord = Coords[i];
+        DrawLayer.VertexDataPtr->TexIndex = TextureIndex;
+        DrawLayer.VertexDataPtr++;
+    }
+
+    DrawLayer.IndexCount += 6;
+}
+
 internal void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
 {
     // Get current frame stuff
