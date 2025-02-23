@@ -51,25 +51,42 @@ struct aabb
     v3 Max;
 };
 
+enum class block_type : u32
+{
+    Dirt = 0,
+
+    INVALID
+};
+#define BLOCK_TYPE_COUNT (u32)block_type::INVALID
+
 struct block
 {
+    bool Placed = false;
     v3 Translation = {};
     v3 Scale = v3(1.0f);
-    texture Texture = {};
     v4 Color = v4(1.0f);
+    texture Texture = {};
+    i32 Left = INT_MAX, Right = INT_MAX, Front = INT_MAX, Back = INT_MAX; // Neighbours
+    block_type Type = block_type::INVALID;
 };
+
+static const u64 RowCount = 16;
+static const u64 ColumnCount = 16;
+static const u64 LayerCount = 16;
 
 struct game
 {
     camera Camera;
 
+    block LogicBlocks[RowCount * ColumnCount * LayerCount];
+
     std::vector<block> Blocks;
     std::vector<block> Intersections;
 
     texture CrosshairTexture;
-    texture TestTexture;
-    texture DirtTexture;
+
+    texture BlockTextures[BLOCK_TYPE_COUNT];
 };
 
 internal game GameCreate(game_renderer* Renderer);
-internal void GameUpdateAndRender(game* Game, game_renderer* Renderer, const game_input* Input, f32 TimeStep, u32 ClientAreaWidth, u32 ClientAreaHeight);
+internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* Input, f32 TimeStep, u32 ClientAreaWidth, u32 ClientAreaHeight);

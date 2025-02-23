@@ -8,8 +8,8 @@
 struct texture
 {
     ID3D12Resource* Handle;
-    u64 Width;
-    u64 Height;
+    u32 Width;
+    u32 Height;
     DXGI_FORMAT Format;
     D3D12_CPU_DESCRIPTOR_HANDLE SRVDescriptor;
 };

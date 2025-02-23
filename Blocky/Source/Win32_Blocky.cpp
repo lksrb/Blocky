@@ -105,12 +105,14 @@ constexpr Enum& operator^=(Enum& ioLHS, Enum inRHS)                  \
     return ioLHS;                                                    \
 }                                                                    \
 
+// SIMD Stuff
+#define ENABLE_SIMD 1
+
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 
 #include <malloc.h>
 #include <stdio.h>
-
 #include <cstdint>
 
 // Primitive types
@@ -143,7 +145,7 @@ struct game_window
 
 enum class key : u32
 {
-    W = 0, S, A, D, Q, E, Shift, Control, BackSpace, Space, COUNT
+    W = 0, S, A, D, Q, E, T, Shift, Control, BackSpace, Space, COUNT
 };
 
 enum class mouse : u32
@@ -168,8 +170,8 @@ struct game_input
     bool IsCursorLocked;
     bool IsCursorVisible = true;
 
-    V2i LastMousePosition;
-    V2i VirtualMousePosition;
+    v2i LastMousePosition;
+    v2i VirtualMousePosition;
 
     i32 MouseScrollDelta;
 
@@ -189,13 +191,59 @@ struct buffer
     u64 Size;
 };
 
+class ScopedTimer
+{
+public:
+    ScopedTimer(const char* name, bool output = true)
+        : m_Name(name), m_Output(output)
+    {
+        ::QueryPerformanceCounter(&m_Start);
+    }
+
+    f32 Stop()
+    {
+        // Get counter
+        LARGE_INTEGER end;
+        ::QueryPerformanceCounter(&end);
+
+        // Get frequency - should not change
+        LARGE_INTEGER frequency;
+        ::QueryPerformanceFrequency(&frequency);
+
+        f32 timeStep = ((end.QuadPart - m_Start.QuadPart) / static_cast<f32>(frequency.QuadPart));
+        return timeStep * 1000.0f;
+    }
+
+    ~ScopedTimer()
+    {
+        if (m_Output == false)
+            return;
+
+        // Get counter
+        LARGE_INTEGER end;
+        ::QueryPerformanceCounter(&end);
+
+        // Get frequency - should not change
+        LARGE_INTEGER frequency;
+        ::QueryPerformanceFrequency(&frequency);
+
+        f32 timeStep = ((end.QuadPart - m_Start.QuadPart) / static_cast<f32>(frequency.QuadPart));
+
+        Trace("%s took %.5f ms", m_Name, timeStep * 1000.0f);
+    }
+private:
+    LARGE_INTEGER m_Start;
+    const char* m_Name;
+    bool m_Output;
+};
+
 #define USE_VULKAN_RENDERER 0
 
 #if USE_VULKAN_RENDERER
-    #include "Vulkan/VulkanRenderer.h"
+#include "Vulkan/VulkanRenderer.h"
 #else
-    #include "DX12/DX12Renderer.h"
-    #include "DX12/DX12Renderer.cpp"
+#include "DX12/DX12Renderer.h"
+#include "DX12/DX12Renderer.cpp"
 #endif
 
 #include "Blocky.h"
@@ -206,7 +254,6 @@ internal u32 g_ClientHeight = 0;
 internal bool g_DoResize = false;
 internal bool g_IsRunning = false;
 internal bool g_IsFocused = false;
-internal HWND g_WindowHandle;
 
 LRESULT Win32ProcedureHandler(HWND WindowHandle, UINT Message, WPARAM WParam, LPARAM LParam)
 {
@@ -275,7 +322,7 @@ LRESULT Win32ProcedureHandler(HWND WindowHandle, UINT Message, WPARAM WParam, LP
     return Result;
 }
 
-internal void Win32ProcessEvents(game_input* Input)
+internal void Win32ProcessEvents(game_window Window, game_input* Input)
 {
     bool DoSetCursorLock = false;
     bool DoSetShowCursor = false;
@@ -307,14 +354,16 @@ internal void Win32ProcessEvents(game_input* Input)
                 {
                     switch (VkCode)
                     {
-                        case 'W': { Input->KeyDown[(u32)key::W] = IsDown; break; }
-                        case 'S': { Input->KeyDown[(u32)key::S] = IsDown; break; }
-                        case 'A': { Input->KeyDown[(u32)key::A] = IsDown; break; }
-                        case 'D': { Input->KeyDown[(u32)key::D] = IsDown; break; }
-                        case 'Q': { Input->KeyDown[(u32)key::Q] = IsDown; break; }
-                        case 'E': { Input->KeyDown[(u32)key::E] = IsDown; break; }
+                        case 'W': { Input->KeyDown[(u32)key::W] = Input->KeyPressed[(u32)key::W] = IsDown; break; }
+                        case 'S': { Input->KeyDown[(u32)key::S] = Input->KeyPressed[(u32)key::S] = IsDown; break; }
+                        case 'A': { Input->KeyDown[(u32)key::A] = Input->KeyPressed[(u32)key::A] = IsDown; break; }
+                        case 'D': { Input->KeyDown[(u32)key::D] = Input->KeyPressed[(u32)key::D] = IsDown; break; }
+                        case 'Q': { Input->KeyDown[(u32)key::Q] = Input->KeyPressed[(u32)key::Q] = IsDown; break; }
+                        case 'E': { Input->KeyDown[(u32)key::E] = Input->KeyPressed[(u32)key::E] = IsDown; break; }
                         case 'T':
                         {
+                            Input->KeyDown[(u32)key::T] = Input->KeyPressed[(u32)key::T] = IsDown;
+
                             if (IsDown)
                             {
                                 DoSetCursorLock = true;
@@ -326,10 +375,10 @@ internal void Win32ProcessEvents(game_input* Input)
                             }
                             break;
                         }
-                        case VK_CONTROL: { Input->KeyDown[(u32)key::Control] = IsDown; break; }
-                        case VK_SHIFT: { Input->KeyDown[(u32)key::Shift] = IsDown; break; }
-                        case VK_SPACE: { Input->KeyDown[(u32)key::Space] = IsDown; break; }
-                        case VK_BACK: { Input->KeyDown[(u32)key::BackSpace] = IsDown; break; }
+                        case VK_CONTROL: { Input->KeyDown[(u32)key::Control] = Input->KeyPressed[(u32)key::Control] = IsDown; break; }
+                        case VK_SHIFT: { Input->KeyDown[(u32)key::Shift] = Input->KeyPressed[(u32)key::Shift] = IsDown; break; }
+                        case VK_SPACE: { Input->KeyDown[(u32)key::Space] = Input->KeyPressed[(u32)key::Space] = IsDown; break; }
+                        case VK_BACK: { Input->KeyDown[(u32)key::BackSpace] = Input->KeyPressed[(u32)key::BackSpace] = IsDown; break; }
                         case VK_F4:
                         {
                             if (AltKeyWasDown)
@@ -348,8 +397,8 @@ internal void Win32ProcessEvents(game_input* Input)
             }
             case WM_MOUSEMOVE:
             {
-                V2i MousePos = { GET_X_LPARAM(Message.lParam), GET_Y_LPARAM(Message.lParam) };
-                V2i MouseDelta = MousePos - Input->LastMousePosition;
+                v2i MousePos = { GET_X_LPARAM(Message.lParam), GET_Y_LPARAM(Message.lParam) };
+                v2i MouseDelta = MousePos - Input->LastMousePosition;
                 Input->VirtualMousePosition += MouseDelta;
                 Input->LastMousePosition = MousePos;
 
@@ -402,12 +451,12 @@ internal void Win32ProcessEvents(game_input* Input)
             }
             case WM_RBUTTONUP:
             {
-                Input->MouseDown[(u32)mouse::Left] = false;
+                Input->MouseDown[(u32)mouse::Right] = false;
                 break;
             }
             case WM_MBUTTONUP:
             {
-                Input->MouseDown[(u32)mouse::Left] = false;
+                Input->MouseDown[(u32)mouse::Middle] = false;
                 break;
             }
 
@@ -451,15 +500,15 @@ internal void Win32ProcessEvents(game_input* Input)
             Trace("Cursor locked.");
 
             RECT Rect;
-            ::GetClientRect(g_WindowHandle, &Rect);
+            ::GetClientRect(Window.WindowHandle, &Rect);
 
             // Store cursor position
             ::GetCursorPos(&Input->RestoreMousePosition);
-            ::ScreenToClient(g_WindowHandle, &Input->RestoreMousePosition);
+            ::ScreenToClient(Window.WindowHandle, &Input->RestoreMousePosition);
 
             // Center cursor position
             POINT CenterCursor = { (LONG)g_ClientWidth / 2, (LONG)g_ClientHeight / 2 };
-            ::ClientToScreen(g_WindowHandle, &CenterCursor);
+            ::ClientToScreen(Window.WindowHandle, &CenterCursor);
             ::SetCursorPos(CenterCursor.x, CenterCursor.y);
         }
         else // Unlock
@@ -468,7 +517,7 @@ internal void Win32ProcessEvents(game_input* Input)
 
             // Set last cursor position from the stored one
             POINT LastCursorPos = Input->RestoreMousePosition;
-            ::ClientToScreen(g_WindowHandle, &LastCursorPos);
+            ::ClientToScreen(Window.WindowHandle, &LastCursorPos);
             ::SetCursorPos(LastCursorPos.x, LastCursorPos.y);
             Input->LastMousePosition = { LastCursorPos.x, LastCursorPos.y };
         }
@@ -479,14 +528,14 @@ internal void Win32ProcessEvents(game_input* Input)
     {
         // Center cursor position
         POINT CenterCursor = { static_cast<int>(g_ClientWidth / 2), static_cast<int>(g_ClientHeight / 2) };
-        ::ClientToScreen(g_WindowHandle, &CenterCursor);
+        ::ClientToScreen(Window.WindowHandle, &CenterCursor);
 
         // Center cursor
         if (Input->LastMousePosition.x != CenterCursor.y || Input->LastMousePosition.y != CenterCursor.y)
         {
             POINT Pos = { (LONG)g_ClientWidth / 2, (LONG)g_ClientHeight / 2 };
             Input->LastMousePosition = { Pos.x, Pos.y };
-            ::ClientToScreen(g_WindowHandle, &Pos);
+            ::ClientToScreen(Window.WindowHandle, &Pos);
             ::SetCursorPos(Pos.x, Pos.y);
         }
     }
@@ -556,9 +605,6 @@ int main(int argc, char** argv)
     g_ClientWidth = Window.ClientAreaWidth;
     g_ClientHeight = Window.ClientAreaHeight;
 
-    // TODO: Figure out how to do this
-    g_WindowHandle = Window.WindowHandle;
-
     // Initialize renderer
     game_renderer GameRenderer = GameRendererCreate(Window);
 
@@ -581,8 +627,10 @@ int main(int argc, char** argv)
     game_input Input = {};
     while (g_IsRunning)
     {
+        //ScopedTimer timer("Frame");
+
         // Process events
-        Win32ProcessEvents(&Input);
+        Win32ProcessEvents(Window, &Input);
 
         IsMinimized = IsIconic(Window.WindowHandle);
 
@@ -595,15 +643,26 @@ int main(int argc, char** argv)
 
         if (!IsMinimized)
         {
-            GameUpdateAndRender(&Game, &GameRenderer, &Input, TimeStep, g_ClientWidth, g_ClientHeight);
+            //ScopedTimer timer("Game update");
+            GameUpdate(&Game, &GameRenderer, &Input, TimeStep, g_ClientWidth, g_ClientHeight);
         }
 
         // Render stuff
-        GameRendererRender(&GameRenderer, g_ClientWidth, g_ClientHeight);
+        {
+            //ScopedTimer timer("Game render");
+            GameRendererRender(&GameRenderer, g_ClientWidth, g_ClientHeight);
+        }
 
         // Timestep
         LARGE_INTEGER EndCounter;
         QueryPerformanceCounter(&EndCounter);
+
+        {
+            char Title[64];
+            sprintf_s(Title, "Blocky %.3f ms", TimeStep * 1000.0f);
+
+            SetWindowTextA(Window.WindowHandle, Title);
+        }
 
         i64 CounterElapsed = EndCounter.QuadPart - LastCounter.QuadPart;
         TimeStep = (CounterElapsed / static_cast<f32>(CounterFrequency.QuadPart));

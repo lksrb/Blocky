@@ -535,7 +535,7 @@ namespace bkm {
         return Max(minimum, Min(value, maximum));
     }
 
-    inline v3 ScreenToRaycastDirection(V2i position, v4 viewport, m4 viewProjection)
+    inline v3 ScreenToRaycastDirection(v2i position, v4 viewport, m4 viewProjection)
     {
         m4 inverse = Inverse(viewProjection);
         v4 worldNear(0.0f);
@@ -570,7 +570,7 @@ namespace bkm {
     }
 
     // Converts 2D screen coordinates to world position
-    inline v2 OrthoScreenToWorld(V2i screenPos, V2i screenSize, m4 viewProjection)
+    inline v2 OrthoScreenToWorld(v2i screenPos, v2i screenSize, m4 viewProjection)
     {
         // Convert screen space coordinates to normalized device coordinates (NDC)
         f32 normalizedX = (2.0f * screenPos.x) / screenSize.x - 1.0f;

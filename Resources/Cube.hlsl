@@ -5,10 +5,7 @@ cbuffer root_constants : register(b0)
 
 struct vertex_shader_input
 {
-    float4 Position : POSITION;
-    float4 Color : COLOR;
-    float2 TexCoord : TEXCOORD;
-    uint TexIndex : TEXINDEX;
+    
 };
 
 struct pixel_shader_input

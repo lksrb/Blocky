@@ -10,6 +10,7 @@
 #include <dxgi1_6.h>
 #include <d3dcompiler.h>
 #include <DirectXMath.h>
+using namespace DirectX;
 
 #pragma comment(lib, "d3d12.lib")
 #pragma comment(lib, "d3dcompiler.lib")
@@ -116,6 +117,15 @@ struct dx12_root_signature_constant_buffer
     m4 ViewProjection;
 };
 
+struct cube_transform
+{
+    union
+    {
+        m4 Transform;
+        XMMATRIX XmmTransform;
+    };
+};
+
 struct quad_draw_layer_data
 {
     dx12_vertex_buffer VertexBuffer[FIF];
@@ -186,6 +196,12 @@ struct game_renderer
     dx12_pipeline QuadPipeline;
     dx12_index_buffer QuadIndexBuffer;
     quad_draw_layer_data QuadDrawLayers[DRAW_LAYER_COUNT] = {};
+
+    // CUBE ONLY
+    u32 CubeCount = 0;
+    dx12_pipeline CubePipeline = {};
+    dx12_vertex_buffer CubeVertexBuffer[FIF] = {};
+    cube_transform* CubeTransforms = nullptr;
 };
 
 // Init / Destroy functions

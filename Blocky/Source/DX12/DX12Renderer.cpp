@@ -395,6 +395,19 @@ internal void GameRendererInitD3DPipeline(game_renderer* Renderer)
         }
     }
 
+    // Cubes
+    if (1)
+    {
+        Renderer->CubePipeline = DX12PipelineCreate(Device, Renderer->RootSignature, L"Resources/Cube.hlsl");
+
+        for (u32 i = 0; i < FIF; i++)
+        {
+            Renderer->CubeVertexBuffer[i] = DX12VertexBufferCreate(Device, sizeof(cube_transform) * c_MaxQuadsPerBatch);
+        }
+
+        Renderer->CubeTransforms = new cube_transform[sizeof(cube_transform) * c_MaxQuadsPerBatch];
+    }
+
     // Create white texture
     {
         u32 WhiteColor = 0xffffffff;
@@ -624,9 +637,28 @@ internal void GameRendererSubmitCube(game_renderer* Renderer, v3 Translation, v3
         Renderer->CurrentTextureStackIndex++;
     }
 
+#if ENABLE_SIMD
+    XMVECTOR translation = XMVectorSet(Translation.x, Translation.y, Translation.z, 0.0f);  // Translation
+    XMVECTOR rotation = XMQuaternionRotationRollPitchYaw(Rotation.x, Rotation.y, Rotation.z);  // Rotation (Euler to Quaternion)
+    XMVECTOR scale = XMVectorSet(Scale.x, Scale.y, Scale.z, 0.0f);  // Scale (2x in all axes)
+
+    XMMATRIX matScale = XMMatrixScalingFromVector(scale);
+    XMMATRIX matRot = XMMatrixRotationQuaternion(rotation);
+    XMMATRIX matTrans = XMMatrixTranslationFromVector(translation);
+
+    XMMATRIX XmmTransform = matScale * matRot * matTrans;
+
+    m4 Transform;
+    memcpy(&Transform, &XmmTransform, sizeof(m4));
+
+        //Renderer->CubeTransforms[Renderer->CubeCount++].XmmTransform = XmmTransform;
+#else
     m4 Transform = bkm::Translate(m4(1.0f), Translation)
         * bkm::ToM4(qtn(Rotation))
         * bkm::Scale(m4(1.0f), Scale);
+
+    // Renderer->CubeTransforms[Renderer->CubeCount++].Transform = Transform;
+#endif
 
     v2 Coords[4];
     Coords[0] = { 0.0f, 0.0f };
@@ -646,8 +678,66 @@ internal void GameRendererSubmitCube(game_renderer* Renderer, v3 Translation, v3
     DrawLayer.IndexCount += 36;
 }
 
+// ~0.00380 ms
+internal void GameRendererSubmitCube_V2(game_renderer* Renderer, v3 Translation, v3 Rotation, v3 Scale, texture Texture, v4 Color, draw_layer Layer)
+{
+    ScopedTimer timer("GameRendererSubmitCube_V2");
+
+    u32 TextureIndex = 0;
+    for (u32 i = 1; i < Renderer->CurrentTextureStackIndex; i++)
+    {
+        if (Renderer->TextureStack[i].Handle == Texture.Handle)
+        {
+            TextureIndex = i;
+            break;
+        }
+    }
+
+    if (TextureIndex == 0)
+    {
+        Assert(Renderer->CurrentTextureStackIndex < c_MaxTexturesPerDrawCall, "Renderer->TextureStackIndex < c_MaxTexturesPerDrawCall");
+        TextureIndex = Renderer->CurrentTextureStackIndex;
+        Renderer->TextureStack[TextureIndex] = Texture;
+        Renderer->CurrentTextureStackIndex++;
+    }
+
+    m4 Transform = bkm::Translate(m4(1.0f), Translation)
+        * bkm::ToM4(qtn(Rotation))
+        * bkm::Scale(m4(1.0f), Scale);
+
+    Renderer->CubeTransforms[Renderer->CubeCount++].Transform = Transform;
+}
+
+internal void GameRendererSubmitCube_V2(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale, const v4& Color, draw_layer Layer)
+{
+    //ScopedTimer timer("GameRendererSubmitCube_V2");
+#if ENABLE_SIMD
+    XMVECTOR translation = XMVectorSet(Translation.x, Translation.y, Translation.z, 0.0f);  // Translation
+    XMVECTOR rotation = XMQuaternionRotationRollPitchYaw(Rotation.x, Rotation.y, Rotation.z);  // Rotation (Euler to Quaternion)
+    XMVECTOR scale = XMVectorSet(Scale.x, Scale.y, Scale.z, 0.0f);  // Scale (2x in all axes)
+
+    XMMATRIX matScale = XMMatrixScalingFromVector(scale);
+    XMMATRIX matRot = XMMatrixRotationQuaternion(rotation);
+    XMMATRIX matTrans = XMMatrixTranslationFromVector(translation);
+
+    XMMATRIX XmmTransform = matScale * matRot * matTrans;
+
+    Renderer->CubeTransforms[Renderer->CubeCount++].XmmTransform = XmmTransform;
+#else
+    m4 Transform = bkm::Translate(m4(1.0f), Translation)
+        * bkm::ToM4(qtn(Rotation))
+        * bkm::Scale(m4(1.0f), Scale);
+
+    Renderer->CubeTransforms[Renderer->CubeCount++].Transform = Transform;
+#endif
+
+}
+
+// ~0.01010 ms
 internal void GameRendererSubmitCube(game_renderer* Renderer, v3 Translation, v3 Rotation, v3 Scale, v4 Color, draw_layer Layer)
 {
+    //ScopedTimer timer("GameRendererSubmitCube");
+
     auto& DrawLayer = Renderer->QuadDrawLayers[(u32)Layer];
 
     m4 Transform = bkm::Translate(m4(1.0f), Translation)
@@ -832,13 +922,14 @@ internal void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
     GameRendererWaitForFenceValue(Renderer->Fence, FrameFenceValue, Renderer->DirectFenceEvent);
 
     // Reset indices
-
     for (auto& DrawLayer : Renderer->QuadDrawLayers)
     {
         DrawLayer.IndexCount = 0;
         DrawLayer.VertexDataPtr = DrawLayer.VertexDataBase;
     }
 
+    // Reset cube indices
+    Renderer->CubeCount = 0;
 
     // Reset textures
     Renderer->CurrentTextureStackIndex = 1;
