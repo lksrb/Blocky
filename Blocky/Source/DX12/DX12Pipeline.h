@@ -41,7 +41,7 @@ internal dx12_pipeline DX12PipelineCreate(ID3D12Device* Device, ID3D12RootSignat
     // Rasterizer state
     PipelineDesc.RasterizerState = {};
     PipelineDesc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
-    PipelineDesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
+    PipelineDesc.RasterizerState.CullMode = D3D12_CULL_MODE_BACK;
     PipelineDesc.RasterizerState.FrontCounterClockwise = TRUE;
     PipelineDesc.RasterizerState.DepthBias = D3D12_DEFAULT_DEPTH_BIAS;
     PipelineDesc.RasterizerState.DepthBiasClamp = D3D12_DEFAULT_DEPTH_BIAS_CLAMP;

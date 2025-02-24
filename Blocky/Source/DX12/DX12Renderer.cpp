@@ -630,76 +630,10 @@ internal void GameRendererSubmitQuad(game_renderer* Renderer, v3 Translation, v3
     DrawLayer.IndexCount += 6;
 }
 
-internal void GameRendererSubmitCube(game_renderer* Renderer, v3 Translation, v3 Rotation, v3 Scale, texture Texture, v4 Color, draw_layer Layer)
-{
-    Assert(Texture.Handle != nullptr, "Texture is invalid!");
-
-    auto& DrawLayer = Renderer->QuadDrawLayers[(u32)Layer];
-
-    // TODO: ID system, pointers are unreliable
-    u32 TextureIndex = 0;
-    for (u32 i = 1; i < Renderer->CurrentTextureStackIndex; i++)
-    {
-        if (Renderer->TextureStack[i].Handle == Texture.Handle)
-        {
-            TextureIndex = i;
-            break;
-        }
-    }
-
-    if (TextureIndex == 0)
-    {
-        Assert(Renderer->CurrentTextureStackIndex < c_MaxTexturesPerDrawCall, "Renderer->TextureStackIndex < c_MaxTexturesPerDrawCall");
-        TextureIndex = Renderer->CurrentTextureStackIndex;
-        Renderer->TextureStack[TextureIndex] = Texture;
-        Renderer->CurrentTextureStackIndex++;
-    }
-
-#if ENABLE_SIMD
-    XMVECTOR translation = XMVectorSet(Translation.x, Translation.y, Translation.z, 0.0f);  // Translation
-    XMVECTOR rotation = XMQuaternionRotationRollPitchYaw(Rotation.x, Rotation.y, Rotation.z);  // Rotation (Euler to Quaternion)
-    XMVECTOR scale = XMVectorSet(Scale.x, Scale.y, Scale.z, 0.0f);  // Scale (2x in all axes)
-
-    XMMATRIX matScale = XMMatrixScalingFromVector(scale);
-    XMMATRIX matRot = XMMatrixRotationQuaternion(rotation);
-    XMMATRIX matTrans = XMMatrixTranslationFromVector(translation);
-
-    XMMATRIX XmmTransform = matScale * matRot * matTrans;
-
-    m4 Transform;
-    memcpy(&Transform, &XmmTransform, sizeof(m4));
-
-    //Renderer->CubeTransforms[Renderer->CubeCount++].XmmTransform = XmmTransform;
-#else
-    m4 Transform = bkm::Translate(m4(1.0f), Translation)
-        * bkm::ToM4(qtn(Rotation))
-        * bkm::Scale(m4(1.0f), Scale);
-
-    // Renderer->CubeTransforms[Renderer->CubeCount++].Transform = Transform;
-#endif
-
-    v2 Coords[4];
-    Coords[0] = { 0.0f, 0.0f };
-    Coords[1] = { 1.0f, 0.0f };
-    Coords[2] = { 1.0f, 1.0f };
-    Coords[3] = { 0.0f, 1.0f };
-
-    for (u32 i = 0; i < CountOf(c_CubeVertexPositions); i++)
-    {
-        DrawLayer.VertexDataPtr->Position = v3(Transform * c_CubeVertexPositions[i]);
-        DrawLayer.VertexDataPtr->Color = Color;
-        DrawLayer.VertexDataPtr->TexCoord = Coords[i % 4];
-        DrawLayer.VertexDataPtr->TexIndex = TextureIndex;
-        DrawLayer.VertexDataPtr++;
-    }
-
-    DrawLayer.IndexCount += 36;
-}
-
 // ~0.00380 ms
 internal void GameRendererSubmitCube_V2(game_renderer* Renderer, v3 Translation, v3 Rotation, v3 Scale, texture Texture, v4 Color, draw_layer Layer)
 {
-    ScopedTimer timer("GameRendererSubmitCube_V2");
+    //ScopedTimer timer("GameRendererSubmitCube_V2");
 
     u32 TextureIndex = 0;
     for (u32 i = 1; i < Renderer->CurrentTextureStackIndex; i++)
@@ -730,16 +664,11 @@ internal void GameRendererSubmitCube_V2(game_renderer* Renderer, const v3& Trans
 {
     //ScopedTimer timer("GameRendererSubmitCube_V2");
 #if ENABLE_SIMD
-    XMVECTOR translation = XMVectorSet(Translation.x, Translation.y, Translation.z, 0.0f);  // Translation
-    XMVECTOR rotation = XMQuaternionRotationRollPitchYaw(Rotation.x, Rotation.y, Rotation.z);  // Rotation (Euler to Quaternion)
-    XMVECTOR scale = XMVectorSet(Scale.x, Scale.y, Scale.z, 0.0f);  // Scale (2x in all axes)
+    XMMATRIX XmmScale = XMMatrixScalingFromVector(XMVectorSet(Scale.x, Scale.y, Scale.z, 0.0f));
+    XMMATRIX XmmRot = XMMatrixRotationQuaternion(XMQuaternionRotationRollPitchYaw(Rotation.x, Rotation.y, Rotation.z));
+    XMMATRIX XmmTrans = XMMatrixTranslationFromVector(XMVectorSet(Translation.x, Translation.y, Translation.z, 0.0f));
 
-    XMMATRIX matScale = XMMatrixScalingFromVector(scale);
-    XMMATRIX matRot = XMMatrixRotationQuaternion(rotation);
-    XMMATRIX matTrans = XMMatrixTranslationFromVector(translation);
-
-    XMMATRIX XmmTransform = matScale * matRot * matTrans;
-
+    XMMATRIX XmmTransform = XmmScale * XmmRot * XmmTrans;
     Renderer->CubeTransforms[Renderer->CubeCount++].XmmTransform = XmmTransform;
 #else
     m4 Transform = bkm::Translate(m4(1.0f), Translation)
@@ -751,22 +680,185 @@ internal void GameRendererSubmitCube_V2(game_renderer* Renderer, const v3& Trans
 
 }
 
-// ~0.01010 ms
-internal void GameRendererSubmitCube(game_renderer* Renderer, v3 Translation, v3 Rotation, v3 Scale, v4 Color, draw_layer Layer)
+internal void GameRendererSubmitCube(game_renderer* Renderer, v3 Translation, v3 Rotation, v3 Scale, texture Texture, v4 Color, draw_layer Layer)
 {
-    //ScopedTimer timer("GameRendererSubmitCube");
+    Assert(Texture.Handle != nullptr, "Texture is invalid!");
 
     auto& DrawLayer = Renderer->QuadDrawLayers[(u32)Layer];
 
-    m4 Transform = bkm::Translate(m4(1.0f), Translation)
-        * bkm::ToM4(qtn(Rotation))
-        * bkm::Scale(m4(1.0f), Scale);
+    // TODO: ID system, pointers are unreliable
+    u32 TextureIndex = 0;
+    for (u32 i = 1; i < Renderer->CurrentTextureStackIndex; i++)
+    {
+        if (Renderer->TextureStack[i].Handle == Texture.Handle)
+        {
+            TextureIndex = i;
+            break;
+        }
+    }
+
+    if (TextureIndex == 0)
+    {
+        Assert(Renderer->CurrentTextureStackIndex < c_MaxTexturesPerDrawCall, "Renderer->TextureStackIndex < c_MaxTexturesPerDrawCall");
+        TextureIndex = Renderer->CurrentTextureStackIndex;
+        Renderer->TextureStack[TextureIndex] = Texture;
+        Renderer->CurrentTextureStackIndex++;
+    }
 
     v2 Coords[4];
     Coords[0] = { 0.0f, 0.0f };
     Coords[1] = { 1.0f, 0.0f };
     Coords[2] = { 1.0f, 1.0f };
     Coords[3] = { 0.0f, 1.0f };
+
+#if ENABLE_SIMD
+    XMMATRIX XmmScale = XMMatrixScalingFromVector(XMVectorSet(Scale.x, Scale.y, Scale.z, 0.0f));
+    XMMATRIX XmmRot = XMMatrixRotationQuaternion(XMQuaternionRotationRollPitchYaw(Rotation.x, Rotation.y, Rotation.z));
+    XMMATRIX XmmTrans = XMMatrixTranslationFromVector(XMVectorSet(Translation.x, Translation.y, Translation.z, 0.0f));
+    XMMATRIX XmmTransform = XmmScale * XmmRot * XmmTrans;
+
+    static XMVECTOR CVP[24]
+    {
+        // Front face (+Z)
+        { -0.5f, -0.5f,  0.5f, 1.0f },
+        {  0.5f, -0.5f,  0.5f, 1.0f },
+        {  0.5f,  0.5f,  0.5f, 1.0f },
+        { -0.5f,  0.5f,  0.5f, 1.0f },
+
+        // Back face (-Z)
+        {  0.5f, -0.5f, -0.5f, 1.0f },
+        { -0.5f, -0.5f, -0.5f, 1.0f },
+        { -0.5f,  0.5f, -0.5f, 1.0f },
+        {  0.5f,  0.5f, -0.5f, 1.0f },
+
+        // Left face (-X)
+        { -0.5f, -0.5f, -0.5f, 1.0f },
+        { -0.5f, -0.5f,  0.5f, 1.0f },
+        { -0.5f,  0.5f,  0.5f, 1.0f },
+        { -0.5f,  0.5f, -0.5f, 1.0f },
+
+        // Right face (+X)
+        {  0.5f, -0.5f,  0.5f, 1.0f },
+        {  0.5f, -0.5f, -0.5f, 1.0f },
+        {  0.5f,  0.5f, -0.5f, 1.0f },
+        {  0.5f,  0.5f,  0.5f, 1.0f },
+
+        // Top face (+Y)
+        { -0.5f,  0.5f,  0.5f, 1.0f },
+        {  0.5f,  0.5f,  0.5f, 1.0f },
+        {  0.5f,  0.5f, -0.5f, 1.0f },
+        { -0.5f,  0.5f, -0.5f, 1.0f },
+
+        // Bottom face (-Y)
+        { -0.5f, -0.5f, -0.5f, 1.0f },
+        {  0.5f, -0.5f, -0.5f, 1.0f },
+        {  0.5f, -0.5f,  0.5f, 1.0f },
+        { -0.5f, -0.5f,  0.5f, 1.0f }
+    };
+
+    for (u32 i = 0; i < CountOf(CVP); i++)
+    {
+        XMVECTOR v = XMVector4Transform(CVP[i], XmmTransform);
+        DrawLayer.VertexDataPtr->Position = v3(v.m128_f32[0], v.m128_f32[1], v.m128_f32[2]);
+        DrawLayer.VertexDataPtr->Color = Color;
+        DrawLayer.VertexDataPtr->TexCoord = Coords[i % 4];
+        DrawLayer.VertexDataPtr->TexIndex = TextureIndex;
+        DrawLayer.VertexDataPtr++;
+    }
+
+    DrawLayer.IndexCount += 36;
+
+#else
+    m4 Transform = bkm::Translate(m4(1.0f), Translation)
+        * bkm::ToM4(qtn(Rotation))
+        * bkm::Scale(m4(1.0f), Scale);
+
+    for (u32 i = 0; i < CountOf(c_CubeVertexPositions); i++)
+    {
+        DrawLayer.VertexDataPtr->Position = v3(Transform * c_CubeVertexPositions[i]);
+        DrawLayer.VertexDataPtr->Color = Color;
+        DrawLayer.VertexDataPtr->TexCoord = Coords[i % 4];
+        DrawLayer.VertexDataPtr->TexIndex = TextureIndex;
+        DrawLayer.VertexDataPtr++;
+    }
+
+    DrawLayer.IndexCount += 36;
+#endif
+}
+
+internal void GameRendererSubmitCube(game_renderer* Renderer, v3 Translation, v3 Rotation, v3 Scale, v4 Color, draw_layer Layer)
+{
+    //ScopedTimer timer("GameRendererSubmitCube");
+
+    auto& DrawLayer = Renderer->QuadDrawLayers[(u32)Layer];
+
+    v2 Coords[4];
+    Coords[0] = { 0.0f, 0.0f };
+    Coords[1] = { 1.0f, 0.0f };
+    Coords[2] = { 1.0f, 1.0f };
+    Coords[3] = { 0.0f, 1.0f };
+
+#if ENABLE_SIMD
+    XMMATRIX XmmScale = XMMatrixScalingFromVector(XMVectorSet(Scale.x, Scale.y, Scale.z, 0.0f));
+    XMMATRIX XmmRot = XMMatrixRotationQuaternion(XMQuaternionRotationRollPitchYaw(Rotation.x, Rotation.y, Rotation.z));
+    XMMATRIX XmmTrans = XMMatrixTranslationFromVector(XMVectorSet(Translation.x, Translation.y, Translation.z, 0.0f));
+    XMMATRIX XmmTransform = XmmScale * XmmRot * XmmTrans;
+
+    static XMVECTOR CVP[24]
+    {
+        // Front face (+Z)
+        { -0.5f, -0.5f,  0.5f, 1.0f },
+        {  0.5f, -0.5f,  0.5f, 1.0f },
+        {  0.5f,  0.5f,  0.5f, 1.0f },
+        { -0.5f,  0.5f,  0.5f, 1.0f },
+
+        // Back face (-Z)
+        {  0.5f, -0.5f, -0.5f, 1.0f },
+        { -0.5f, -0.5f, -0.5f, 1.0f },
+        { -0.5f,  0.5f, -0.5f, 1.0f },
+        {  0.5f,  0.5f, -0.5f, 1.0f },
+
+        // Left face (-X)
+        { -0.5f, -0.5f, -0.5f, 1.0f },
+        { -0.5f, -0.5f,  0.5f, 1.0f },
+        { -0.5f,  0.5f,  0.5f, 1.0f },
+        { -0.5f,  0.5f, -0.5f, 1.0f },
+
+        // Right face (+X)
+        {  0.5f, -0.5f,  0.5f, 1.0f },
+        {  0.5f, -0.5f, -0.5f, 1.0f },
+        {  0.5f,  0.5f, -0.5f, 1.0f },
+        {  0.5f,  0.5f,  0.5f, 1.0f },
+
+        // Top face (+Y)
+        { -0.5f,  0.5f,  0.5f, 1.0f },
+        {  0.5f,  0.5f,  0.5f, 1.0f },
+        {  0.5f,  0.5f, -0.5f, 1.0f },
+        { -0.5f,  0.5f, -0.5f, 1.0f },
+
+        // Bottom face (-Y)
+        { -0.5f, -0.5f, -0.5f, 1.0f },
+        {  0.5f, -0.5f, -0.5f, 1.0f },
+        {  0.5f, -0.5f,  0.5f, 1.0f },
+        { -0.5f, -0.5f,  0.5f, 1.0f }
+    };
+
+    for (u32 i = 0; i < CountOf(CVP); i++)
+    {
+        XMVECTOR v = XMVector4Transform(CVP[i], XmmTransform);
+        DrawLayer.VertexDataPtr->Position = v3(v.m128_f32[0], v.m128_f32[1], v.m128_f32[2]);
+        DrawLayer.VertexDataPtr->Color = Color;
+        DrawLayer.VertexDataPtr->TexCoord = Coords[i % 4];
+        DrawLayer.VertexDataPtr->TexIndex = 0;
+        DrawLayer.VertexDataPtr++;
+    }
+
+    DrawLayer.IndexCount += 36;
+
+#else
+    m4 Transform = bkm::Translate(m4(1.0f), Translation)
+        * bkm::ToM4(qtn(Rotation))
+        * bkm::Scale(m4(1.0f), Scale);
 
     for (u32 i = 0; i < CountOf(c_CubeVertexPositions); i++)
     {
@@ -778,6 +870,8 @@ internal void GameRendererSubmitCube(game_renderer* Renderer, v3 Translation, v3
     }
 
     DrawLayer.IndexCount += 36;
+#endif
+
 }
 
 internal void GameRendererSubmitQuadCustom(game_renderer* Renderer, v3 VertexPositions[4], texture Texture, v4 Color, draw_layer Layer)
@@ -810,7 +904,6 @@ internal void GameRendererSubmitQuadCustom(game_renderer* Renderer, v3 VertexPos
     Coords[3] = { 0.0f, 1.0f };
 
     auto& DrawLayer = Renderer->QuadDrawLayers[(u32)Layer];
-
     for (u32 i = 0; i < 4; i++)
     {
         DrawLayer.VertexDataPtr->Position = VertexPositions[i];

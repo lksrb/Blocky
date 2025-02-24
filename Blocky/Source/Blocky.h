@@ -70,9 +70,9 @@ struct block
     block_type Type = block_type::INVALID;
 };
 
-static const u64 RowCount = 16;
-static const u64 ColumnCount = 16;
-static const u64 LayerCount = 16;
+static const i64 RowCount = 16;
+static const i64 ColumnCount = 16;
+static const i64 LayerCount = 1;
 
 struct game
 {

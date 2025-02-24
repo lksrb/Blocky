@@ -14,8 +14,6 @@ struct vertex_shader_input
 struct vertex_shader_input_v2
 {
     float4x4 TransformMatrix;
-    float4 Color;
-    float2 TexCoord;
 };
 
 struct pixel_shader_input

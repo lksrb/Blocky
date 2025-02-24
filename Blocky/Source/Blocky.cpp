@@ -153,29 +153,29 @@ internal game GameCreate(game_renderer* Renderer)
 
                 CikCak++;
 
-                //// Left
-                //if (C > 0 && C < ColumnCount)
-                //{
-                //    Block.Left = GlobalIndex - 1;
-                //}
+                // Left
+                if (C > 0 && C < ColumnCount)
+                {
+                    Block.Left = GlobalIndex - 1;
+                }
 
-                //// Right
-                //if (C < ColumnCount - 1)
-                //{
-                //    Block.Right = GlobalIndex + 1;
-                //}
+                // Right
+                if (C < ColumnCount - 1)
+                {
+                    Block.Right = GlobalIndex + 1;
+                }
 
-                //// Front
-                //if (GlobalIndex - RowCount >= 0)
-                //{
-                //    Block.Front = GlobalIndex - RowCount;
-                //}
+                // Front
+                if (GlobalIndex - RowCount >= 0)
+                {
+                    Block.Front = GlobalIndex - RowCount;
+                }
 
-                //// Back
-                //if (GlobalIndex + RowCount < 256)
-                //{
-                //    Block.Back = GlobalIndex + RowCount;
-                //}
+                // Back
+                if (GlobalIndex + RowCount < 256)
+                {
+                    Block.Back = GlobalIndex + RowCount;
+                }
 
                 GlobalIndex++;
             }
@@ -331,48 +331,48 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
     }
 
     // Destroy logic block
-    //if (Input->IsMousePressed(mouse::Left))
-    //{
-    //    ray Ray;
-    //    Ray.Origin = PlayerTranslation;
-    //    Ray.Direction = Forward; // Forward is already normalized
+    if (Input->IsMousePressed(mouse::Left))
+    {
+        ray Ray;
+        Ray.Origin = PlayerTranslation;
+        Ray.Direction = Forward; // Forward is already normalized
 
-    //    v3 HitPoint;
-    //    v3 HitNormal;
-    //    block HitBlock;
-    //    u64 HitIndex;
-    //    if (FindFirstHit(Ray, Game->LogicBlocks, CountOf(Game->LogicBlocks), &HitPoint, &HitNormal, &HitBlock, &HitIndex))
-    //    {
-    //        auto& Block = Game->LogicBlocks[HitIndex];
-    //        //Block.Placed = false;
+        v3 HitPoint;
+        v3 HitNormal;
+        block HitBlock;
+        u64 HitIndex;
+        if (FindFirstHit(Ray, Game->LogicBlocks, CountOf(Game->LogicBlocks), &HitPoint, &HitNormal, &HitBlock, &HitIndex))
+        {
+            auto& Block = Game->LogicBlocks[HitIndex];
+            Block.Placed = false;
 
-    //        if (Block.Left != INT_MAX)
-    //        {
-    //            auto& LeftNeightbour = Game->LogicBlocks[Block.Left];
-    //            LeftNeightbour.Right = INT_MAX;
-    //        }
+            if (Block.Left != INT_MAX)
+            {
+                auto& LeftNeightbour = Game->LogicBlocks[Block.Left];
+                LeftNeightbour.Right = INT_MAX;
+            }
 
-    //        if (Block.Right != INT_MAX)
-    //        {
-    //            auto& RightNeightbour = Game->LogicBlocks[Block.Right];
-    //            RightNeightbour.Left = INT_MAX;
-    //        }
+            if (Block.Right != INT_MAX)
+            {
+                auto& RightNeightbour = Game->LogicBlocks[Block.Right];
+                RightNeightbour.Left = INT_MAX;
+            }
 
-    //        if (Block.Front != INT_MAX)
-    //        {
-    //            auto& FrontNeightbour = Game->LogicBlocks[Block.Front];
-    //            FrontNeightbour.Back = INT_MAX;
-    //        }
+            if (Block.Front != INT_MAX)
+            {
+                auto& FrontNeightbour = Game->LogicBlocks[Block.Front];
+                FrontNeightbour.Back = INT_MAX;
+            }
 
-    //        if (Block.Back != INT_MAX)
-    //        {
-    //            auto& BackNeightbour = Game->LogicBlocks[Block.Back];
-    //            BackNeightbour.Front = INT_MAX;
-    //        }
+            if (Block.Back != INT_MAX)
+            {
+                auto& BackNeightbour = Game->LogicBlocks[Block.Back];
+                BackNeightbour.Front = INT_MAX;
+            }
 
-    //        Info("Block destroyed.");
-    //    }
-    //}
+            Info("Block destroyed.");
+        }
+    }
 
     // Color pink if all neighbours are present
     //if (false)
@@ -436,15 +436,13 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
             if (!Block.Placed)
                 continue;
 
-            /* if (Block.Texture.Handle)
-             {
-                   GameRendererSubmitCube_V2(Renderer, Block.Translation, v3(0.0f), Block.Scale, Block.Texture, Block.Color, draw_layer::Main);
-             }
-             else*/
+            if (Block.Texture.Handle)
             {
-                v3 Rotation(0.0f);
-
-                GameRendererSubmitCube_V2(Renderer, Block.Translation, Rotation, Block.Scale, Block.Color, draw_layer::Main);
+                GameRendererSubmitCube(Renderer, Block.Translation, v3(0.0f), Block.Scale, Block.Texture, Block.Color, draw_layer::Main);
+            }
+            else
+            {
+                GameRendererSubmitCube(Renderer, Block.Translation, v3(0.0f), Block.Scale, Block.Color, draw_layer::Main);
             }
         }
     }
@@ -453,8 +451,8 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
 
     if (Input->IsMouseDown(mouse::Middle))
     {
-        static v3 Pos = v3(0.0f, 10.0f, 0.0f);
-        static v3 Vel = v3(0.0f);
+        local_persist v3 Pos = v3(0.0f, 10.0f, 0.0f);
+        local_persist v3 Vel = v3(0.0f);
         f32 G = -9.81;
 
         Vel.y += G * TimeStep;
@@ -496,10 +494,10 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
     f32 centerY = ClientAreaHeight / 2.0f - crosshairSize / 2.0f;
 
     v3 Positions[4];
-    Positions[0] = { centerX, centerY, 0.0f };
-    Positions[1] = { centerX + crosshairSize, centerY, 0.0f };
-    Positions[2] = { centerX + crosshairSize, centerY + crosshairSize, 0.0f };
-    Positions[3] = { centerX, centerY + crosshairSize, 0.0f };
+    Positions[3] = { centerX, centerY, 0.0f };
+    Positions[2] = { centerX + crosshairSize, centerY, 0.0f };
+    Positions[1] = { centerX + crosshairSize, centerY + crosshairSize, 0.0f };
+    Positions[0] = { centerX, centerY + crosshairSize, 0.0f };
 
     GameRendererSubmitQuadCustom(Renderer, Positions, Game->CrosshairTexture, v4(1.0f, 1.0f, 1.0f, 0.7f), draw_layer::HUD);
 }

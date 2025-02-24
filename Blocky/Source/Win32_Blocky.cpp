@@ -243,11 +243,16 @@ private:
 #include "Vulkan/VulkanRenderer.h"
 #else
 #include "DX12/DX12Renderer.h"
-#include "DX12/DX12Renderer.cpp"
 #endif
 
 #include "Blocky.h"
 #include "Blocky.cpp"
+
+#if USE_VULKAN_RENDERER
+#else
+#include "DX12/DX12Renderer.cpp"
+#endif
+
 
 internal u32 g_ClientWidth = 0;
 internal u32 g_ClientHeight = 0;
