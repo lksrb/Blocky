@@ -23,7 +23,7 @@ workspace "Blocky"
 		"Dependencies.lua",
 		"premake5.lua",
 		"Resources/Quad.hlsl",
-		"Resources/Cube.hlsl",
+		"Resources/Block.hlsl",
 		"Blocky/Blocky.lua",
 		"Blocky-ResourcePacker/Blocky-ResourcePacker.lua",
 	}

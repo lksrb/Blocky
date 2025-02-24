@@ -359,7 +359,16 @@ internal void GameRendererInitD3DPipeline(game_renderer* Renderer)
 
     // Quad Pipeline
     {
-        Renderer->QuadPipeline = DX12PipelineCreate(Device, Renderer->RootSignature, L"Resources/Quad.hlsl");
+        // Define the vertex input layout.
+        D3D12_INPUT_ELEMENT_DESC InputElementDescs[] =
+        {
+            { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+            { "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+            { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+            { "TEXINDEX", 0, DXGI_FORMAT_R32_UINT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+        };
+
+        Renderer->QuadPipeline = DX12PipelineCreate(Device, Renderer->RootSignature, InputElementDescs, CountOf(InputElementDescs), L"Resources/Quad.hlsl");
 
         // Quad vertex buffer
         for (u32 i = 0; i < DRAW_LAYER_COUNT; i++)
@@ -398,7 +407,16 @@ internal void GameRendererInitD3DPipeline(game_renderer* Renderer)
     // Cubes
     if (1)
     {
-        Renderer->CubePipeline = DX12PipelineCreate(Device, Renderer->RootSignature, L"Resources/Cube.hlsl");
+        // Define the vertex input layout.
+        D3D12_INPUT_ELEMENT_DESC InputElementDescs[] =
+        {
+            { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+            { "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+            { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+            { "TEXINDEX", 0, DXGI_FORMAT_R32_UINT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+        };
+
+        Renderer->CubePipeline = DX12PipelineCreate(Device, Renderer->RootSignature, InputElementDescs, CountOf(InputElementDescs), L"Resources/Block.hlsl");
 
         for (u32 i = 0; i < FIF; i++)
         {
@@ -651,7 +669,7 @@ internal void GameRendererSubmitCube(game_renderer* Renderer, v3 Translation, v3
     m4 Transform;
     memcpy(&Transform, &XmmTransform, sizeof(m4));
 
-        //Renderer->CubeTransforms[Renderer->CubeCount++].XmmTransform = XmmTransform;
+    //Renderer->CubeTransforms[Renderer->CubeCount++].XmmTransform = XmmTransform;
 #else
     m4 Transform = bkm::Translate(m4(1.0f), Translation)
         * bkm::ToM4(qtn(Rotation))

@@ -6,7 +6,7 @@ struct dx12_pipeline
 };
 
 // TODO: Make more generic 
-internal dx12_pipeline DX12PipelineCreate(ID3D12Device* Device, ID3D12RootSignature* RootSignature, const wchar_t* ShaderPath)
+internal dx12_pipeline DX12PipelineCreate(ID3D12Device* Device, ID3D12RootSignature* RootSignature, D3D12_INPUT_ELEMENT_DESC Inputs[], u32 InputsCount, const wchar_t* ShaderPath)
 {
     dx12_pipeline Pipeline = {};
 #if defined(BK_DEBUG)
@@ -35,15 +35,6 @@ internal dx12_pipeline DX12PipelineCreate(ID3D12Device* Device, ID3D12RootSignat
             Err("%s", (const char*)ErrorMessage->GetBufferPointer());
         Assert(false, "");
     }
-
-    // Define the vertex input layout.
-    D3D12_INPUT_ELEMENT_DESC InputElementDescs[] =
-    {
-        { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-        { "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-        { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-        { "TEXINDEX", 0, DXGI_FORMAT_R32_UINT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-    };
 
     D3D12_GRAPHICS_PIPELINE_STATE_DESC PipelineDesc = {};
 
@@ -85,7 +76,7 @@ internal dx12_pipeline DX12PipelineCreate(ID3D12Device* Device, ID3D12RootSignat
         Desc.RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
     }
 
-    PipelineDesc.InputLayout = { InputElementDescs, CountOf(InputElementDescs) };
+    PipelineDesc.InputLayout = { Inputs, InputsCount };
     PipelineDesc.pRootSignature = RootSignature;
     PipelineDesc.VS = CD3DX12_SHADER_BYTECODE(VertexShader);
     PipelineDesc.PS = CD3DX12_SHADER_BYTECODE(PixelShader);

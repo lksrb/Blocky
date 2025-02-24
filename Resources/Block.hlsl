@@ -5,7 +5,17 @@ cbuffer root_constants : register(b0)
 
 struct vertex_shader_input
 {
-    
+    float4 Position : POSITION;
+    float4 Color : COLOR;
+    float2 TexCoord : TEXCOORD;
+    uint TexIndex : TEXINDEX;
+};
+
+struct vertex_shader_input_v2
+{
+    float4x4 TransformMatrix;
+    float4 Color;
+    float2 TexCoord;
 };
 
 struct pixel_shader_input
@@ -36,9 +46,9 @@ float4 PSMain(pixel_shader_input In) : SV_TARGET
 {
     float4 Result = In.Color * g_Texture[In.TexIndex].Sample(g_Sampler, In.TexCoord);
     //float4 Result = In.Color;
-    
+
     if (Result.a == 0.0f)
         discard;
-    
+
     return Result;
 }
