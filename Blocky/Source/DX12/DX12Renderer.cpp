@@ -410,19 +410,32 @@ internal void GameRendererInitD3DPipeline(game_renderer* Renderer)
         // Define the vertex input layout.
         D3D12_INPUT_ELEMENT_DESC InputElementDescs[] =
         {
-            { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-            { "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-            { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-            { "TEXINDEX", 0, DXGI_FORMAT_R32_UINT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+            // Per vertex
+            { "POSITION", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+            //{ "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+            //{ "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+            //{ "TEXINDEX", 0, DXGI_FORMAT_R32_UINT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+
+            // Per instance
+            { "TRANSFORMA", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 0 },
+            { "TRANSFORMB", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 0},
+            { "TRANSFORMC", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 0 },
+            { "TRANSFORMD", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 0 },
         };
 
         Renderer->CubePipeline = DX12PipelineCreate(Device, Renderer->RootSignature, InputElementDescs, CountOf(InputElementDescs), L"Resources/Block.hlsl");
 
+        Renderer->CubePositionsVertexBuffer = DX12VertexBufferCreate(Device, sizeof(c_CubeVertexPositions));
+
+        GameRendererSubmitToQueueImmidiate(Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, [Renderer](ID3D12GraphicsCommandList* CommandList)
+        {
+            DX12VertexBufferSendData(&Renderer->CubePositionsVertexBuffer, CommandList, c_CubeVertexPositions, sizeof(c_CubeVertexPositions));
+        });
+
         for (u32 i = 0; i < FIF; i++)
         {
-            Renderer->CubeVertexBuffer[i] = DX12VertexBufferCreate(Device, sizeof(cube_transform) * c_MaxQuadsPerBatch);
+            Renderer->CubeTransformVertexBuffers[i] = DX12VertexBufferCreate(Device, sizeof(cube_transform) * c_MaxQuadsPerBatch);
         }
-
         Renderer->CubeTransforms = new cube_transform[sizeof(cube_transform) * c_MaxQuadsPerBatch];
     }
 
@@ -657,7 +670,7 @@ internal void GameRendererSubmitCube_V2(game_renderer* Renderer, v3 Translation,
         * bkm::ToM4(qtn(Rotation))
         * bkm::Scale(m4(1.0f), Scale);
 
-    Renderer->CubeTransforms[Renderer->CubeCount++].Transform = Transform;
+    Renderer->CubeTransforms[Renderer->CubeInstanceCount++].Transform = Transform;
 }
 
 internal void GameRendererSubmitCube_V2(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale, const v4& Color, draw_layer Layer)
@@ -669,13 +682,15 @@ internal void GameRendererSubmitCube_V2(game_renderer* Renderer, const v3& Trans
     XMMATRIX XmmTrans = XMMatrixTranslationFromVector(XMVectorSet(Translation.x, Translation.y, Translation.z, 0.0f));
 
     XMMATRIX XmmTransform = XmmScale * XmmRot * XmmTrans;
-    Renderer->CubeTransforms[Renderer->CubeCount++].XmmTransform = XmmTransform;
+    Renderer->CubeTransforms[Renderer->CubeInstanceCount].XmmTransform = XmmTransform;
+    Renderer->CubeInstanceCount++;
 #else
     m4 Transform = bkm::Translate(m4(1.0f), Translation)
         * bkm::ToM4(qtn(Rotation))
         * bkm::Scale(m4(1.0f), Scale);
 
-    Renderer->CubeTransforms[Renderer->CubeCount++].Transform = Transform;
+    Renderer->CubeTransforms[Renderer->CubeInstanceCount].Transform = Transform;
+    Renderer->CubeInstanceCount++;
 #endif
 
 }
@@ -954,6 +969,11 @@ internal void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
         DX12VertexBufferSendData(&DrawLayer.VertexBuffer[CurrentBackBufferIndex], Renderer->DirectCommandList, DrawLayer.VertexDataBase, sizeof(quad_vertex) * DrawLayer.IndexCount);
     }
 
+    for (u32 i = 0; i < FIF; i++)
+    {
+        DX12VertexBufferSendData(&Renderer->CubeTransformVertexBuffers[i], Renderer->DirectCommandList, Renderer->CubeTransforms, Renderer->CubeInstanceCount * sizeof(cube_transform));
+    }
+
     // Set and clear render target view
     v4 ClearColor = { 0.2f, 0.3f, 0.8f, 1.0f };
     CommandList->ClearRenderTargetView(RTV, &ClearColor.x, 0, nullptr);
@@ -1014,6 +1034,38 @@ internal void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
         }
     }
 
+    // Render instanced
+    if (Renderer->CubeInstanceCount > 0)
+    {
+        CommandList->SetPipelineState(Renderer->CubePipeline.Handle);
+
+        CommandList->SetGraphicsRoot32BitConstants(0, 16, &Renderer->QuadDrawLayers[0].RootSignatureBuffer.ViewProjection, 0);
+
+        // Bind vertex positions
+        local_persist D3D12_VERTEX_BUFFER_VIEW CubeVertexBufferView;
+        CubeVertexBufferView.BufferLocation = Renderer->CubePositionsVertexBuffer.Buffer.Handle->GetGPUVirtualAddress();
+        CubeVertexBufferView.SizeInBytes = Renderer->CubePositionsVertexBuffer.Buffer.Size;
+        CubeVertexBufferView.StrideInBytes = sizeof(v4);
+        CommandList->IASetVertexBuffers(0, 1, &CubeVertexBufferView);
+
+        // Bind transforms
+        local_persist D3D12_VERTEX_BUFFER_VIEW TransformVertexBufferView;
+        TransformVertexBufferView.BufferLocation = Renderer->CubeTransformVertexBuffers[CurrentBackBufferIndex].Buffer.Handle->GetGPUVirtualAddress();
+        TransformVertexBufferView.SizeInBytes = Renderer->CubeInstanceCount * sizeof(cube_transform);
+        TransformVertexBufferView.StrideInBytes = sizeof(cube_transform);
+        CommandList->IASetVertexBuffers(1, 1, &TransformVertexBufferView);
+
+        // Bind index buffer
+        local_persist D3D12_INDEX_BUFFER_VIEW IndexBufferView;
+        IndexBufferView.BufferLocation = Renderer->QuadIndexBuffer.Buffer.Handle->GetGPUVirtualAddress();
+        IndexBufferView.SizeInBytes = 36 * Renderer->CubeInstanceCount * sizeof(u32);
+        IndexBufferView.Format = DXGI_FORMAT_R32_UINT;
+        CommandList->IASetIndexBuffer(&IndexBufferView);
+
+        // Issue draw call
+        CommandList->DrawIndexedInstanced(36, Renderer->CubeInstanceCount, 0, 0, 0);
+    }
+
     // Present transition
     {
         // Rendered frame needs to be transitioned to present state
@@ -1040,7 +1092,7 @@ internal void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
     }
 
     // Reset cube indices
-    Renderer->CubeCount = 0;
+    Renderer->CubeInstanceCount = 0;
 
     // Reset textures
     Renderer->CurrentTextureStackIndex = 1;

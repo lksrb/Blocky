@@ -62,7 +62,7 @@ internal void DX12VertexBufferDestroy(dx12_vertex_buffer* VertexBuffer)
     DX12BufferDestroy(&VertexBuffer->IntermediateBuffer);
 }
 
-internal void DX12VertexBufferSendData(dx12_vertex_buffer* VertexBuffer, ID3D12GraphicsCommandList* CommandList, void* Data, u64 DataSize)
+internal void DX12VertexBufferSendData(dx12_vertex_buffer* VertexBuffer, ID3D12GraphicsCommandList* CommandList, const void* Data, u64 DataSize)
 {
     Assert(VertexBuffer->Buffer.Size >= DataSize, "Buffer overload!");
 

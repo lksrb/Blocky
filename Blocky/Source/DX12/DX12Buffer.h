@@ -26,4 +26,4 @@ internal void DX12BufferDestroy(dx12_buffer* Buffer);
 
 internal dx12_vertex_buffer DX12VertexBufferCreate(ID3D12Device* Device, u64 Size);
 internal void DX12VertexBufferDestroy(dx12_vertex_buffer* VertexBuffer);
-internal void DX12VertexBufferSendData(dx12_vertex_buffer* VertexBuffer, ID3D12GraphicsCommandList* CommandList, void* Data, u64 DataSize);
+internal void DX12VertexBufferSendData(dx12_vertex_buffer* VertexBuffer, ID3D12GraphicsCommandList* CommandList, const void* Data, u64 DataSize);

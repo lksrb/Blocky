@@ -43,6 +43,11 @@ struct quad_vertex
     u32 TexIndex;
 };
 
+struct cube_vertex
+{
+    v4 Position;
+};
+
 internal constexpr inline u32 c_MaxQuadsPerBatch = 1 << 16;
 internal constexpr inline u32 c_MaxQuadVertices = c_MaxQuadsPerBatch * 4;
 internal constexpr inline u32 c_MaxQuadIndices = c_MaxQuadsPerBatch * 6;
@@ -198,9 +203,10 @@ struct game_renderer
     quad_draw_layer_data QuadDrawLayers[DRAW_LAYER_COUNT] = {};
 
     // CUBE ONLY
-    u32 CubeCount = 0;
+    u32 CubeInstanceCount = 0;
     dx12_pipeline CubePipeline = {};
-    dx12_vertex_buffer CubeVertexBuffer[FIF] = {};
+    dx12_vertex_buffer CubeTransformVertexBuffers[FIF] = {};
+    dx12_vertex_buffer CubePositionsVertexBuffer = {};
     cube_transform* CubeTransforms = nullptr;
 };
 
@@ -219,6 +225,8 @@ internal void GameRendererSubmitQuad(game_renderer* Renderer, v3 Translation, v3
 internal void GameRendererSubmitCube(game_renderer* Renderer, v3 Translation, v3 Rotation, v3 Scale, texture Texture, v4 Color, draw_layer Layer);
 internal void GameRendererSubmitCube(game_renderer* Renderer, v3 Translation, v3 Rotation, v3 Scale, v4 Color, draw_layer Layer);
 internal void GameRendererSubmitQuadCustom(game_renderer* Renderer, v3 VertexPositions[4], texture Texture, v4 Color, draw_layer Layer);
+
+internal void GameRendererSubmitCube_V2(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale, const v4& Color, draw_layer Layer);
 
 // Helpers
 internal D3D12_RESOURCE_BARRIER GameRendererTransition(ID3D12Resource* Resource, D3D12_RESOURCE_STATES StateBefore, D3D12_RESOURCE_STATES StateAfter, UINT Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_BARRIER_FLAGS Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE);

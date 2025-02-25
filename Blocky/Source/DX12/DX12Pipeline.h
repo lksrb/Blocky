@@ -86,7 +86,7 @@ internal dx12_pipeline DX12PipelineCreate(ID3D12Device* Device, ID3D12RootSignat
     PipelineDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
     PipelineDesc.SampleDesc.Count = 1;
     DxAssert(Device->CreateGraphicsPipelineState(&PipelineDesc, IID_PPV_ARGS(&Pipeline.Handle)));
-
+    
     return Pipeline;
 }
 

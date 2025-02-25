@@ -253,7 +253,6 @@ private:
 #include "DX12/DX12Renderer.cpp"
 #endif
 
-
 internal u32 g_ClientWidth = 0;
 internal u32 g_ClientHeight = 0;
 internal bool g_DoResize = false;

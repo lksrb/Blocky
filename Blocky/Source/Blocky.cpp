@@ -429,7 +429,7 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
         }
     }
 
-    if (1)
+    if (0)
     {
         for (auto& Block : Game->LogicBlocks)
         {
@@ -481,6 +481,11 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
     //        GameRendererSubmitCube(Renderer, Block.Translation, v3(0.0f), Block.Scale, Block.Color, draw_layer::Main);
     //    }
     //}
+
+    //GameRendererSubmitCube(Renderer, v3(1.0), v3(0.0f), v3(1.0f), v4(1.0), draw_layer::Main);
+
+    GameRendererSubmitCube_V2(Renderer, v3(0.0), v3(0.0f), v3(1.0f), v4(1.0), draw_layer::Main);
+    GameRendererSubmitCube_V2(Renderer, v3(1.0, 0.0f, 0.0f), v3(0.0f), v3(1.0f), v4(1.0), draw_layer::Main);
 
     // HUD
     // HUD

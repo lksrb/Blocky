@@ -72,7 +72,7 @@ struct block
 
 static const i64 RowCount = 16;
 static const i64 ColumnCount = 16;
-static const i64 LayerCount = 1;
+static const i64 LayerCount = 16;
 
 struct game
 {
