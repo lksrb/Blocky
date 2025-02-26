@@ -3,6 +3,93 @@
 #include "DX12Texture.cpp"
 #include "DX12Buffer.cpp"
 
+// Each face has to have a normal vector, so unfortunately we cannot encode cube as 8 vertices
+internal constexpr inline v4 c_OldCubeVertices[24] =
+{
+    // Front face (+Z)
+    { -0.5f, -0.5f,  0.5f, 1.0f },
+    {  0.5f, -0.5f,  0.5f, 1.0f },
+    {  0.5f,  0.5f,  0.5f, 1.0f },
+    { -0.5f,  0.5f,  0.5f, 1.0f },
+
+    // Back face (-Z)
+    {  0.5f, -0.5f, -0.5f, 1.0f },
+    { -0.5f, -0.5f, -0.5f, 1.0f },
+    { -0.5f,  0.5f, -0.5f, 1.0f },
+    {  0.5f,  0.5f, -0.5f, 1.0f },
+
+    // Left face (-X)
+    { -0.5f, -0.5f, -0.5f, 1.0f },
+    { -0.5f, -0.5f,  0.5f, 1.0f },
+    { -0.5f,  0.5f,  0.5f, 1.0f },
+    { -0.5f,  0.5f, -0.5f, 1.0f },
+
+    // Right face (+X)
+    {  0.5f, -0.5f,  0.5f, 1.0f },
+    {  0.5f, -0.5f, -0.5f, 1.0f },
+    {  0.5f,  0.5f, -0.5f, 1.0f },
+    {  0.5f,  0.5f,  0.5f, 1.0f },
+
+    // Top face (+Y)
+    { -0.5f,  0.5f,  0.5f, 1.0f },
+    {  0.5f,  0.5f,  0.5f, 1.0f },
+    {  0.5f,  0.5f, -0.5f, 1.0f },
+    { -0.5f,  0.5f, -0.5f, 1.0f },
+
+    // Bottom face (-Y)
+    { -0.5f, -0.5f, -0.5f, 1.0f },
+    {  0.5f, -0.5f, -0.5f, 1.0f },
+    {  0.5f, -0.5f,  0.5f, 1.0f },
+    { -0.5f, -0.5f,  0.5f, 1.0f }
+};
+
+internal constexpr inline cube_vertex c_CubeVertices[24] =
+{
+    // Front face (+Z)
+    cube_vertex(v4{ -0.5f, -0.5f,  0.5f, 1.0f }, v2{ 0.0f, 0.0f }),
+    cube_vertex(v4{  0.5f, -0.5f,  0.5f, 1.0f }, v2{ 1.0f, 0.0f }),
+    cube_vertex(v4{  0.5f,  0.5f,  0.5f, 1.0f }, v2{ 1.0f, 1.0f }),
+    cube_vertex(v4{ -0.5f,  0.5f,  0.5f, 1.0f }, v2{ 0.0f, 1.0f }),
+
+    // Back face (-Z)
+    cube_vertex({  0.5f, -0.5f, -0.5f, 1.0f }, v2{ 0.0f, 0.0f }),
+    cube_vertex({ -0.5f, -0.5f, -0.5f, 1.0f }, v2{ 1.0f, 0.0f }),
+    cube_vertex({ -0.5f,  0.5f, -0.5f, 1.0f }, v2{ 1.0f, 1.0f }),
+    cube_vertex({  0.5f,  0.5f, -0.5f, 1.0f }, v2{ 0.0f, 1.0f }),
+
+    // Left face (-X)
+    cube_vertex({ -0.5f, -0.5f, -0.5f, 1.0f }, v2{ 0.0f, 0.0f }),
+    cube_vertex({ -0.5f, -0.5f,  0.5f, 1.0f }, v2{ 1.0f, 0.0f }),
+    cube_vertex({ -0.5f,  0.5f,  0.5f, 1.0f }, v2{ 1.0f, 1.0f }),
+    cube_vertex({ -0.5f,  0.5f, -0.5f, 1.0f }, v2{ 0.0f, 1.0f }),
+
+    // Right face (+X)
+    cube_vertex({  0.5f, -0.5f,  0.5f, 1.0f }, v2{ 0.0f, 0.0f }),
+    cube_vertex({  0.5f, -0.5f, -0.5f, 1.0f }, v2{ 1.0f, 0.0f }),
+    cube_vertex({  0.5f,  0.5f, -0.5f, 1.0f }, v2{ 1.0f, 1.0f }),
+    cube_vertex({  0.5f,  0.5f,  0.5f, 1.0f }, v2{ 0.0f, 1.0f }),
+
+    // Top face (+Y)
+    cube_vertex({ -0.5f,  0.5f,  0.5f, 1.0f }, v2{ 0.0f, 0.0f }),
+    cube_vertex({  0.5f,  0.5f,  0.5f, 1.0f }, v2{ 1.0f, 0.0f }),
+    cube_vertex({  0.5f,  0.5f, -0.5f, 1.0f }, v2{ 1.0f, 1.0f }),
+    cube_vertex({ -0.5f,  0.5f, -0.5f, 1.0f }, v2{ 0.0f, 1.0f }),
+
+    // Bottom face (-Y)
+    cube_vertex({ -0.5f, -0.5f, -0.5f, 1.0f }, v2{ 0.0f, 0.0f }),
+    cube_vertex({  0.5f, -0.5f, -0.5f, 1.0f }, v2{ 1.0f, 0.0f }),
+    cube_vertex({  0.5f, -0.5f,  0.5f, 1.0f }, v2{ 1.0f, 1.0f }),
+    cube_vertex({ -0.5f, -0.5f,  0.5f, 1.0f }, v2{ 0.0f, 1.0f })
+};
+
+internal constexpr inline v4 c_QuadVertexPositions[4]
+{
+    { -0.5f, -0.5f, 0.0f, 1.0f },
+    {  0.5f, -0.5f, 0.0f, 1.0f },
+    {  0.5f,  0.5f, 0.0f, 1.0f },
+    { -0.5f,  0.5f, 0.0f, 1.0f }
+};
+
 internal game_renderer GameRendererCreate(game_window Window)
 {
     game_renderer Renderer = {};
@@ -54,7 +141,7 @@ internal void GameRendererDestroy(game_renderer* Renderer)
 #if DX12_ENABLE_DEBUG_LAYER
     // Report all memory leaks
     Renderer->DxgiDebugInterface->ReportLiveObjects(DXGI_DEBUG_ALL, DXGI_DEBUG_RLO_FLAGS(DXGI_DEBUG_RLO_ALL | DXGI_DEBUG_RLO_IGNORE_INTERNAL));
-    GameRendererDumpInfoQueue(Renderer->DebugInfoQueue);
+    DX12DumpInfoQueue(Renderer->DebugInfoQueue);
 #endif
 
     // Zero everything to make sure nothing can reference this
@@ -412,31 +499,31 @@ internal void GameRendererInitD3DPipeline(game_renderer* Renderer)
         {
             // Per vertex
             { "POSITION", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-            //{ "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-            //{ "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-            //{ "TEXINDEX", 0, DXGI_FORMAT_R32_UINT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+            { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
 
             // Per instance
-            { "TRANSFORMA", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 0 },
-            { "TRANSFORMB", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 0},
-            { "TRANSFORMC", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 0 },
-            { "TRANSFORMD", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 0 },
+            { "TRANSFORMA", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
+            { "TRANSFORMB", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1},
+            { "TRANSFORMC", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
+            { "TRANSFORMD", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
+            { "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
+            { "TEXINDEX", 0, DXGI_FORMAT_R32_UINT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
         };
 
         Renderer->CubePipeline = DX12PipelineCreate(Device, Renderer->RootSignature, InputElementDescs, CountOf(InputElementDescs), L"Resources/Block.hlsl");
 
-        Renderer->CubePositionsVertexBuffer = DX12VertexBufferCreate(Device, sizeof(c_CubeVertexPositions));
+        Renderer->CubePositionsVertexBuffer = DX12VertexBufferCreate(Device, sizeof(c_CubeVertices));
 
-        GameRendererSubmitToQueueImmidiate(Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, [Renderer](ID3D12GraphicsCommandList* CommandList)
+        DX12SubmitToQueueImmidiate(Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, [Renderer](ID3D12GraphicsCommandList* CommandList)
         {
-            DX12VertexBufferSendData(&Renderer->CubePositionsVertexBuffer, CommandList, c_CubeVertexPositions, sizeof(c_CubeVertexPositions));
+            DX12VertexBufferSendData(&Renderer->CubePositionsVertexBuffer, CommandList, c_CubeVertices, sizeof(c_CubeVertices));
         });
 
         for (u32 i = 0; i < FIF; i++)
         {
-            Renderer->CubeTransformVertexBuffers[i] = DX12VertexBufferCreate(Device, sizeof(cube_transform) * c_MaxQuadsPerBatch);
+            Renderer->CubeTransformVertexBuffers[i] = DX12VertexBufferCreate(Device, sizeof(cube_transform_vertex_data) * c_MaxCubesPerBatch);
         }
-        Renderer->CubeTransforms = new cube_transform[sizeof(cube_transform) * c_MaxQuadsPerBatch];
+        Renderer->CubeInstanceData = new cube_transform_vertex_data[sizeof(cube_transform_vertex_data) * c_MaxCubesPerBatch];
     }
 
     // Create white texture
@@ -565,372 +652,6 @@ internal void GameRendererResizeSwapChain(game_renderer* Renderer, u32 RequestWi
     Warn("SwapChain resized to %d %d", RequestWidth, RequestHeight);
 }
 
-internal void GameRendererSetViewProjection(game_renderer* Renderer, m4 ViewProjection, draw_layer Layer)
-{
-    Renderer->QuadDrawLayers[(u32)Layer].RootSignatureBuffer.ViewProjection = ViewProjection;
-}
-
-internal void GameRendererSubmitQuad(game_renderer* Renderer, v3 Translation, v3 Rotation, v2 Scale, v4 Color, draw_layer Layer)
-{
-    auto& DrawLayer = Renderer->QuadDrawLayers[(u32)Layer];
-
-    m4 Transform = bkm::Translate(m4(1.0f), Translation)
-        * bkm::ToM4(qtn(Rotation))
-        * bkm::Scale(m4(1.0f), v3(Scale, 1.0f));
-
-    v2 Coords[4];
-    Coords[0] = { 0.0f, 0.0f };
-    Coords[1] = { 1.0f, 0.0f };
-    Coords[2] = { 1.0f, 1.0f };
-    Coords[3] = { 0.0f, 1.0f };
-
-    for (u32 i = 0; i < CountOf(c_QuadVertexPositions); i++)
-    {
-        DrawLayer.VertexDataPtr->Position = v3(Transform * c_QuadVertexPositions[i]);
-        DrawLayer.VertexDataPtr->Color = Color;
-        DrawLayer.VertexDataPtr->TexCoord = Coords[i];
-        DrawLayer.VertexDataPtr->TexIndex = 0;
-        DrawLayer.VertexDataPtr++;
-    }
-
-    DrawLayer.IndexCount += 6;
-}
-
-internal void GameRendererSubmitQuad(game_renderer* Renderer, v3 Translation, v3 Rotation, v2 Scale, texture Texture, v4 Color, draw_layer Layer)
-{
-    Assert(Texture.Handle != nullptr, "Texture is invalid!");
-
-    auto& DrawLayer = Renderer->QuadDrawLayers[(u32)Layer];
-
-    // TODO: ID system, pointers are unreliable
-    u32 TextureIndex = 0;
-    for (u32 i = 1; i < Renderer->CurrentTextureStackIndex; i++)
-    {
-        if (Renderer->TextureStack[i].Handle == Texture.Handle)
-        {
-            TextureIndex = i;
-            break;
-        }
-    }
-
-    if (TextureIndex == 0)
-    {
-        Assert(Renderer->CurrentTextureStackIndex < c_MaxTexturesPerDrawCall, "Renderer->TextureStackIndex < c_MaxTexturesPerDrawCall");
-        TextureIndex = Renderer->CurrentTextureStackIndex;
-        Renderer->TextureStack[TextureIndex] = Texture;
-        Renderer->CurrentTextureStackIndex++;
-    }
-
-    m4 Transform = bkm::Translate(m4(1.0f), Translation)
-        * bkm::ToM4(qtn(Rotation))
-        * bkm::Scale(m4(1.0f), v3(Scale, 1.0f));
-
-    v2 Coords[4];
-    Coords[0] = { 0.0f, 0.0f };
-    Coords[1] = { 1.0f, 0.0f };
-    Coords[2] = { 1.0f, 1.0f };
-    Coords[3] = { 0.0f, 1.0f };
-
-    for (u32 i = 0; i < CountOf(c_QuadVertexPositions); i++)
-    {
-        DrawLayer.VertexDataPtr->Position = v3(Transform * c_QuadVertexPositions[i]);
-        DrawLayer.VertexDataPtr->Color = Color;
-        DrawLayer.VertexDataPtr->TexCoord = Coords[i];
-        DrawLayer.VertexDataPtr->TexIndex = TextureIndex;
-        DrawLayer.VertexDataPtr++;
-    }
-
-    DrawLayer.IndexCount += 6;
-}
-
-// ~0.00380 ms
-internal void GameRendererSubmitCube_V2(game_renderer* Renderer, v3 Translation, v3 Rotation, v3 Scale, texture Texture, v4 Color, draw_layer Layer)
-{
-    //ScopedTimer timer("GameRendererSubmitCube_V2");
-
-    u32 TextureIndex = 0;
-    for (u32 i = 1; i < Renderer->CurrentTextureStackIndex; i++)
-    {
-        if (Renderer->TextureStack[i].Handle == Texture.Handle)
-        {
-            TextureIndex = i;
-            break;
-        }
-    }
-
-    if (TextureIndex == 0)
-    {
-        Assert(Renderer->CurrentTextureStackIndex < c_MaxTexturesPerDrawCall, "Renderer->TextureStackIndex < c_MaxTexturesPerDrawCall");
-        TextureIndex = Renderer->CurrentTextureStackIndex;
-        Renderer->TextureStack[TextureIndex] = Texture;
-        Renderer->CurrentTextureStackIndex++;
-    }
-
-    m4 Transform = bkm::Translate(m4(1.0f), Translation)
-        * bkm::ToM4(qtn(Rotation))
-        * bkm::Scale(m4(1.0f), Scale);
-
-    Renderer->CubeTransforms[Renderer->CubeInstanceCount++].Transform = Transform;
-}
-
-internal void GameRendererSubmitCube_V2(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale, const v4& Color, draw_layer Layer)
-{
-    //ScopedTimer timer("GameRendererSubmitCube_V2");
-#if ENABLE_SIMD
-    XMMATRIX XmmScale = XMMatrixScalingFromVector(XMVectorSet(Scale.x, Scale.y, Scale.z, 0.0f));
-    XMMATRIX XmmRot = XMMatrixRotationQuaternion(XMQuaternionRotationRollPitchYaw(Rotation.x, Rotation.y, Rotation.z));
-    XMMATRIX XmmTrans = XMMatrixTranslationFromVector(XMVectorSet(Translation.x, Translation.y, Translation.z, 0.0f));
-
-    XMMATRIX XmmTransform = XmmScale * XmmRot * XmmTrans;
-    Renderer->CubeTransforms[Renderer->CubeInstanceCount].XmmTransform = XmmTransform;
-    Renderer->CubeInstanceCount++;
-#else
-    m4 Transform = bkm::Translate(m4(1.0f), Translation)
-        * bkm::ToM4(qtn(Rotation))
-        * bkm::Scale(m4(1.0f), Scale);
-
-    Renderer->CubeTransforms[Renderer->CubeInstanceCount].Transform = Transform;
-    Renderer->CubeInstanceCount++;
-#endif
-
-}
-
-internal void GameRendererSubmitCube(game_renderer* Renderer, v3 Translation, v3 Rotation, v3 Scale, texture Texture, v4 Color, draw_layer Layer)
-{
-    Assert(Texture.Handle != nullptr, "Texture is invalid!");
-
-    auto& DrawLayer = Renderer->QuadDrawLayers[(u32)Layer];
-
-    // TODO: ID system, pointers are unreliable
-    u32 TextureIndex = 0;
-    for (u32 i = 1; i < Renderer->CurrentTextureStackIndex; i++)
-    {
-        if (Renderer->TextureStack[i].Handle == Texture.Handle)
-        {
-            TextureIndex = i;
-            break;
-        }
-    }
-
-    if (TextureIndex == 0)
-    {
-        Assert(Renderer->CurrentTextureStackIndex < c_MaxTexturesPerDrawCall, "Renderer->TextureStackIndex < c_MaxTexturesPerDrawCall");
-        TextureIndex = Renderer->CurrentTextureStackIndex;
-        Renderer->TextureStack[TextureIndex] = Texture;
-        Renderer->CurrentTextureStackIndex++;
-    }
-
-    v2 Coords[4];
-    Coords[0] = { 0.0f, 0.0f };
-    Coords[1] = { 1.0f, 0.0f };
-    Coords[2] = { 1.0f, 1.0f };
-    Coords[3] = { 0.0f, 1.0f };
-
-#if ENABLE_SIMD
-    XMMATRIX XmmScale = XMMatrixScalingFromVector(XMVectorSet(Scale.x, Scale.y, Scale.z, 0.0f));
-    XMMATRIX XmmRot = XMMatrixRotationQuaternion(XMQuaternionRotationRollPitchYaw(Rotation.x, Rotation.y, Rotation.z));
-    XMMATRIX XmmTrans = XMMatrixTranslationFromVector(XMVectorSet(Translation.x, Translation.y, Translation.z, 0.0f));
-    XMMATRIX XmmTransform = XmmScale * XmmRot * XmmTrans;
-
-    static XMVECTOR CVP[24]
-    {
-        // Front face (+Z)
-        { -0.5f, -0.5f,  0.5f, 1.0f },
-        {  0.5f, -0.5f,  0.5f, 1.0f },
-        {  0.5f,  0.5f,  0.5f, 1.0f },
-        { -0.5f,  0.5f,  0.5f, 1.0f },
-
-        // Back face (-Z)
-        {  0.5f, -0.5f, -0.5f, 1.0f },
-        { -0.5f, -0.5f, -0.5f, 1.0f },
-        { -0.5f,  0.5f, -0.5f, 1.0f },
-        {  0.5f,  0.5f, -0.5f, 1.0f },
-
-        // Left face (-X)
-        { -0.5f, -0.5f, -0.5f, 1.0f },
-        { -0.5f, -0.5f,  0.5f, 1.0f },
-        { -0.5f,  0.5f,  0.5f, 1.0f },
-        { -0.5f,  0.5f, -0.5f, 1.0f },
-
-        // Right face (+X)
-        {  0.5f, -0.5f,  0.5f, 1.0f },
-        {  0.5f, -0.5f, -0.5f, 1.0f },
-        {  0.5f,  0.5f, -0.5f, 1.0f },
-        {  0.5f,  0.5f,  0.5f, 1.0f },
-
-        // Top face (+Y)
-        { -0.5f,  0.5f,  0.5f, 1.0f },
-        {  0.5f,  0.5f,  0.5f, 1.0f },
-        {  0.5f,  0.5f, -0.5f, 1.0f },
-        { -0.5f,  0.5f, -0.5f, 1.0f },
-
-        // Bottom face (-Y)
-        { -0.5f, -0.5f, -0.5f, 1.0f },
-        {  0.5f, -0.5f, -0.5f, 1.0f },
-        {  0.5f, -0.5f,  0.5f, 1.0f },
-        { -0.5f, -0.5f,  0.5f, 1.0f }
-    };
-
-    for (u32 i = 0; i < CountOf(CVP); i++)
-    {
-        XMVECTOR v = XMVector4Transform(CVP[i], XmmTransform);
-        DrawLayer.VertexDataPtr->Position = v3(v.m128_f32[0], v.m128_f32[1], v.m128_f32[2]);
-        DrawLayer.VertexDataPtr->Color = Color;
-        DrawLayer.VertexDataPtr->TexCoord = Coords[i % 4];
-        DrawLayer.VertexDataPtr->TexIndex = TextureIndex;
-        DrawLayer.VertexDataPtr++;
-    }
-
-    DrawLayer.IndexCount += 36;
-
-#else
-    m4 Transform = bkm::Translate(m4(1.0f), Translation)
-        * bkm::ToM4(qtn(Rotation))
-        * bkm::Scale(m4(1.0f), Scale);
-
-    for (u32 i = 0; i < CountOf(c_CubeVertexPositions); i++)
-    {
-        DrawLayer.VertexDataPtr->Position = v3(Transform * c_CubeVertexPositions[i]);
-        DrawLayer.VertexDataPtr->Color = Color;
-        DrawLayer.VertexDataPtr->TexCoord = Coords[i % 4];
-        DrawLayer.VertexDataPtr->TexIndex = TextureIndex;
-        DrawLayer.VertexDataPtr++;
-    }
-
-    DrawLayer.IndexCount += 36;
-#endif
-}
-
-internal void GameRendererSubmitCube(game_renderer* Renderer, v3 Translation, v3 Rotation, v3 Scale, v4 Color, draw_layer Layer)
-{
-    //ScopedTimer timer("GameRendererSubmitCube");
-
-    auto& DrawLayer = Renderer->QuadDrawLayers[(u32)Layer];
-
-    v2 Coords[4];
-    Coords[0] = { 0.0f, 0.0f };
-    Coords[1] = { 1.0f, 0.0f };
-    Coords[2] = { 1.0f, 1.0f };
-    Coords[3] = { 0.0f, 1.0f };
-
-#if ENABLE_SIMD
-    XMMATRIX XmmScale = XMMatrixScalingFromVector(XMVectorSet(Scale.x, Scale.y, Scale.z, 0.0f));
-    XMMATRIX XmmRot = XMMatrixRotationQuaternion(XMQuaternionRotationRollPitchYaw(Rotation.x, Rotation.y, Rotation.z));
-    XMMATRIX XmmTrans = XMMatrixTranslationFromVector(XMVectorSet(Translation.x, Translation.y, Translation.z, 0.0f));
-    XMMATRIX XmmTransform = XmmScale * XmmRot * XmmTrans;
-
-    static XMVECTOR CVP[24]
-    {
-        // Front face (+Z)
-        { -0.5f, -0.5f,  0.5f, 1.0f },
-        {  0.5f, -0.5f,  0.5f, 1.0f },
-        {  0.5f,  0.5f,  0.5f, 1.0f },
-        { -0.5f,  0.5f,  0.5f, 1.0f },
-
-        // Back face (-Z)
-        {  0.5f, -0.5f, -0.5f, 1.0f },
-        { -0.5f, -0.5f, -0.5f, 1.0f },
-        { -0.5f,  0.5f, -0.5f, 1.0f },
-        {  0.5f,  0.5f, -0.5f, 1.0f },
-
-        // Left face (-X)
-        { -0.5f, -0.5f, -0.5f, 1.0f },
-        { -0.5f, -0.5f,  0.5f, 1.0f },
-        { -0.5f,  0.5f,  0.5f, 1.0f },
-        { -0.5f,  0.5f, -0.5f, 1.0f },
-
-        // Right face (+X)
-        {  0.5f, -0.5f,  0.5f, 1.0f },
-        {  0.5f, -0.5f, -0.5f, 1.0f },
-        {  0.5f,  0.5f, -0.5f, 1.0f },
-        {  0.5f,  0.5f,  0.5f, 1.0f },
-
-        // Top face (+Y)
-        { -0.5f,  0.5f,  0.5f, 1.0f },
-        {  0.5f,  0.5f,  0.5f, 1.0f },
-        {  0.5f,  0.5f, -0.5f, 1.0f },
-        { -0.5f,  0.5f, -0.5f, 1.0f },
-
-        // Bottom face (-Y)
-        { -0.5f, -0.5f, -0.5f, 1.0f },
-        {  0.5f, -0.5f, -0.5f, 1.0f },
-        {  0.5f, -0.5f,  0.5f, 1.0f },
-        { -0.5f, -0.5f,  0.5f, 1.0f }
-    };
-
-    for (u32 i = 0; i < CountOf(CVP); i++)
-    {
-        XMVECTOR v = XMVector4Transform(CVP[i], XmmTransform);
-        DrawLayer.VertexDataPtr->Position = v3(v.m128_f32[0], v.m128_f32[1], v.m128_f32[2]);
-        DrawLayer.VertexDataPtr->Color = Color;
-        DrawLayer.VertexDataPtr->TexCoord = Coords[i % 4];
-        DrawLayer.VertexDataPtr->TexIndex = 0;
-        DrawLayer.VertexDataPtr++;
-    }
-
-    DrawLayer.IndexCount += 36;
-
-#else
-    m4 Transform = bkm::Translate(m4(1.0f), Translation)
-        * bkm::ToM4(qtn(Rotation))
-        * bkm::Scale(m4(1.0f), Scale);
-
-    for (u32 i = 0; i < CountOf(c_CubeVertexPositions); i++)
-    {
-        DrawLayer.VertexDataPtr->Position = v3(Transform * c_CubeVertexPositions[i]);
-        DrawLayer.VertexDataPtr->Color = Color;
-        DrawLayer.VertexDataPtr->TexCoord = Coords[i % 4];
-        DrawLayer.VertexDataPtr->TexIndex = 0;
-        DrawLayer.VertexDataPtr++;
-    }
-
-    DrawLayer.IndexCount += 36;
-#endif
-
-}
-
-internal void GameRendererSubmitQuadCustom(game_renderer* Renderer, v3 VertexPositions[4], texture Texture, v4 Color, draw_layer Layer)
-{
-    Assert(Texture.Handle != nullptr, "Texture handle is nullptr!");
-
-    // TODO: ID system, pointers are unreliable
-    u32 TextureIndex = 0;
-    for (u32 i = 1; i < Renderer->CurrentTextureStackIndex; i++)
-    {
-        if (Renderer->TextureStack[i].Handle == Texture.Handle)
-        {
-            TextureIndex = i;
-            break;
-        }
-    }
-
-    if (TextureIndex == 0)
-    {
-        Assert(Renderer->CurrentTextureStackIndex < c_MaxTexturesPerDrawCall, "Renderer->TextureStackIndex < c_MaxTexturesPerDrawCall");
-        TextureIndex = Renderer->CurrentTextureStackIndex;
-        Renderer->TextureStack[TextureIndex] = Texture;
-        Renderer->CurrentTextureStackIndex++;
-    }
-
-    v2 Coords[4];
-    Coords[0] = { 0.0f, 0.0f };
-    Coords[1] = { 1.0f, 0.0f };
-    Coords[2] = { 1.0f, 1.0f };
-    Coords[3] = { 0.0f, 1.0f };
-
-    auto& DrawLayer = Renderer->QuadDrawLayers[(u32)Layer];
-    for (u32 i = 0; i < 4; i++)
-    {
-        DrawLayer.VertexDataPtr->Position = VertexPositions[i];
-        DrawLayer.VertexDataPtr->Color = Color;
-        DrawLayer.VertexDataPtr->TexCoord = Coords[i];
-        DrawLayer.VertexDataPtr->TexIndex = TextureIndex;
-        DrawLayer.VertexDataPtr++;
-    }
-
-    DrawLayer.IndexCount += 6;
-}
-
 internal void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
 {
     // Get current frame stuff
@@ -960,7 +681,7 @@ internal void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
     CommandList->Reset(DirectCommandAllocator, Renderer->QuadPipeline.Handle);
 
     // Frame that was presented needs to be set to render target again
-    auto Barrier = GameRendererTransition(BackBuffer, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
+    auto Barrier = DX12Transition(BackBuffer, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
     CommandList->ResourceBarrier(1, &Barrier);
 
     // Copy vertex data to gpu buffer
@@ -971,7 +692,7 @@ internal void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
 
     for (u32 i = 0; i < FIF; i++)
     {
-        DX12VertexBufferSendData(&Renderer->CubeTransformVertexBuffers[i], Renderer->DirectCommandList, Renderer->CubeTransforms, Renderer->CubeInstanceCount * sizeof(cube_transform));
+        DX12VertexBufferSendData(&Renderer->CubeTransformVertexBuffers[i], Renderer->DirectCommandList, Renderer->CubeInstanceData, Renderer->CubeInstanceCount * sizeof(cube_transform_vertex_data));
     }
 
     // Set and clear render target view
@@ -1004,61 +725,35 @@ internal void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
 
     // Quads
     CommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-    CommandList->SetPipelineState(Renderer->QuadPipeline.Handle);
-
-    for (auto& DrawLayer : Renderer->QuadDrawLayers)
-    {
-        if (DrawLayer.IndexCount > 0)
-        {
-            // Draw layers do not share depth 
-            CommandList->ClearDepthStencilView(DSV, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
-
-            // Bind vertex buffer
-            local_persist D3D12_VERTEX_BUFFER_VIEW QuadVertexBufferView;
-            QuadVertexBufferView.BufferLocation = DrawLayer.VertexBuffer[CurrentBackBufferIndex].Buffer.Handle->GetGPUVirtualAddress();
-            QuadVertexBufferView.StrideInBytes = sizeof(quad_vertex);
-            QuadVertexBufferView.SizeInBytes = DrawLayer.IndexCount * sizeof(quad_vertex);
-            CommandList->IASetVertexBuffers(0, 1, &QuadVertexBufferView);
-
-            // Bind index buffer
-            local_persist D3D12_INDEX_BUFFER_VIEW QuadIndexBufferView;
-            QuadIndexBufferView.BufferLocation = Renderer->QuadIndexBuffer.Buffer.Handle->GetGPUVirtualAddress();
-            QuadIndexBufferView.Format = DXGI_FORMAT_R32_UINT;
-            QuadIndexBufferView.SizeInBytes = DrawLayer.IndexCount * sizeof(u32);
-            CommandList->IASetIndexBuffer(&QuadIndexBufferView);
-
-            CommandList->SetGraphicsRoot32BitConstants(0, 16, &DrawLayer.RootSignatureBuffer.ViewProjection, 0);
-
-            // Issue draw call
-            CommandList->DrawIndexedInstanced(DrawLayer.IndexCount, 1, 0, 0, 0);
-        }
-    }
 
     // Render instanced
     if (Renderer->CubeInstanceCount > 0)
     {
         CommandList->SetPipelineState(Renderer->CubePipeline.Handle);
 
-        CommandList->SetGraphicsRoot32BitConstants(0, 16, &Renderer->QuadDrawLayers[0].RootSignatureBuffer.ViewProjection, 0);
+        CommandList->ClearDepthStencilView(DSV, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
+
+        CommandList->SetGraphicsRoot32BitConstants(0, 16, &Renderer->CubeRootSignatureBuffer, 0);
 
         // Bind vertex positions
         local_persist D3D12_VERTEX_BUFFER_VIEW CubeVertexBufferView;
         CubeVertexBufferView.BufferLocation = Renderer->CubePositionsVertexBuffer.Buffer.Handle->GetGPUVirtualAddress();
-        CubeVertexBufferView.SizeInBytes = Renderer->CubePositionsVertexBuffer.Buffer.Size;
-        CubeVertexBufferView.StrideInBytes = sizeof(v4);
-        CommandList->IASetVertexBuffers(0, 1, &CubeVertexBufferView);
+        CubeVertexBufferView.SizeInBytes = (u32)Renderer->CubePositionsVertexBuffer.Buffer.Size;
+        CubeVertexBufferView.StrideInBytes = sizeof(cube_vertex);
 
         // Bind transforms
         local_persist D3D12_VERTEX_BUFFER_VIEW TransformVertexBufferView;
         TransformVertexBufferView.BufferLocation = Renderer->CubeTransformVertexBuffers[CurrentBackBufferIndex].Buffer.Handle->GetGPUVirtualAddress();
-        TransformVertexBufferView.SizeInBytes = Renderer->CubeInstanceCount * sizeof(cube_transform);
-        TransformVertexBufferView.StrideInBytes = sizeof(cube_transform);
-        CommandList->IASetVertexBuffers(1, 1, &TransformVertexBufferView);
+        TransformVertexBufferView.SizeInBytes = Renderer->CubeInstanceCount * sizeof(cube_transform_vertex_data);
+        TransformVertexBufferView.StrideInBytes = sizeof(cube_transform_vertex_data);
+
+        D3D12_VERTEX_BUFFER_VIEW VertexBufferViews[] = { CubeVertexBufferView, TransformVertexBufferView };
+        CommandList->IASetVertexBuffers(0, 2, VertexBufferViews);
 
         // Bind index buffer
         local_persist D3D12_INDEX_BUFFER_VIEW IndexBufferView;
         IndexBufferView.BufferLocation = Renderer->QuadIndexBuffer.Buffer.Handle->GetGPUVirtualAddress();
-        IndexBufferView.SizeInBytes = 36 * Renderer->CubeInstanceCount * sizeof(u32);
+        IndexBufferView.SizeInBytes = 36 * sizeof(u32);
         IndexBufferView.Format = DXGI_FORMAT_R32_UINT;
         CommandList->IASetIndexBuffer(&IndexBufferView);
 
@@ -1066,10 +761,43 @@ internal void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
         CommandList->DrawIndexedInstanced(36, Renderer->CubeInstanceCount, 0, 0, 0);
     }
 
+    // Render quads
+    if (true)
+    {
+        CommandList->SetPipelineState(Renderer->QuadPipeline.Handle);
+        for (auto& DrawLayer : Renderer->QuadDrawLayers)
+        {
+            if (DrawLayer.IndexCount > 0)
+            {
+                // Draw layers do not share depth 
+                CommandList->ClearDepthStencilView(DSV, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
+
+                // Bind vertex buffer
+                local_persist D3D12_VERTEX_BUFFER_VIEW QuadVertexBufferView;
+                QuadVertexBufferView.BufferLocation = DrawLayer.VertexBuffer[CurrentBackBufferIndex].Buffer.Handle->GetGPUVirtualAddress();
+                QuadVertexBufferView.StrideInBytes = sizeof(quad_vertex);
+                QuadVertexBufferView.SizeInBytes = DrawLayer.IndexCount * sizeof(quad_vertex);
+                CommandList->IASetVertexBuffers(0, 1, &QuadVertexBufferView);
+
+                // Bind index buffer
+                local_persist D3D12_INDEX_BUFFER_VIEW QuadIndexBufferView;
+                QuadIndexBufferView.BufferLocation = Renderer->QuadIndexBuffer.Buffer.Handle->GetGPUVirtualAddress();
+                QuadIndexBufferView.Format = DXGI_FORMAT_R32_UINT;
+                QuadIndexBufferView.SizeInBytes = DrawLayer.IndexCount * sizeof(u32);
+                CommandList->IASetIndexBuffer(&QuadIndexBufferView);
+
+                CommandList->SetGraphicsRoot32BitConstants(0, 16, &DrawLayer.RootSignatureBuffer.ViewProjection, 0);
+
+                // Issue draw call
+                CommandList->DrawIndexedInstanced(DrawLayer.IndexCount, 1, 0, 0, 0);
+            }
+        }
+    }
+
     // Present transition
     {
         // Rendered frame needs to be transitioned to present state
-        auto Barrier = GameRendererTransition(BackBuffer, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
+        auto Barrier = DX12Transition(BackBuffer, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
         CommandList->ResourceBarrier(1, &Barrier);
     }
 
@@ -1106,87 +834,7 @@ internal void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
     Renderer->CurrentBackBufferIndex = Renderer->SwapChain->GetCurrentBackBufferIndex();
 
     // Log dx12 stuff
-    GameRendererDumpInfoQueue(Renderer->DebugInfoQueue);
-}
-
-internal D3D12_RESOURCE_BARRIER GameRendererTransition(
-   ID3D12Resource* Resource,
-   D3D12_RESOURCE_STATES StateBefore,
-   D3D12_RESOURCE_STATES StateAfter,
-   UINT Subresource,
-   D3D12_RESOURCE_BARRIER_FLAGS Flags)
-{
-    D3D12_RESOURCE_BARRIER Result;
-    Result.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-    Result.Flags = Flags;
-    Result.Transition.pResource = Resource;
-    Result.Transition.StateBefore = StateBefore;
-    Result.Transition.StateAfter = StateAfter;
-    Result.Transition.Subresource = Subresource;
-    return Result;
-};
-
-internal void GameRendererDumpInfoQueue(ID3D12InfoQueue* InfoQueue)
-{
-    if (!InfoQueue)
-        return;
-
-    for (UINT64 i = 0; i < InfoQueue->GetNumStoredMessages(); ++i)
-    {
-        SIZE_T MessageLength = 0;
-
-        // Get the length of the message
-        HRESULT HR = InfoQueue->GetMessage(i, nullptr, &MessageLength);
-        if (FAILED(HR))
-        {
-            Warn("Failed to get message length: HRESULT = 0x%08X", HR);
-            continue;
-        }
-
-        // Allocate memory for the message
-        auto Message = static_cast<D3D12_MESSAGE*>(alloca(MessageLength));
-        if (!Message)
-        {
-            Warn("Failed to allocate memory for message.");
-            continue;
-        }
-
-        // Retrieve the message
-        HR = InfoQueue->GetMessage(i, Message, &MessageLength);
-        if (FAILED(HR))
-        {
-            Warn("Failed to get message: HRESULT = 0x%08X", HR);
-            continue;
-        }
-
-        switch (Message->Severity)
-        {
-            case D3D12_MESSAGE_SEVERITY_MESSAGE:
-            {
-                Trace("[DX12]%s", Message->pDescription);
-                break;
-            }
-            case D3D12_MESSAGE_SEVERITY_INFO:
-            {
-                Info("[DX12]%s", Message->pDescription);
-                break;
-            }
-            case D3D12_MESSAGE_SEVERITY_WARNING:
-            {
-                Warn("[DX12]%s", Message->pDescription);
-                break;
-            }
-            case D3D12_MESSAGE_SEVERITY_ERROR:
-            case D3D12_MESSAGE_SEVERITY_CORRUPTION:
-            {
-                Err("[DX12]%s", Message->pDescription);
-                break;
-            }
-        }
-    }
-
-    // Optionally, clear the messages from the queue
-    InfoQueue->ClearStoredMessages();
+    DX12DumpInfoQueue(Renderer->DebugInfoQueue);
 }
 
 internal u64 GameRendererSignal(ID3D12CommandQueue* CommandQueue, ID3D12Fence* Fence, u64* FenceValue)
@@ -1212,41 +860,265 @@ internal void GameRendererFlush(game_renderer* Renderer)
     GameRendererWaitForFenceValue(Renderer->Fence, FenceValueForSignal, Renderer->DirectFenceEvent);
 }
 
-template<typename F>
-internal void GameRendererSubmitToQueueImmidiate(ID3D12Device* Device, ID3D12CommandAllocator* CommandAllocator, ID3D12GraphicsCommandList* CommandList, ID3D12CommandQueue* CommandQueue, F&& Func)
+// ===============================================================================================================
+//                                                   RENDERER API                                               
+// ===============================================================================================================
+internal void GameRendererSetViewProjectionLayer(game_renderer* Renderer, const m4& ViewProjection, draw_layer Layer)
 {
-    // Reset
-    CommandAllocator->Reset();
-    CommandList->Reset(CommandAllocator, nullptr);
+    Renderer->QuadDrawLayers[(u32)Layer].RootSignatureBuffer.ViewProjection = ViewProjection;
+}
 
-    // Record stuff
-    Func(CommandList);
+internal void GameRendererSetViewProjection(game_renderer* Renderer, const m4& ViewProjection)
+{
+    Renderer->CubeRootSignatureBuffer.ViewProjection = ViewProjection;
+}
 
-    // Finish recording
-    CommandList->Close();
+internal void GameRendererSubmitQuad(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v2& Scale, const v4& Color, draw_layer Layer)
+{
+    auto& DrawLayer = Renderer->QuadDrawLayers[(u32)Layer];
+    Assert(DrawLayer.IndexCount < c_MaxQuadIndices, "DrawLayer.IndexCount < c_MaxQuadIndices");
 
-    // Execute command list
-    CommandQueue->ExecuteCommandLists(1, (ID3D12CommandList* const*)&CommandList);
+    m4 Transform = bkm::Translate(m4(1.0f), Translation)
+        * bkm::ToM4(qtn(Rotation))
+        * bkm::Scale(m4(1.0f), v3(Scale, 1.0f));
 
-    // Wait for completion
+    v2 Coords[4];
+    Coords[0] = { 0.0f, 0.0f };
+    Coords[1] = { 1.0f, 0.0f };
+    Coords[2] = { 1.0f, 1.0f };
+    Coords[3] = { 0.0f, 1.0f };
+
+    for (u32 i = 0; i < CountOf(c_QuadVertexPositions); i++)
     {
-        UINT64 FenceValue = 0;
-        HANDLE FenceEvent = CreateEvent(nullptr, false, false, nullptr);
-
-        ID3D12Fence* Fence;
-
-        // Create a simple fence for synchronization
-        Device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&Fence));
-
-        CommandQueue->Signal(Fence, ++FenceValue);
-
-        // Step 3: Wait until the GPU reaches the fence
-        if (SUCCEEDED(Fence->SetEventOnCompletion(FenceValue, FenceEvent)))
-        {
-            WaitForSingleObject(FenceEvent, INFINITE);
-        }
-        CloseHandle(FenceEvent);
-
-        Fence->Release();
+        DrawLayer.VertexDataPtr->Position = v3(Transform * c_QuadVertexPositions[i]);
+        DrawLayer.VertexDataPtr->Color = Color;
+        DrawLayer.VertexDataPtr->TexCoord = Coords[i];
+        DrawLayer.VertexDataPtr->TexIndex = 0;
+        DrawLayer.VertexDataPtr++;
     }
+
+    DrawLayer.IndexCount += 6;
+}
+
+internal void GameRendererSubmitQuad(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v2& Scale, const texture& Texture, const v4& Color, draw_layer Layer)
+{
+    auto& DrawLayer = Renderer->QuadDrawLayers[(u32)Layer];
+    Assert(DrawLayer.IndexCount < c_MaxQuadIndices, "DrawLayer.IndexCount < c_MaxQuadIndices");
+    Assert(Texture.Handle != nullptr, "Texture is invalid!");
+
+    // TODO: ID system, pointers are unreliable
+    u32 TextureIndex = 0;
+    for (u32 i = 1; i < Renderer->CurrentTextureStackIndex; i++)
+    {
+        if (Renderer->TextureStack[i].Handle == Texture.Handle)
+        {
+            TextureIndex = i;
+            break;
+        }
+    }
+
+    if (TextureIndex == 0)
+    {
+        Assert(Renderer->CurrentTextureStackIndex < c_MaxTexturesPerDrawCall, "Renderer->TextureStackIndex < c_MaxTexturesPerDrawCall");
+        TextureIndex = Renderer->CurrentTextureStackIndex;
+        Renderer->TextureStack[TextureIndex] = Texture;
+        Renderer->CurrentTextureStackIndex++;
+    }
+
+    m4 Transform = bkm::Translate(m4(1.0f), Translation)
+        * bkm::ToM4(qtn(Rotation))
+        * bkm::Scale(m4(1.0f), v3(Scale, 1.0f));
+
+    v2 Coords[4];
+    Coords[0] = { 0.0f, 0.0f };
+    Coords[1] = { 1.0f, 0.0f };
+    Coords[2] = { 1.0f, 1.0f };
+    Coords[3] = { 0.0f, 1.0f };
+
+    for (u32 i = 0; i < CountOf(c_QuadVertexPositions); i++)
+    {
+        DrawLayer.VertexDataPtr->Position = v3(Transform * c_QuadVertexPositions[i]);
+        DrawLayer.VertexDataPtr->Color = Color;
+        DrawLayer.VertexDataPtr->TexCoord = Coords[i];
+        DrawLayer.VertexDataPtr->TexIndex = TextureIndex;
+        DrawLayer.VertexDataPtr++;
+    }
+
+    DrawLayer.IndexCount += 6;
+}
+
+internal void GameRendererSubmitQuadCustom(game_renderer* Renderer, v3 VertexPositions[4], const texture& Texture, const v4& Color, draw_layer Layer)
+{
+    auto& DrawLayer = Renderer->QuadDrawLayers[(u32)Layer];
+    Assert(DrawLayer.IndexCount < c_MaxQuadIndices, "DrawLayer.IndexCount < c_MaxQuadIndices");
+    Assert(Texture.Handle != nullptr, "Texture handle is nullptr!");
+
+    // TODO: ID system, pointers are unreliable
+    u32 TextureIndex = 0;
+    for (u32 i = 1; i < Renderer->CurrentTextureStackIndex; i++)
+    {
+        if (Renderer->TextureStack[i].Handle == Texture.Handle)
+        {
+            TextureIndex = i;
+            break;
+        }
+    }
+
+    if (TextureIndex == 0)
+    {
+        Assert(Renderer->CurrentTextureStackIndex < c_MaxTexturesPerDrawCall, "Renderer->TextureStackIndex < c_MaxTexturesPerDrawCall");
+        TextureIndex = Renderer->CurrentTextureStackIndex;
+        Renderer->TextureStack[TextureIndex] = Texture;
+        Renderer->CurrentTextureStackIndex++;
+    }
+
+    v2 Coords[4];
+    Coords[0] = { 0.0f, 0.0f };
+    Coords[1] = { 1.0f, 0.0f };
+    Coords[2] = { 1.0f, 1.0f };
+    Coords[3] = { 0.0f, 1.0f };
+
+    for (u32 i = 0; i < 4; i++)
+    {
+        DrawLayer.VertexDataPtr->Position = VertexPositions[i];
+        DrawLayer.VertexDataPtr->Color = Color;
+        DrawLayer.VertexDataPtr->TexCoord = Coords[i];
+        DrawLayer.VertexDataPtr->TexIndex = TextureIndex;
+        DrawLayer.VertexDataPtr++;
+    }
+
+    DrawLayer.IndexCount += 6;
+}
+
+internal void GameRendererSubmitCube(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale, const texture& Texture, const v4& Color)
+{
+    Assert(Renderer->CubeInstanceCount < c_MaxCubesPerBatch, "Renderer->CubeInstanceCount < c_MaxCubesPerBatch");
+
+    u32 TextureIndex = 0;
+    for (u32 i = 1; i < Renderer->CurrentTextureStackIndex; i++)
+    {
+        if (Renderer->TextureStack[i].Handle == Texture.Handle)
+        {
+            TextureIndex = i;
+            break;
+        }
+    }
+
+    if (TextureIndex == 0)
+    {
+        Assert(Renderer->CurrentTextureStackIndex < c_MaxTexturesPerDrawCall, "Renderer->TextureStackIndex < c_MaxTexturesPerDrawCall");
+        TextureIndex = Renderer->CurrentTextureStackIndex;
+        Renderer->TextureStack[TextureIndex] = Texture;
+        Renderer->CurrentTextureStackIndex++;
+    }
+
+    auto& Cube = Renderer->CubeInstanceData[Renderer->CubeInstanceCount];
+
+#if ENABLE_SIMD
+    XMMATRIX XmmScale = XMMatrixScalingFromVector(XMVectorSet(Scale.x, Scale.y, Scale.z, 0.0f));
+    XMMATRIX XmmRot = XMMatrixRotationQuaternion(XMQuaternionRotationRollPitchYaw(Rotation.x, Rotation.y, Rotation.z));
+    XMMATRIX XmmTrans = XMMatrixTranslationFromVector(XMVectorSet(Translation.x, Translation.y, Translation.z, 0.0f));
+    XMMATRIX XmmTransform = XmmScale * XmmRot * XmmTrans;
+
+    Cube.Color = Color;
+    Cube.XmmTransform = XmmTransform;
+    Cube.TextureIndex = TextureIndex;
+
+    Renderer->CubeInstanceCount++;
+#else
+    m4 Transform = bkm::Translate(m4(1.0f), Translation)
+        * bkm::ToM4(qtn(Rotation))
+        * bkm::Scale(m4(1.0f), Scale);
+
+    Cube.Color = Color;
+    Cube.Transform = Transform;
+    Cube.TextureIndex = TextureIndex;
+    Renderer->CubeInstanceCount++;
+#endif
+}
+
+internal void GameRendererSubmitCube(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale, const v4& Color)
+{
+    Assert(Renderer->CubeInstanceCount < c_MaxCubesPerBatch, "Renderer->CubeInstanceCount < c_MaxCubesPerBatch");
+
+    auto& Cube = Renderer->CubeInstanceData[Renderer->CubeInstanceCount];
+
+#if ENABLE_SIMD
+    XMMATRIX XmmScale = XMMatrixScalingFromVector(XMVectorSet(Scale.x, Scale.y, Scale.z, 0.0f));
+    XMMATRIX XmmRot = XMMatrixRotationQuaternion(XMQuaternionRotationRollPitchYaw(Rotation.x, Rotation.y, Rotation.z));
+    XMMATRIX XmmTrans = XMMatrixTranslationFromVector(XMVectorSet(Translation.x, Translation.y, Translation.z, 0.0f));
+
+    XMMATRIX XmmTransform = XmmScale * XmmRot * XmmTrans;
+
+    Cube.Color = Color;
+    Cube.XmmTransform = XmmTransform;
+    Cube.TextureIndex = 0;
+    Renderer->CubeInstanceCount++;
+#else
+    m4 Transform = bkm::Translate(m4(1.0f), Translation)
+        * bkm::ToM4(qtn(Rotation))
+        * bkm::Scale(m4(1.0f), Scale);
+
+    Cube.Color = Color;
+    Cube.Transform = Transform;
+    Cube.TextureIndex = 0;
+    Renderer->CubeInstanceCount++;
+#endif
+}
+
+internal void GameRendererSubmitCubeNoRotScale(game_renderer* Renderer, const v3& Translation, const texture& Texture, const v4& Color)
+{
+    Assert(Renderer->CubeInstanceCount < c_MaxCubesPerBatch, "Renderer->CubeInstanceCount < c_MaxCubesPerBatch");
+
+    u32 TextureIndex = 0;
+    for (u32 i = 1; i < Renderer->CurrentTextureStackIndex; i++)
+    {
+        if (Renderer->TextureStack[i].Handle == Texture.Handle)
+        {
+            TextureIndex = i;
+            break;
+        }
+    }
+
+    if (TextureIndex == 0)
+    {
+        Assert(Renderer->CurrentTextureStackIndex < c_MaxTexturesPerDrawCall, "Renderer->TextureStackIndex < c_MaxTexturesPerDrawCall");
+        TextureIndex = Renderer->CurrentTextureStackIndex;
+        Renderer->TextureStack[TextureIndex] = Texture;
+        Renderer->CurrentTextureStackIndex++;
+    }
+
+    auto& Cube = Renderer->CubeInstanceData[Renderer->CubeInstanceCount];
+
+    // TODO: We can do better by simply copying data and then calculate everything at one swoop
+#if ENABLE_SIMD
+    Cube.XmmTransform = XMMatrixTranslationFromVector(XMVectorSet(Translation.x, Translation.y, Translation.z, 0.0f));
+    Cube.Color = Color;
+    Cube.TextureIndex = TextureIndex;
+    Renderer->CubeInstanceCount++;
+#else
+    Cube.Color = Color;
+    Cube.Transform = bkm::Translate(m4(1.0f), Translation);
+    Cube.TextureIndex = TextureIndex;
+    Renderer->CubeInstanceCount++;
+#endif
+}
+
+internal void GameRendererSubmitCubeNoRotScale(game_renderer* Renderer, const v3& Translation, const v4& Color)
+{
+    Assert(Renderer->CubeInstanceCount < c_MaxCubesPerBatch, "Renderer->CubeInstanceCount < c_MaxCubesPerBatch");
+
+    auto& Cube = Renderer->CubeInstanceData[Renderer->CubeInstanceCount];
+
+#if ENABLE_SIMD
+    Cube.XmmTransform = XMMatrixTranslationFromVector(XMVectorSet(Translation.x, Translation.y, Translation.z, 0.0f));
+    Cube.Color = Color;
+    Cube.TextureIndex = 0;
+    Renderer->CubeInstanceCount++;
+#else
+    Cube.Color = Color;
+    Cube.Transform = bkm::Translate(m4(1.0f), Translation);
+    Cube.TextureIndex = 0;
+    Renderer->CubeInstanceCount++;
+#endif
 }

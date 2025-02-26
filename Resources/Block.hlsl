@@ -6,15 +6,15 @@ cbuffer root_constants : register(b0)
 struct vertex_shader_input
 {
     float4 Position : POSITION;
-    //float4 Color : COLOR;
-    //float2 TexCoord : TEXCOORD;
-    //uint TexIndex : TEXINDEX;
+    float2 TexCoord : TEXCOORD;
 
     // Per instance
     float4 TransformRow0 : TRANSFORMA;
     float4 TransformRow1 : TRANSFORMB;
     float4 TransformRow2 : TRANSFORMC;
     float4 TransformRow3 : TRANSFORMD;
+    float4 Color : COLOR;
+    uint TexIndex : TEXINDEX;
 };
 
 struct pixel_shader_input
@@ -32,11 +32,9 @@ pixel_shader_input VSMain(vertex_shader_input In)
     float4x4 Transform = float4x4(In.TransformRow0, In.TransformRow1, In.TransformRow2, In.TransformRow3);
     
     Out.Position = mul(ViewProjection, mul(transpose(Transform), In.Position));
-    //Out.Position = mul(ViewProjection, In.Position);
-    //Out.Color = In.Color;
-    Out.Color = float4(1.0f, 1.0f, 1.0f, 1.0f);
-    //Out.TexCoord = In.TexCoord;
-    //Out.TexIndex = In.TexIndex;
+    Out.Color = In.Color;
+    Out.TexCoord = In.TexCoord;
+    Out.TexIndex = In.TexIndex;
 
     return Out;
 }
@@ -47,9 +45,9 @@ SamplerState g_Sampler : register(s0);
 
 float4 PSMain(pixel_shader_input In) : SV_TARGET
 {
-    //float4 Result = In.Color * g_Texture[In.TexIndex].Sample(g_Sampler, In.TexCoord);
+    float4 Result = In.Color * g_Texture[In.TexIndex].Sample(g_Sampler, In.TexCoord);
     //float4 Result = In.Color;
-    float4 Result = float4(1.0f, 1.0f, 1.0f, 1.0f);
+    //float4 Result = float4(In.TexCoord, 0.0f, 1.0f);
 
     if (Result.a == 0.0f)
         discard;

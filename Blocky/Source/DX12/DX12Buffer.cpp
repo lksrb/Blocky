@@ -71,12 +71,12 @@ internal void DX12VertexBufferSendData(dx12_vertex_buffer* VertexBuffer, ID3D12G
 
     memcpy(VertexBuffer->MappedIntermediateData, Data, DataSize);
 
-    auto Barrier = GameRendererTransition(VertexBuffer->Buffer.Handle, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER, D3D12_RESOURCE_STATE_COPY_DEST);
+    auto Barrier = DX12Transition(VertexBuffer->Buffer.Handle, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER, D3D12_RESOURCE_STATE_COPY_DEST);
     CommandList->ResourceBarrier(1, &Barrier);
 
     CommandList->CopyBufferRegion(VertexBuffer->Buffer.Handle, 0, VertexBuffer->IntermediateBuffer.Handle, 0, DataSize);
 
-    Barrier = GameRendererTransition(VertexBuffer->Buffer.Handle, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
+    Barrier = DX12Transition(VertexBuffer->Buffer.Handle, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
     CommandList->ResourceBarrier(1, &Barrier);
 }
 
@@ -90,7 +90,7 @@ internal dx12_index_buffer DX12IndexBufferCreate(ID3D12Device* Device, ID3D12Com
     Intermediate.Handle->Map(0, nullptr, &MappedPtr);
     memcpy(MappedPtr, Data, Count * sizeof(u32));
     Intermediate.Handle->Unmap(0, nullptr);
-    GameRendererSubmitToQueueImmidiate(Device, CommandAllocator, CommandList, CommandQueue,
+    DX12SubmitToQueueImmidiate(Device, CommandAllocator, CommandList, CommandQueue,
     [&IndexBuffer, &Intermediate, Count](ID3D12GraphicsCommandList* CommandList)
     {
         CommandList->CopyBufferRegion(IndexBuffer.Buffer.Handle, 0, Intermediate.Handle, 0, Count * sizeof(u32));

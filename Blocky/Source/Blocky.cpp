@@ -117,6 +117,8 @@ internal game GameCreate(game_renderer* Renderer)
 {
     game Game = {};
 
+    Game.LogicBlocks.resize(RowCount * ColumnCount * LayerCount);
+
     // Crosshair texture will be separate from block textures
     Game.CrosshairTexture = TextureCreate(Renderer->Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, "Resources/Textures/MC/Crosshair.png");
 
@@ -183,6 +185,8 @@ internal game GameCreate(game_renderer* Renderer)
 
             StartPos.z++;
         }
+
+        CikCak++;
 
         StartPos.y++;
     }
@@ -341,7 +345,7 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
         v3 HitNormal;
         block HitBlock;
         u64 HitIndex;
-        if (FindFirstHit(Ray, Game->LogicBlocks, CountOf(Game->LogicBlocks), &HitPoint, &HitNormal, &HitBlock, &HitIndex))
+        if (FindFirstHit(Ray, Game->LogicBlocks, &HitPoint, &HitNormal, &HitBlock, &HitIndex))
         {
             auto& Block = Game->LogicBlocks[HitIndex];
             Block.Placed = false;
@@ -412,7 +416,7 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
     // Render
 
     // Render blocks
-    GameRendererSetViewProjection(Renderer, Game->Camera.GetViewProjection(), draw_layer::Main);
+    GameRendererSetViewProjection(Renderer, Game->Camera.GetViewProjection());
 
     if (0)
     {
@@ -420,16 +424,16 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
         {
             if (Block.Texture.Handle)
             {
-                GameRendererSubmitCube(Renderer, Block.Translation, v3(0.0f), Block.Scale, Block.Texture, Block.Color, draw_layer::Main);
+                GameRendererSubmitCube(Renderer, Block.Translation, v3(0.0f), Block.Scale, Block.Texture, Block.Color);
             }
             else
             {
-                GameRendererSubmitCube(Renderer, Block.Translation, v3(0.0f), Block.Scale, Block.Color, draw_layer::Main);
+                GameRendererSubmitCube(Renderer, Block.Translation, v3(0.0f), Block.Scale, Block.Color);
             }
         }
     }
 
-    if (0)
+    if (1)
     {
         for (auto& Block : Game->LogicBlocks)
         {
@@ -438,11 +442,11 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
 
             if (Block.Texture.Handle)
             {
-                GameRendererSubmitCube(Renderer, Block.Translation, v3(0.0f), Block.Scale, Block.Texture, Block.Color, draw_layer::Main);
+                GameRendererSubmitCubeNoRotScale(Renderer, Block.Translation, Block.Texture, Block.Color);
             }
             else
             {
-                GameRendererSubmitCube(Renderer, Block.Translation, v3(0.0f), Block.Scale, Block.Color, draw_layer::Main);
+                GameRendererSubmitCubeNoRotScale(Renderer, Block.Translation, Block.Color);
             }
         }
     }
@@ -465,8 +469,9 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
             Vel.y = 0;
         }
 
-        GameRendererSubmitCube(Renderer, Pos, v3(0.0f), v3(1.0f), Game->BlockTextures[u32(block_type::Dirt)], v4(1.0), draw_layer::Main);
     }
+
+    //GameRendererSubmitCube(Renderer, v3(0.0f), v3(0.0f), v3(1.0f), Game->BlockTextures[u32(block_type::Dirt)], v4(1.0), draw_layer::Main);
 
     //// Render intersections
     //// TODO: Delete
@@ -484,8 +489,11 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
 
     //GameRendererSubmitCube(Renderer, v3(1.0), v3(0.0f), v3(1.0f), v4(1.0), draw_layer::Main);
 
-    GameRendererSubmitCube_V2(Renderer, v3(0.0), v3(0.0f), v3(1.0f), v4(1.0), draw_layer::Main);
-    GameRendererSubmitCube_V2(Renderer, v3(1.0, 0.0f, 0.0f), v3(0.0f), v3(1.0f), v4(1.0), draw_layer::Main);
+    //GameRendererSubmitCube_V2(Renderer, v3(0.0), v3(0.0f), v3(1.0f), v4(1.0), draw_layer::Main);
+    // They render on top of each other or just the first one is rendererd
+    //GameRendererSubmitCube_V2(Renderer, v3(1.0, 1.0f, 0.0f), v3(0.0f), v3(1.0f), v4(1.0f, 0.0f, 0.0f, 1.0f), draw_layer::Main);
+    //GameRendererSubmitCube_V2(Renderer, v3(0.0, 0.0f, 1.0f), v3(0.0f), v3(1.0f), v4(1.0), draw_layer::Main);
+    //GameRendererSubmitCube_V2(Renderer, v3(1.0, 0.0f, 1.0f), v3(0.0f), v3(1.0f), v4(1.0), draw_layer::Main);
 
     // HUD
     // HUD
@@ -493,7 +501,7 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
 
     // Orthographic projection: 0, 0, ClientAreaWidth, ClientAreaHeight
     Game->Camera.RecalculateProjectionOrtho_V2(ClientAreaWidth, ClientAreaHeight);
-    GameRendererSetViewProjection(Renderer, Game->Camera.Projection, draw_layer::HUD);
+    GameRendererSetViewProjectionLayer(Renderer, Game->Camera.Projection, draw_layer::HUD);
     f32 crosshairSize = 15.0f * 2.0f;
     f32 centerX = ClientAreaWidth / 2.0f - crosshairSize / 2.0f;
     f32 centerY = ClientAreaHeight / 2.0f - crosshairSize / 2.0f;

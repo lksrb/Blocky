@@ -5,35 +5,16 @@
  */
 #pragma once
 
- // DirectX 12
-#include <d3d12.h>
-#include <dxgi1_6.h>
-#include <d3dcompiler.h>
-#include <DirectXMath.h>
-using namespace DirectX;
+#include "DX12.h"
+#include "DX12Buffer.h"
+#include "DX12Texture.h"
+#include "DX12Pipeline.h"
 
-#pragma comment(lib, "d3d12.lib")
-#pragma comment(lib, "d3dcompiler.lib")
-#pragma comment(lib, "dxgi.lib")
-
-// D3D12 extension
-#include "d3dx12.h"
-
-#define DxAssert(x) Assert(SUCCEEDED(x), #x)
-#define FIF 2
-
-#if BK_DEBUG
-#define DX12_ENABLE_DEBUG_LAYER 1
-#else
-#define DX12_ENABLE_DEBUG_LAYER 0
-#endif
-
-#if DX12_ENABLE_DEBUG_LAYER
-#include <dxgidebug.h>
-#include <d3d12sdklayers.h>
-
-#pragma comment(lib, "dxguid.lib")
-#endif
+internal constexpr inline u32 c_MaxCubesPerBatch = 1 << 16;
+internal constexpr inline u32 c_MaxQuadsPerBatch = 1 << 16;
+internal constexpr inline u32 c_MaxQuadVertices = c_MaxQuadsPerBatch * 4;
+internal constexpr inline u32 c_MaxQuadIndices = c_MaxQuadsPerBatch * 6;
+internal constexpr inline u32 c_MaxTexturesPerDrawCall = 32; // TODO: Get this from the driver
 
 struct quad_vertex
 {
@@ -46,70 +27,13 @@ struct quad_vertex
 struct cube_vertex
 {
     v4 Position;
+    v2 TextureCoord;
 };
 
-internal constexpr inline u32 c_MaxQuadsPerBatch = 1 << 16;
-internal constexpr inline u32 c_MaxQuadVertices = c_MaxQuadsPerBatch * 4;
-internal constexpr inline u32 c_MaxQuadIndices = c_MaxQuadsPerBatch * 6;
-internal constexpr inline u32 c_MaxTexturesPerDrawCall = 32; // TODO: Get this from the driver
-
-// Each face has to have a normal vector, so unfortunately we cannot encode cube as 8 vertices
-internal constexpr inline v4 c_CubeVertexPositions[24] =
-{
-    // Front face (+Z)
-    { -0.5f, -0.5f,  0.5f, 1.0f },
-    {  0.5f, -0.5f,  0.5f, 1.0f },
-    {  0.5f,  0.5f,  0.5f, 1.0f },
-    { -0.5f,  0.5f,  0.5f, 1.0f },
-
-    // Back face (-Z)
-    {  0.5f, -0.5f, -0.5f, 1.0f },
-    { -0.5f, -0.5f, -0.5f, 1.0f },
-    { -0.5f,  0.5f, -0.5f, 1.0f },
-    {  0.5f,  0.5f, -0.5f, 1.0f },
-
-    // Left face (-X)
-    { -0.5f, -0.5f, -0.5f, 1.0f },
-    { -0.5f, -0.5f,  0.5f, 1.0f },
-    { -0.5f,  0.5f,  0.5f, 1.0f },
-    { -0.5f,  0.5f, -0.5f, 1.0f },
-
-    // Right face (+X)
-    {  0.5f, -0.5f,  0.5f, 1.0f },
-    {  0.5f, -0.5f, -0.5f, 1.0f },
-    {  0.5f,  0.5f, -0.5f, 1.0f },
-    {  0.5f,  0.5f,  0.5f, 1.0f },
-
-    // Top face (+Y)
-    { -0.5f,  0.5f,  0.5f, 1.0f },
-    {  0.5f,  0.5f,  0.5f, 1.0f },
-    {  0.5f,  0.5f, -0.5f, 1.0f },
-    { -0.5f,  0.5f, -0.5f, 1.0f },
-
-    // Bottom face (-Y)
-    { -0.5f, -0.5f, -0.5f, 1.0f },
-    {  0.5f, -0.5f, -0.5f, 1.0f },
-    {  0.5f, -0.5f,  0.5f, 1.0f },
-    { -0.5f, -0.5f,  0.5f, 1.0f }
-};
-
-internal constexpr inline v4 c_QuadVertexPositions[4]
-{
-    { -0.5f, -0.5f, 0.0f, 1.0f },
-    {  0.5f, -0.5f, 0.0f, 1.0f },
-    {  0.5f,  0.5f, 0.0f, 1.0f },
-    { -0.5f,  0.5f, 0.0f, 1.0f }
-};
-
-#include "DX12Buffer.h"
-#include "DX12Texture.h"
-#include "DX12Pipeline.h"
-
-// Strong-typed int
+// Strong-typed uint
 enum class draw_layer : u32
 {
-    Main = 0,
-    HUD,
+    HUD = 0,
 
     COUNT
 };
@@ -122,13 +46,16 @@ struct dx12_root_signature_constant_buffer
     m4 ViewProjection;
 };
 
-struct cube_transform
+struct cube_transform_vertex_data
 {
     union
     {
         m4 Transform;
         XMMATRIX XmmTransform;
     };
+
+    v4 Color;
+    u32 TextureIndex;
 };
 
 struct quad_draw_layer_data
@@ -207,7 +134,8 @@ struct game_renderer
     dx12_pipeline CubePipeline = {};
     dx12_vertex_buffer CubeTransformVertexBuffers[FIF] = {};
     dx12_vertex_buffer CubePositionsVertexBuffer = {};
-    cube_transform* CubeTransforms = nullptr;
+    cube_transform_vertex_data* CubeInstanceData = nullptr;
+    dx12_root_signature_constant_buffer CubeRootSignatureBuffer;
 };
 
 // Init / Destroy functions
@@ -217,27 +145,22 @@ internal void GameRendererDestroy(game_renderer* Renderer);
 internal void GameRendererInitD3D(game_renderer* Renderer, game_window Window);
 internal void GameRendererInitD3DPipeline(game_renderer* Renderer);
 internal void GameRendererResizeSwapChain(game_renderer* Renderer, u32 RequestWidth, u32 RequestHeight);
-
-// API-agnostic used in game code
-internal void GameRendererSetViewProjection(game_renderer* Renderer, m4 ViewProjection, draw_layer Layer);
-internal void GameRendererSubmitQuad(game_renderer* Renderer, v3 Translation, v3 Rotation, v2 Scale, v4 Color, draw_layer Layer);
-internal void GameRendererSubmitQuad(game_renderer* Renderer, v3 Translation, v3 Rotation, v2 Scale, texture Texture, v4 Color, draw_layer Layer);
-internal void GameRendererSubmitCube(game_renderer* Renderer, v3 Translation, v3 Rotation, v3 Scale, texture Texture, v4 Color, draw_layer Layer);
-internal void GameRendererSubmitCube(game_renderer* Renderer, v3 Translation, v3 Rotation, v3 Scale, v4 Color, draw_layer Layer);
-internal void GameRendererSubmitQuadCustom(game_renderer* Renderer, v3 VertexPositions[4], texture Texture, v4 Color, draw_layer Layer);
-
-internal void GameRendererSubmitCube_V2(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale, const v4& Color, draw_layer Layer);
-
-// Helpers
-internal D3D12_RESOURCE_BARRIER GameRendererTransition(ID3D12Resource* Resource, D3D12_RESOURCE_STATES StateBefore, D3D12_RESOURCE_STATES StateAfter, UINT Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_BARRIER_FLAGS Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE);
-
-internal void GameRendererDumpInfoQueue(ID3D12InfoQueue* InfoQueue);
+internal void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height);
 internal u64 GameRendererSignal(ID3D12CommandQueue* CommandQueue, ID3D12Fence* Fence, u64* FenceValue);
 internal void GameRendererWaitForFenceValue(ID3D12Fence* Fence, u64 FenceValue, HANDLE FenceEvent, u32 Duration = UINT32_MAX);
 internal void GameRendererFlush(game_renderer* Renderer);
 
-// Blocking API for submitting stuff to GPU
-template<typename F>
-internal void GameRendererSubmitToQueueImmidiate(ID3D12Device* Device, ID3D12CommandAllocator* CommandAllocator, ID3D12GraphicsCommandList* CommandList, ID3D12CommandQueue* CommandQueue, F&& Func);
+// ===============================================================================================================
+//                                                   RENDERER API                                               
+// ===============================================================================================================
+internal void GameRendererSetViewProjectionLayer(game_renderer* Renderer, const m4& ViewProjection, draw_layer Layer);
+internal void GameRendererSetViewProjection(game_renderer* Renderer, const m4& ViewProjection);
 
-
+// Render commands
+internal void GameRendererSubmitQuad(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v2& Scale, const v4& Color, draw_layer Layer);
+internal void GameRendererSubmitQuad(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v2& Scale, const texture& Texture, const v4& Color, draw_layer Layer);
+internal void GameRendererSubmitQuadCustom(game_renderer* Renderer, v3 VertexPositions[4], const texture& Texture, const v4& Color, draw_layer Layer);
+internal void GameRendererSubmitCube(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale, const texture& Texture, const v4& Color);
+internal void GameRendererSubmitCube(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale, const v4& Color);
+internal void GameRendererSubmitCubeNoRotScale(game_renderer* Renderer, const v3& Translation, const v4& Color);
+internal void GameRendererSubmitCubeNoRotScale(game_renderer* Renderer, const v3& Translation, const texture& Texture, const v4& Color);

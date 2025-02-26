@@ -112,10 +112,10 @@ internal texture TextureCreate(ID3D12Device* Device, ID3D12CommandAllocator* Com
         }
         UploadBuffer->Unmap(0, nullptr);
 
-        GameRendererSubmitToQueueImmidiate(Device, CommandAllocator, CommandList, CommandQueue, [&](ID3D12GraphicsCommandList* CommandList)
+        DX12SubmitToQueueImmidiate(Device, CommandAllocator, CommandList, CommandQueue, [&](ID3D12GraphicsCommandList* CommandList)
         {
             CommandList->CopyTextureRegion(&Dst, 0, 0, 0, &Src, nullptr);
-            auto Barrier = GameRendererTransition(Texture.Handle, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+            auto Barrier = DX12Transition(Texture.Handle, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
             CommandList->ResourceBarrier(1, &Barrier);
         });
     }

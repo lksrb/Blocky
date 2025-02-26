@@ -548,8 +548,8 @@ internal void Win32ProcessEvents(game_window Window, game_input* Input)
 internal game_window CreateGameWindow()
 {
     game_window Window;
-    const u32 DefaultWindowWidth = u32(1600);
-    const u32 DefaultWindowHeight = u32(900);
+    const u32 DefaultWindowWidth = u32(1600 * 1.3f);
+    const u32 DefaultWindowHeight = u32(900 * 1.3f);
 
     // Show window on primary window
     // TODO: User should choose on which monitor to display

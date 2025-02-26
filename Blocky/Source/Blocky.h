@@ -70,15 +70,15 @@ struct block
     block_type Type = block_type::INVALID;
 };
 
-static const i64 RowCount = 16;
-static const i64 ColumnCount = 16;
-static const i64 LayerCount = 16;
+static const i64 RowCount = 16 * 2;
+static const i64 ColumnCount = 16 * 2;
+static const i64 LayerCount = 16 * 2;
 
 struct game
 {
     camera Camera;
 
-    block LogicBlocks[RowCount * ColumnCount * LayerCount];
+    std::vector<block> LogicBlocks;
 
     std::vector<block> Blocks;
     std::vector<block> Intersections;

@@ -13,7 +13,7 @@ static constexpr inline u32 c_MaxQuadVertices = c_MaxQuadsPerBatch * 4;
 static constexpr inline u32 c_MaxQuadIndices = c_MaxQuadsPerBatch * 6;
 static constexpr inline u32 c_MaxTexturesPerDrawCall = 32; // TODO: Get this from the driver
 
-internal constexpr inline v4 c_QuadVertexPositions[4]
+static constexpr inline v4 c_QuadVertexPositions[4]
 {
     { -0.5f, -0.5f, 0.0f, 1.0f },
     {  0.5f, -0.5f, 0.0f, 1.0f },
@@ -22,7 +22,7 @@ internal constexpr inline v4 c_QuadVertexPositions[4]
 };
 
 // Each face has to have a normal vector, so unfortunately we cannot encode cube as 8 vertices
-static constexpr inline v4 c_CubeVertexPositions[24] =
+static constexpr inline v4 c_CubeVertices[24] =
 {
     // Front face (+Z)
     { -0.5f, -0.5f,  0.5f, 1.0f },
@@ -1180,9 +1180,9 @@ static void GameRendererSubmitCube(game_renderer* Renderer, v3 Translation, v3 R
     Coords[2] = { 1.0f, 1.0f };
     Coords[3] = { 0.0f, 1.0f };
 
-    for (u32 i = 0; i < CountOf(c_CubeVertexPositions); i++)
+    for (u32 i = 0; i < CountOf(c_CubeVertices); i++)
     {
-        Renderer->QuadVertexDataPtr->Position = v3(Transform * c_CubeVertexPositions[i]);
+        Renderer->QuadVertexDataPtr->Position = v3(Transform * c_CubeVertices[i]);
         Renderer->QuadVertexDataPtr->Color = Color;
         Renderer->QuadVertexDataPtr->TexCoord = Coords[i % 4];
         Renderer->QuadVertexDataPtr->TextureIndex = 0;
@@ -1204,9 +1204,9 @@ static void GameRendererSubmitCube(game_renderer* Renderer, v3 Translation, v3 R
     Coords[2] = { 1.0f, 1.0f };
     Coords[3] = { 0.0f, 1.0f };
 
-    for (u32 i = 0; i < CountOf(c_CubeVertexPositions); i++)
+    for (u32 i = 0; i < CountOf(c_CubeVertices); i++)
     {
-        Renderer->QuadVertexDataPtr->Position = v3(Transform * c_CubeVertexPositions[i]);
+        Renderer->QuadVertexDataPtr->Position = v3(Transform * c_CubeVertices[i]);
         Renderer->QuadVertexDataPtr->Color = Color;
         Renderer->QuadVertexDataPtr->TexCoord = Coords[i % 4];
         Renderer->QuadVertexDataPtr->TextureIndex = 0;
