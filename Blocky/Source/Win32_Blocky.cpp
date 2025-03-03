@@ -61,6 +61,7 @@
     printf(BK_RESET_COLOR "\n"); \
 } while(0)
 
+#define TraceV3(__V3) Trace("(%.3f, %.3f, %.3f)", __V3.x, __V3.y, __V3.z)
 #define InfoV3(__V3) Info("(%.3f, %.3f, %.3f)", __V3.x, __V3.y, __V3.z)
 
 #define ENABLE_BITWISE_OPERATORS(Enum, SizeOfEnum)                   \

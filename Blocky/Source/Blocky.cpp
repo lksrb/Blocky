@@ -113,6 +113,11 @@ internal void BlockDestroy(game* Game, u64 Index)
     Game->Blocks.erase(Game->Blocks.begin() + Index);
 }
 
+internal block* LogicBlockGet(game* Game, i32 C, i32 R, i32 L)
+{
+    return &Game->LogicBlocks[(L * RowCount * ColumnCount) + (R * RowCount) + C];
+}
+
 internal game GameCreate(game_renderer* Renderer)
 {
     game Game = {};
@@ -508,7 +513,7 @@ internal void GamePlayerUpdate(game* Game, const game_input* Input, f32 TimeStep
 
         for (auto& Block : Game->LogicBlocks)
         {
-            if (!Block.Placed) 
+            if (!Block.Placed)
                 continue;
 
             aabb BlockAABB = AABBFromV3(Block.Position, v3(1.0f));
@@ -537,7 +542,7 @@ internal void GamePlayerUpdate(game* Game, const game_input* Input, f32 TimeStep
 
         for (auto& Block : Game->LogicBlocks)
         {
-            if (!Block.Placed) 
+            if (!Block.Placed)
                 continue;
 
             aabb BlockAABB = AABBFromV3(Block.Position, v3(1.0f));
@@ -557,7 +562,7 @@ internal void GamePlayerUpdate(game* Game, const game_input* Input, f32 TimeStep
 
         for (auto& Block : Game->LogicBlocks)
         {
-            if (!Block.Placed) 
+            if (!Block.Placed)
                 continue;
 
             aabb BlockAABB = AABBFromV3(Block.Position, v3(1.0f));
@@ -574,7 +579,10 @@ internal void GamePlayerUpdate(game* Game, const game_input* Input, f32 TimeStep
         Player.Position = NextPos;
         Player.Velocity = NextVelocity;
     }
-    
+
+    i32 L = (i32)bkm::Floor(Player.Position.y + 0.5f);
+    Trace("F: (%d, %d, %d)", (i32)bkm::Floor(Player.Position.x + 0.5f), (i32)bkm::Floor(Player.Position.y + 0.5f), (i32)bkm::Floor(Player.Position.z + 0.5f));
+
     //
     // ----------------------------------------------------------------------------------------------------------
     // 
