@@ -61,7 +61,7 @@ enum class block_type : u32
 
 struct player
 {
-    v3 Position = v3(0.0f, 20.0f, 1.0f);
+    v3 Position = v3(0.0f, 18, 1.0f);
     v3 Rotation = v3(-bkm::PI_HALF, 0.0f, 0.0f);
     v3 Velocity = v3(0.0f);
     bool PhysicsObject = true;
@@ -80,11 +80,12 @@ struct block
 
 static const i64 RowCount = 16;
 static const i64 ColumnCount = 16;
-static const i64 LayerCount = 2;
+static const i64 LayerCount = 16;
 
 struct game
 {
     camera Camera;
+    v3 CameraOffset = v3(0.0f, 0.8f, 0.0f);
 
     player Player;
 
@@ -105,8 +106,9 @@ internal void GamePlayerUpdate(game* Game, const game_input* Input, f32 TimeStep
 internal aabb AABBFromV3(v3 Position, v3 Scale)
 {
     aabb Result;
-    Result.Min = Position - (Scale * 0.5f);
-    Result.Max = Position + (Scale * 0.5f);
+    v3 HalfScale = bkm::Abs(Scale) * 0.5f;
+    Result.Min = Position - HalfScale;
+    Result.Max = Position + HalfScale;
     return Result;
 }
 
@@ -126,37 +128,77 @@ struct collision_result
     CollisionSide Side;
 };
 
-internal collision_result CheckCollisionAABB(const aabb& a, const aabb& b, f32 TimeStep)
+internal collision_result CheckCollisionAABB(const v3& Center0, const v3& Center1, const aabb& Box0, const aabb& Box1, f32 DeltaTime)
 {
     collision_result Result;
     Result.Collided = false;
 
-    v3 centerA = (a.Min + a.Max) * 0.5f;
-    v3 centerB = (b.Min + b.Max) * 0.5f;
-    v3 halfSizeA = (a.Max - a.Min) * 0.5f;
-    v3 halfSizeB = (b.Max - b.Min) * 0.5f;
+    v3 HalfSize0 = (Box0.Max - Box0.Min) * 0.5f;
+    v3 halfSizeB = (Box1.Max - Box1.Min) * 0.5f;
 
-    v3 delta = centerB - centerA;
-    v3 overlap = (halfSizeA + halfSizeB) - bkm::Abs(delta);
+    v3 Delta = Center1 - Center0;
+    v3 Overlap = (HalfSize0 + halfSizeB) - bkm::Abs(Delta);
 
-    f32 Margin = 0;
-
-    if (overlap.x > Margin && overlap.y > Margin && overlap.z > Margin)
+    DeltaTime = 0;
+    // Edge handling: If overlap is very small, treat as a collision
+    if (Overlap.x > DeltaTime && Overlap.y > DeltaTime && Overlap.z > DeltaTime)
     {
         Result.Collided = true;
-        if (overlap.x < overlap.y && overlap.x < overlap.z)
+
+        // Check if the AABBs are just touching (edge case detection)
+        if (Overlap.x <= DeltaTime || Overlap.y <= DeltaTime || Overlap.z <= DeltaTime)
         {
-            Result.Side = (delta.x > Margin) ? CollisionSide::Left : CollisionSide::Right;
-        }
-        else if (overlap.y < overlap.x && overlap.y < overlap.z)
-        {
-            Result.Side = (delta.y > Margin) ? CollisionSide::Top : CollisionSide::Bottom;
+            // Edge case detection (exactly touching or almost touching)
+            if (Overlap.x <= DeltaTime)
+            {
+                Result.Side = (Delta.x > 0) ? CollisionSide::Left : CollisionSide::Right;
+            }
+            else if (Overlap.y <= DeltaTime)
+            {
+                Result.Side = (Delta.y > 0) ? CollisionSide::Top : CollisionSide::Bottom;
+            }
+            else if (Overlap.z <= DeltaTime)
+            {
+                Result.Side = (Delta.z > 0) ? CollisionSide::Front : CollisionSide::Back;
+            }
         }
         else
         {
-            Result.Side = (delta.z > Margin) ? CollisionSide::Front : CollisionSide::Back;
+            // Normal collision handling (overlap is more than epsilon)
+            if (Overlap.x < Overlap.y && Overlap.x < Overlap.z)
+            {
+                Result.Side = (Delta.x > DeltaTime) ? CollisionSide::Left : CollisionSide::Right;
+            }
+            else if (Overlap.y < Overlap.x && Overlap.y < Overlap.z)
+            {
+                Result.Side = (Delta.y > DeltaTime) ? CollisionSide::Top : CollisionSide::Bottom;
+            }
+            else
+            {
+                Result.Side = (Delta.z > DeltaTime) ? CollisionSide::Front : CollisionSide::Back;
+            }
         }
     }
 
     return Result;
+}
+
+internal bool CheckCollisionAABBX(const aabb& Box0, const aabb& Box1)
+{
+    return (Box0.Min.x <= Box1.Max.x + bkm::EPSILON && Box0.Max.x + bkm::EPSILON >= Box1.Min.x);
+}
+
+internal bool CheckCollisionAABBY(const aabb& Box0, const aabb& Box1)
+{
+    return (Box0.Min.y <= Box1.Max.y + bkm::EPSILON && Box0.Max.y + bkm::EPSILON >= Box1.Min.y);
+}
+
+internal bool CheckCollisionAABBZ(const aabb& Box0, const aabb& Box1)
+{
+    return (Box0.Min.z <= Box1.Max.z + bkm::EPSILON && Box0.Max.z + bkm::EPSILON >= Box1.Min.z);
+}
+
+internal bool CheckCollisionAABB(const aabb& Box0, const aabb& Box1)
+{
+    return CheckCollisionAABBX(Box0, Box1) && CheckCollisionAABBY(Box0, Box1) && CheckCollisionAABBZ(Box0, Box1);
 }

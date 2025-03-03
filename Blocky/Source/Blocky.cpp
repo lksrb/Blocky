@@ -149,6 +149,7 @@ internal game GameCreate(game_renderer* Renderer)
                 Block.Position = v3(StartPos.x, StartPos.y, StartPos.z);
                 Block.Type = block_type::Dirt;
                 Block.Color = (CikCak & 1) ? v4(0.2f, 0.2f, 0.2f, 1.0f) : v4(1.0f);
+                //Block.Color = v4(1.0f);
                 Block.Placed = true;
 
                 StartPos.x++;
@@ -203,6 +204,18 @@ internal game GameCreate(game_renderer* Renderer)
         StartPos.y++;
     }
 
+    //{
+    //    i32 L = 2;
+    //    i32 R = 5;
+    //    i32 C = 5;
+    //    auto& Block = Game.LogicBlocks[(L * RowCount * ColumnCount) + (R * RowCount) + C];
+    //    Block.Texture = Game.BlockTextures[(u32)block_type::Dirt];
+    //    Block.Position = v3(R, L, C);
+    //    Block.Type = block_type::Dirt;
+    //    Block.Color = (CikCak & 1) ? v4(0.2f, 0.2f, 0.2f, 1.0f) : v4(1.0f);
+    //    Block.Placed = true;
+    //}
+
     return Game;
 }
 
@@ -256,7 +269,7 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
 
     // Update camera
     {
-        Game->Camera.View = bkm::Translate(m4(1.0f), Game->Player.Position + v3(0.0f, 1.0f, 0.0f))
+        Game->Camera.View = bkm::Translate(m4(1.0f), Game->Player.Position + Game->CameraOffset)
             * bkm::ToM4(qtn(Game->Player.Rotation));
 
         Game->Camera.View = bkm::Inverse(Game->Camera.View);
@@ -373,12 +386,13 @@ internal void GamePlayerUpdate(game* Game, const game_input* Input, f32 TimeStep
     v3 Up = { 0.0f, 1.0, 0.0f };
     v3 Right = { 1.0f, 0.0, 0.0f };
     v3 Forward = { 0.0f, 0.0, -1.0f };
-    f32 Speed = 10.0f;
+    f32 Speed = 4.0f;
 
     // Rotating
     local_persist bool TPressed = false;
 
     bool JustPressed = false;
+    bool JumpKeyPressed = false;
 
     if (Input->IsKeyPressed(key::T))
     {
@@ -455,10 +469,10 @@ internal void GamePlayerUpdate(game* Game, const game_input* Input, f32 TimeStep
         //    Direction -= v3(0.0f, 1.0f, 0.0f);;
         //}
 
-        /*if (Input->IsKeyDown(key::BackSpace))
+        if (Input->IsKeyPressed(key::BackSpace))
         {
-            Player.Velocity.y = 1.0f;
-        }*/
+            JumpKeyPressed = true;
+        }
 
         if (bkm::Length(Direction) > 0.0f)
             Direction = bkm::Normalize(Direction);
@@ -467,52 +481,100 @@ internal void GamePlayerUpdate(game* Game, const game_input* Input, f32 TimeStep
 
     if (Game->Player.PhysicsObject)
     {
+        const f32 G = -9.81f;
+        const f32 CheckRadius = 5.0f;
+        const f32 JumpStrength = 8.0f;
         auto& Player = Game->Player;
+        local_persist bool Grounded = false;
 
-        f32 G = -9.81;
+        // Apply gravity and movement forces
+        v3 NextVelocity = Player.Velocity;
+        NextVelocity.y += G * TimeStep;  // Gravity
+        NextVelocity.x = Direction.x * Speed;
+        NextVelocity.z = Direction.z * Speed;
 
-        v3 NextPlayerVelocity = Player.Velocity + v3(0.0f , G * TimeStep, 0.0f);
-        v3 FinalVelocity = v3(Direction.x * Speed, NextPlayerVelocity.y, Direction.z * Speed);
+        v3 NextPos = Player.Position;
+        aabb PlayerAABB;
 
-        v3 NextPlayerPosition = Player.Position + FinalVelocity * TimeStep;
+        if (Grounded && JumpKeyPressed)
+        {
+            NextVelocity.y = JumpStrength;
+            Grounded = false;
+        }
+
+        // Y - Gravity
+        NextPos.y += NextVelocity.y * TimeStep;
+        PlayerAABB = AABBFromV3(NextPos, v3(0.5f, 1.8f, 0.5f));
 
         for (auto& Block : Game->LogicBlocks)
         {
-            if (!Block.Placed)
+            if (!Block.Placed) 
                 continue;
 
             aabb BlockAABB = AABBFromV3(Block.Position, v3(1.0f));
-            aabb PlayerAABB = AABBFromV3(NextPlayerPosition, v3(0.5f, 2.0f, 0.5f));
 
-            collision_result Result = CheckCollisionAABB(PlayerAABB, BlockAABB, TimeStep);
-            if (Result.Collided)
+            if (CheckCollisionAABB(PlayerAABB, BlockAABB))
             {
-                if (Result.Side == CollisionSide::Bottom)
+                // Hit something above? Stop jumping.
+                if (NextVelocity.y > 0)
                 {
-                    FinalVelocity.y = 0.0f;
+                    NextVelocity.y = 0;
                 }
-
-                if (Result.Side == CollisionSide::Left || Result.Side == CollisionSide::Right)
+                // Hit the ground? Reset velocity and allow jumping again.
+                else if (NextVelocity.y < 0)
                 {
-                    FinalVelocity.x = 0.0f;
+                    Grounded = true;
+                    NextVelocity.y = 0;
                 }
-
-                if (Result.Side == CollisionSide::Front || Result.Side == CollisionSide::Back)
-                {
-                    FinalVelocity.z = 0.0f;
-                }
+                NextPos.y = Player.Position.y; // Revert movement
                 break;
             }
         }
 
-        Player.Velocity = FinalVelocity;
-        Player.Position += FinalVelocity * TimeStep;
-    }
-    else
-    {
-        Player.Position += v3(Direction.x, 0.0f, Direction.z) * Speed * TimeStep;
-    }
+        // Move X-axis
+        NextPos.x += NextVelocity.x * TimeStep;
+        PlayerAABB = AABBFromV3(NextPos, v3(0.5f, 1.8f, 0.5f));
 
+        for (auto& Block : Game->LogicBlocks)
+        {
+            if (!Block.Placed) 
+                continue;
+
+            aabb BlockAABB = AABBFromV3(Block.Position, v3(1.0f));
+
+            if (CheckCollisionAABB(PlayerAABB, BlockAABB))
+            {
+                // Collision on X-axis: stop only X movement
+                NextVelocity.x = 0;
+                NextPos.x = Player.Position.x;
+                break;
+            }
+        }
+
+        // Move Z-axis
+        NextPos.z += NextVelocity.z * TimeStep;
+        PlayerAABB = AABBFromV3(NextPos, v3(0.5f, 1.8f, 0.5f));
+
+        for (auto& Block : Game->LogicBlocks)
+        {
+            if (!Block.Placed) 
+                continue;
+
+            aabb BlockAABB = AABBFromV3(Block.Position, v3(1.0f));
+
+            if (CheckCollisionAABB(PlayerAABB, BlockAABB))
+            {
+                // Collision on Z-axis: stop only Z movement
+                NextVelocity.z = 0;
+                NextPos.z = Player.Position.z;
+                break;
+            }
+        }
+
+        Player.Position = NextPos;
+        Player.Velocity = NextVelocity;
+    }
+    
     //
     // ----------------------------------------------------------------------------------------------------------
     // 
@@ -563,7 +625,7 @@ internal void GamePlayerUpdate(game* Game, const game_input* Input, f32 TimeStep
     if (Input->IsMousePressed(mouse::Left))
     {
         ray Ray;
-        Ray.Origin = Player.Position + v3(0.0f, 1.0f, 0.0f); // TODO: Camera position 
+        Ray.Origin = Player.Position + Game->CameraOffset; // TODO: Camera position
         Ray.Direction = Forward; // Forward is already normalized
 
         v3 HitPoint;
