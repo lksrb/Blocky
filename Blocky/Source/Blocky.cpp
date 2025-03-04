@@ -474,7 +474,7 @@ internal void GamePlayerUpdate(game* Game, const game_input* Input, f32 TimeStep
         //    Direction -= v3(0.0f, 1.0f, 0.0f);;
         //}
 
-        if (Input->IsKeyPressed(key::BackSpace))
+        if (Input->IsKeyPressed(key::BackSpace) || Input->IsKeyDown(key::Space))
         {
             JumpKeyPressed = true;
         }
@@ -580,8 +580,19 @@ internal void GamePlayerUpdate(game* Game, const game_input* Input, f32 TimeStep
         Player.Velocity = NextVelocity;
     }
 
+    i32 C = (i32)bkm::Floor(Player.Position.x + 0.5f);
+    i32 R = (i32)bkm::Floor(Player.Position.z + 0.5f);
     i32 L = (i32)bkm::Floor(Player.Position.y + 0.5f);
-    Trace("F: (%d, %d, %d)", (i32)bkm::Floor(Player.Position.x + 0.5f), (i32)bkm::Floor(Player.Position.y + 0.5f), (i32)bkm::Floor(Player.Position.z + 0.5f));
+
+    Trace("F: (%d, %d, %d)", C, R, L);
+
+    if (C >= 0 && C < ColumnCount && 
+        R >= 0 && R < RowCount &&
+        L > 1 && L < LayerCount + 1)
+    {
+        auto Block = LogicBlockGet(Game, C, R, L - 1);
+        Block->Color = v4(0, 0, 1, 1);
+    }
 
     //
     // ----------------------------------------------------------------------------------------------------------
@@ -646,7 +657,7 @@ internal void GamePlayerUpdate(game* Game, const game_input* Input, f32 TimeStep
             Block.Placed = false;
 
             // Color adjacent blocks
-            if (1)
+            if (0)
             {
                 if (Block.Left != INT_MAX)
                 {
