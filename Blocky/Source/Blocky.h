@@ -64,7 +64,8 @@ struct player
     v3 Position = v3(0.0f, 18, 1.0f);
     v3 Rotation = v3(-bkm::PI_HALF, 0.0f, 0.0f);
     v3 Velocity = v3(0.0f);
-    bool PhysicsObject = true;
+    bool IsPhysicsObject = true;
+    bool Grounded = false;
 };
 
 struct block

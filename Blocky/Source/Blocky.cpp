@@ -209,18 +209,6 @@ internal game GameCreate(game_renderer* Renderer)
         StartPos.y++;
     }
 
-    //{
-    //    i32 L = 2;
-    //    i32 R = 5;
-    //    i32 C = 5;
-    //    auto& Block = Game.LogicBlocks[(L * RowCount * ColumnCount) + (R * RowCount) + C];
-    //    Block.Texture = Game.BlockTextures[(u32)block_type::Dirt];
-    //    Block.Position = v3(R, L, C);
-    //    Block.Type = block_type::Dirt;
-    //    Block.Color = (CikCak & 1) ? v4(0.2f, 0.2f, 0.2f, 1.0f) : v4(1.0f);
-    //    Block.Placed = true;
-    //}
-
     return Game;
 }
 
@@ -320,27 +308,6 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
         }
     }
 
-    //Trace("%.3f", TimeStep * 1000.0f);
-
-    if (Input->IsMouseDown(mouse::Middle))
-    {
-        local_persist v3 Pos = v3(0.0f, 20.0f, 0.0f);
-        local_persist v3 Vel = v3(0.0f);
-        f32 G = -9.81;
-
-        Vel.y += G * TimeStep;
-
-        Pos += Vel * TimeStep;
-
-        if (Pos.y < 1)
-        {
-            Pos.y = 1;
-            Vel.y = 0;
-        }
-        //GameRendererSubmitBlock(Renderer, v3(0.0f), v3(0.0f), v3(1.0f), Game->BlockTextures[u32(block_type::Dirt)], v4(1.0), draw_layer::Main);
-
-    }
-
 
     //// Render intersections
     //// TODO: Delete
@@ -356,13 +323,6 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
     //    }
     //}
 
-    //GameRendererSubmitBlock(Renderer, v3(1.0), v3(0.0f), v3(1.0f), v4(1.0), draw_layer::Main);
-
-    //GameRendererSubmitBlock_V2(Renderer, v3(0.0), v3(0.0f), v3(1.0f), v4(1.0), draw_layer::Main);
-    // They render on top of each other or just the first one is rendererd
-    //GameRendererSubmitBlock_V2(Renderer, v3(1.0, 1.0f, 0.0f), v3(0.0f), v3(1.0f), v4(1.0f, 0.0f, 0.0f, 1.0f), draw_layer::Main);
-    //GameRendererSubmitBlock_V2(Renderer, v3(0.0, 0.0f, 1.0f), v3(0.0f), v3(1.0f), v4(1.0), draw_layer::Main);
-    //GameRendererSubmitBlock_V2(Renderer, v3(1.0, 0.0f, 1.0f), v3(0.0f), v3(1.0f), v4(1.0), draw_layer::Main);
 
     // HUD
     // HUD
@@ -463,34 +423,38 @@ internal void GamePlayerUpdate(game* Game, const game_input* Input, f32 TimeStep
             Direction += Right;
         }
 
-        //// TODO: What happens on simultaneously press?
-        //if (Input->IsKeyDown(key::Q) || Input->IsKeyDown(key::BackSpace) || Input->IsKeyDown(key::Space))
-        //{
-        //    Direction += v3(0.0f, 1.0f, 0.0f);;
-        //}
-
-        //if (Input->IsKeyDown(key::E) || Input->IsKeyDown(key::Control) || Input->IsKeyDown(key::Shift))
-        //{
-        //    Direction -= v3(0.0f, 1.0f, 0.0f);;
-        //}
-
         if (Input->IsKeyPressed(key::BackSpace) || Input->IsKeyDown(key::Space))
         {
             JumpKeyPressed = true;
         }
 
+        if (Input->IsKeyPressed(key::G))
+        {
+            Player.IsPhysicsObject = !Player.IsPhysicsObject;
+        }
+
+        if (!Player.IsPhysicsObject)
+        {
+            if (Input->IsKeyDown(key::Q) || Input->IsKeyDown(key::BackSpace) || Input->IsKeyDown(key::Space))
+            {
+                Direction += v3(0.0f, 1.0f, 0.0f);
+            }
+            else if (Input->IsKeyDown(key::E) || Input->IsKeyDown(key::Control) || Input->IsKeyDown(key::Shift))
+            {
+                Direction -= v3(0.0f, 1.0f, 0.0f);
+            }
+        }
+
         if (bkm::Length(Direction) > 0.0f)
             Direction = bkm::Normalize(Direction);
-
     }
 
-    if (Game->Player.PhysicsObject)
+    if (Game->Player.IsPhysicsObject)
     {
         const f32 G = -9.81f;
         const f32 CheckRadius = 5.0f;
         const f32 JumpStrength = 8.0f;
         auto& Player = Game->Player;
-        local_persist bool Grounded = false;
 
         // Apply gravity and movement forces
         v3 NextVelocity = Player.Velocity;
@@ -501,10 +465,10 @@ internal void GamePlayerUpdate(game* Game, const game_input* Input, f32 TimeStep
         v3 NextPos = Player.Position;
         aabb PlayerAABB;
 
-        if (Grounded && JumpKeyPressed)
+        if (Player.Grounded && JumpKeyPressed)
         {
             NextVelocity.y = JumpStrength;
-            Grounded = false;
+            Player.Grounded = false;
         }
 
         // Y - Gravity
@@ -528,7 +492,7 @@ internal void GamePlayerUpdate(game* Game, const game_input* Input, f32 TimeStep
                 // Hit the ground? Reset velocity and allow jumping again.
                 else if (NextVelocity.y < 0)
                 {
-                    Grounded = true;
+                    Player.Grounded = true;
                     NextVelocity.y = 0;
                 }
                 NextPos.y = Player.Position.y; // Revert movement
@@ -579,14 +543,18 @@ internal void GamePlayerUpdate(game* Game, const game_input* Input, f32 TimeStep
         Player.Position = NextPos;
         Player.Velocity = NextVelocity;
     }
+    else
+    {
+        Player.Position += Direction * Speed * TimeStep;
+    }
 
     i32 C = (i32)bkm::Floor(Player.Position.x + 0.5f);
     i32 R = (i32)bkm::Floor(Player.Position.z + 0.5f);
     i32 L = (i32)bkm::Floor(Player.Position.y + 0.5f);
 
-    Trace("F: (%d, %d, %d)", C, R, L);
+    //Trace("F: (%d, %d, %d)", C, R, L);
 
-    if (C >= 0 && C < ColumnCount && 
+    if (C >= 0 && C < ColumnCount &&
         R >= 0 && R < RowCount &&
         L > 1 && L < LayerCount + 1)
     {

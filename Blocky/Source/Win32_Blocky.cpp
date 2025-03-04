@@ -146,7 +146,7 @@ struct game_window
 
 enum class key : u32
 {
-    W = 0, S, A, D, Q, E, T, Shift, Control, BackSpace, Space, COUNT
+    W = 0, S, A, D, Q, E, T, G, Shift, Control, BackSpace, Space, COUNT
 };
 
 enum class mouse : u32
@@ -160,7 +160,7 @@ enum class mouse : u32
 
 struct game_input
 {
-    // TODO: Probably make it u32 or something
+    // TODO: Probably make it a single u32 or something
 
     bool MousePressed[(u32)mouse::COUNT];
     bool MouseDown[(u32)mouse::COUNT];
@@ -178,6 +178,18 @@ struct game_input
 
     // Temp
     POINT RestoreMousePosition;
+
+    void SetKeyState(key Key, bool IsDown)
+    {
+        KeyDown[(u32)Key] = IsDown;
+        KeyPressed[(u32)Key] = IsDown;
+    }
+
+    void SetMouseState(mouse Mouse, bool IsDown)
+    {
+        MouseDown[(u32)Mouse] = IsDown;
+        MousePressed[(u32)Mouse] = IsDown;
+    }
 
     bool IsKeyDown(key Key) const { return KeyDown[(u32)Key]; }
     bool IsKeyPressed(key Key) const { return KeyPressed[(u32)Key]; }
@@ -359,15 +371,16 @@ internal void Win32ProcessEvents(game_window Window, game_input* Input)
                 {
                     switch (VkCode)
                     {
-                        case 'W': { Input->KeyDown[(u32)key::W] = Input->KeyPressed[(u32)key::W] = IsDown; break; }
-                        case 'S': { Input->KeyDown[(u32)key::S] = Input->KeyPressed[(u32)key::S] = IsDown; break; }
-                        case 'A': { Input->KeyDown[(u32)key::A] = Input->KeyPressed[(u32)key::A] = IsDown; break; }
-                        case 'D': { Input->KeyDown[(u32)key::D] = Input->KeyPressed[(u32)key::D] = IsDown; break; }
-                        case 'Q': { Input->KeyDown[(u32)key::Q] = Input->KeyPressed[(u32)key::Q] = IsDown; break; }
-                        case 'E': { Input->KeyDown[(u32)key::E] = Input->KeyPressed[(u32)key::E] = IsDown; break; }
+                        case 'W': { Input->SetKeyState(key::W, IsDown); break; }
+                        case 'S': { Input->SetKeyState(key::S, IsDown); break; }
+                        case 'A': { Input->SetKeyState(key::A, IsDown); break; }
+                        case 'D': { Input->SetKeyState(key::D, IsDown); break; }
+                        case 'Q': { Input->SetKeyState(key::Q, IsDown); break; }
+                        case 'E': { Input->SetKeyState(key::E, IsDown); break; }
+                        case 'G': { Input->SetKeyState(key::G, IsDown); break; }
                         case 'T':
                         {
-                            Input->KeyDown[(u32)key::T] = Input->KeyPressed[(u32)key::T] = IsDown;
+                            Input->SetKeyState(key::T, IsDown);
 
                             if (IsDown)
                             {
@@ -380,10 +393,10 @@ internal void Win32ProcessEvents(game_window Window, game_input* Input)
                             }
                             break;
                         }
-                        case VK_CONTROL: { Input->KeyDown[(u32)key::Control] = Input->KeyPressed[(u32)key::Control] = IsDown; break; }
-                        case VK_SHIFT: { Input->KeyDown[(u32)key::Shift] = Input->KeyPressed[(u32)key::Shift] = IsDown; break; }
-                        case VK_SPACE: { Input->KeyDown[(u32)key::Space] = Input->KeyPressed[(u32)key::Space] = IsDown; break; }
-                        case VK_BACK: { Input->KeyDown[(u32)key::BackSpace] = Input->KeyPressed[(u32)key::BackSpace] = IsDown; break; }
+                        case VK_CONTROL: { Input->SetKeyState(key::Control, IsDown); break; }
+                        case VK_SHIFT:   { Input->SetKeyState(key::Shift, IsDown); break; }
+                        case VK_SPACE:   { Input->SetKeyState(key::Space, IsDown); break; }
+                        case VK_BACK:    { Input->SetKeyState(key::BackSpace, IsDown); break; }
                         case VK_F4:
                         {
                             if (AltKeyWasDown)
@@ -431,37 +444,34 @@ internal void Win32ProcessEvents(game_window Window, game_input* Input)
             case WM_LBUTTONDOWN:
             case WM_LBUTTONDBLCLK:
             {
-                Input->MouseDown[(u32)mouse::Left] = true;
-                Input->MousePressed[(u32)mouse::Left] = true;
+                Input->SetMouseState(mouse::Left, true);
                 break;
             }
             case WM_RBUTTONDOWN:
             case WM_RBUTTONDBLCLK:
             {
-                Input->MouseDown[(u32)mouse::Right] = true;
-                Input->MousePressed[(u32)mouse::Right] = true;
+                Input->SetMouseState(mouse::Right, true);
                 break;
             }
             case WM_MBUTTONDOWN:
             case WM_MBUTTONDBLCLK:
             {
-                Input->MouseDown[(u32)mouse::Middle] = true;
-                Input->MousePressed[(u32)mouse::Middle] = true;
+                Input->SetMouseState(mouse::Middle, true);
                 break;
             }
             case WM_LBUTTONUP:
             {
-                Input->MouseDown[(u32)mouse::Left] = false; // TODO: Mouse click behaviour, is this necessary?
+                Input->SetMouseState(mouse::Left, false);
                 break;
             }
             case WM_RBUTTONUP:
             {
-                Input->MouseDown[(u32)mouse::Right] = false;
+                Input->SetMouseState(mouse::Right, false);
                 break;
             }
             case WM_MBUTTONUP:
             {
-                Input->MouseDown[(u32)mouse::Middle] = false;
+                Input->SetMouseState(mouse::Middle, false);
                 break;
             }
 
