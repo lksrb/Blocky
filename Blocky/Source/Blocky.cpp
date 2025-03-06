@@ -100,22 +100,16 @@ internal bool FindFirstHit(const ray& Ray, const std::vector<block>& Blocks, v3*
     return FindFirstHit(Ray, Blocks.data(), Blocks.size(), HitPoint, HitNormal, HitBlock, HitIndex);
 }
 
-internal void BlockCreate(game* Game, block_type Type, v3 Position)
+internal block* LogicBlockGetSafe(game* Game, i32 C, i32 R, i32 L)
 {
-    auto& Block = Game->Blocks.emplace_back();
-    //Block.Texture = Game->BlockTextures[(u32)Type];
-    Block.Color = v4(1.0f);
-    Block.Position = Position;
-}
+    if (C >= 0 && C < ColumnCount &&
+       R >= 0 && R < RowCount &&
+       L > 0 && L < LayerCount)
+    {
+        return &Game->LogicBlocks[(L * RowCount * ColumnCount) + (R * RowCount) + C];
+    }
 
-internal void BlockDestroy(game* Game, u64 Index)
-{
-    Game->Blocks.erase(Game->Blocks.begin() + Index);
-}
-
-internal block* LogicBlockGet(game* Game, i32 C, i32 R, i32 L)
-{
-    return &Game->LogicBlocks[(L * RowCount * ColumnCount) + (R * RowCount) + C];
+    return nullptr;
 }
 
 internal game GameCreate(game_renderer* Renderer)
@@ -129,9 +123,6 @@ internal game GameCreate(game_renderer* Renderer)
 
     // Load block textures
     Game.BlockTextures[(u32)block_type::Dirt] = TextureCreate(Renderer->Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, "Resources/Textures/MC/dirt_2.png");
-
-    // Place a block
-    BlockCreate(&Game, block_type::Dirt, v3(0.0f, 0.0f, 0.0f));
 
     v3 StartPos = { 0, 0, 0, };
 
@@ -231,34 +222,7 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
                 }
             }
         }
-
-
     }
-
-    // Color pink if all neighbours are present
-    //if (false)
-    //{
-    //    for (i32 R = 0; R < RowCount; R++)
-    //    {
-    //        for (i32 C = 0; C < ColumnCount; C++)
-    //        {
-    //            auto& Block = Game->LogicBlocks[R * RowCount + C];
-
-    //            bool HasAllNeightbours = Block.Back != INT_MAX && Block.Front != INT_MAX && Block.Left != INT_MAX && Block.Right != INT_MAX;
-
-    //            Block.Color = HasAllNeightbours ? v4(1.0f, 0.0f, 1.0f, 1.0f) : v4(1.0f, 1.0f, 1.0f, 1.0f);
-
-    //            if (HasAllNeightbours)
-    //            {
-    //                /* auto& LeftNeightbour = Game.LogicBlocks[Block.Left];
-    //                 auto& RightNeightbour = Game.LogicBlocks[Block.Right];
-    //                 auto& FrontNeightbour = Game.LogicBlocks[Block.Front];
-    //                 auto& BackNeightbour = Game.LogicBlocks[Block.Back];*/
-
-    //            }
-    //        }
-    //    }
-    //}
 
     // Update camera
     {
@@ -270,25 +234,8 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
         //Game->Camera.RecalculateProjectionOrtho_V2(ClientAreaWidth, ClientAreaHeight);
     }
 
-    // Render
-
     // Render blocks
     GameRendererSetViewProjection(Renderer, Game->Camera.GetViewProjection());
-
-    if (0)
-    {
-        for (const auto& Block : Game->Blocks)
-        {
-            if (Block.Texture.Handle)
-            {
-                GameRendererSubmitBlock(Renderer, Block.Position, v3(0.0f), Block.Scale, Block.Texture, Block.Color);
-            }
-            else
-            {
-                GameRendererSubmitBlock(Renderer, Block.Position, v3(0.0f), Block.Scale, Block.Color);
-            }
-        }
-    }
 
     if (1)
     {
@@ -307,21 +254,6 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
             }
         }
     }
-
-
-    //// Render intersections
-    //// TODO: Delete
-    //for (auto& Block : Game->Intersections)
-    //{
-    //    if (Block.Texture.Handle)
-    //    {
-    //        GameRendererSubmitBlock(Renderer, Block.Translation, v3(0.0f), Block.Scale, Block.Texture, Block.Color, draw_layer::Main);
-    //    }
-    //    else
-    //    {
-    //        GameRendererSubmitBlock(Renderer, Block.Translation, v3(0.0f), Block.Scale, Block.Color, draw_layer::Main);
-    //    }
-    //}
 
 
     // HUD
@@ -548,66 +480,6 @@ internal void GamePlayerUpdate(game* Game, const game_input* Input, f32 TimeStep
         Player.Position += Direction * Speed * TimeStep;
     }
 
-    i32 C = (i32)bkm::Floor(Player.Position.x + 0.5f);
-    i32 R = (i32)bkm::Floor(Player.Position.z + 0.5f);
-    i32 L = (i32)bkm::Floor(Player.Position.y + 0.5f);
-
-    //Trace("F: (%d, %d, %d)", C, R, L);
-
-    if (C >= 0 && C < ColumnCount &&
-        R >= 0 && R < RowCount &&
-        L > 1 && L < LayerCount + 1)
-    {
-        auto Block = LogicBlockGet(Game, C, R, L - 1);
-        Block->Color = v4(0, 0, 1, 1);
-    }
-
-    //
-    // ----------------------------------------------------------------------------------------------------------
-    // 
-
-    // Place a block
-    if (Input->IsMousePressed(mouse::Right) && false)
-    {
-        ray Ray;
-        Ray.Origin = Player.Position;
-        Ray.Direction = Forward; // Forward is already normalized
-
-        v3 HitPoint;
-        v3 HitNormal;
-        block HitBlock;
-        u64 HitIndex; // Unused
-        if (FindFirstHit(Ray, Game->Blocks, &HitPoint, &HitNormal, &HitBlock, &HitIndex))
-        {
-            BlockCreate(Game, block_type::Dirt, HitBlock.Position + HitNormal);
-            Info("New block added");
-        }
-    }
-
-    // Destroy a block
-    if (Input->IsMousePressed(mouse::Left) && false)
-    {
-        ray Ray;
-        Ray.Origin = Player.Position;
-        Ray.Direction = Forward; // Forward is already normalized
-
-        v3 HitPoint;
-        v3 HitNormal;
-        block HitBlock;
-        u64 HitIndex;
-        if (FindFirstHit(Ray, Game->Blocks, &HitPoint, &HitNormal, &HitBlock, &HitIndex))
-        {
-            BlockDestroy(Game, HitIndex);
-            Info("Block destroyed.");
-        }
-    }
-
-    // Create Logic blocks
-    if (Input->IsMousePressed(mouse::Right))
-    {
-        v2i PlacePos = { 0,0 };
-    }
-
     // Destroy logic block
     if (Input->IsMousePressed(mouse::Left))
     {
@@ -672,5 +544,49 @@ internal void GamePlayerUpdate(game* Game, const game_input* Input, f32 TimeStep
 
             Info("Block destroyed.");
         }
+    }
+
+    // Create Logic blocks
+    if (Input->IsMousePressed(mouse::Right))
+    {
+        v2i PlacePos = { 0,0 };
+
+        ray Ray;
+        Ray.Origin = Player.Position + Game->CameraOffset; // TODO: Camera position
+        Ray.Direction = Forward; // Forward is already normalized
+
+        v3 HitPoint;
+        v3 HitNormal;
+        block HitBlock;
+        u64 HitIndex;
+
+        if (FindFirstHit(Ray, Game->LogicBlocks, &HitPoint, &HitNormal, &HitBlock, &HitIndex))
+        {
+            v3 NewBlockPos = HitBlock.Position + HitNormal;
+            i32 C = NewBlockPos.x;
+            i32 R = NewBlockPos.z;
+            i32 L = NewBlockPos.y;
+            auto SteppedOnBlock = LogicBlockGetSafe(Game, C, R, L);
+
+            if (SteppedOnBlock)
+            {
+                SteppedOnBlock->Color = v4(1, 0, 1, 1);
+                SteppedOnBlock->Placed = true;
+
+            }
+            //auto& Block = Game->LogicBlocks[HitIndex];
+        }
+    }
+
+    // Stepping on a block
+    // Is kinda wonky
+    i32 C = (i32)bkm::Floor(Player.Position.x + 0.5f);
+    i32 R = (i32)bkm::Floor(Player.Position.z + 0.5f);
+    i32 L = (i32)bkm::Floor(Player.Position.y + 0.5f);
+
+    auto SteppedOnBlock = LogicBlockGetSafe(Game, C, R, L - 1);
+    if (SteppedOnBlock)
+    {
+        SteppedOnBlock->Color = v4(0, 0, 1, 1);
     }
 }

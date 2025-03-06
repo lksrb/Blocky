@@ -92,9 +92,6 @@ struct game
 
     std::vector<block> LogicBlocks;
 
-    std::vector<block> Blocks;
-    std::vector<block> Intersections;
-
     texture CrosshairTexture;
 
     texture BlockTextures[BLOCK_TYPE_COUNT];
