@@ -1,128 +1,23 @@
 #include "Blocky.h"
 
-// Slab method raycast
-// Ignores negative values to ensure one direction
-
-struct aabb_raycast_result
-{
-    f32 Near;
-    f32 Far;
-    v3 Normal;
-    bool Hit = true;
-
-    operator bool() const { return Hit; }
-};
-internal aabb_raycast_result RayIntersectsAABB(const ray& Ray, const aabb& Box)
-{
-    aabb_raycast_result Result = {};
-
-    f32 Min = -INFINITY;
-    f32 Max = INFINITY;
-    v3 Normal(0.0f);
-    for (u32 Axis = 0; Axis < 3; ++Axis)
-    {
-        f32 InvD = 1.0f / (Axis == 0 ? Ray.Direction.x : (Axis == 1 ? Ray.Direction.y : Ray.Direction.z));
-        f32 T0 = ((Axis == 0 ? Box.Min.x : (Axis == 1 ? Box.Min.y : Box.Min.z)) - (Axis == 0 ? Ray.Origin.x : (Axis == 1 ? Ray.Origin.y : Ray.Origin.z))) * InvD;
-        f32 T1 = ((Axis == 0 ? Box.Max.x : (Axis == 1 ? Box.Max.y : Box.Max.z)) - (Axis == 0 ? Ray.Origin.x : (Axis == 1 ? Ray.Origin.y : Ray.Origin.z))) * InvD;
-
-        if (InvD < 0.0f)
-        {
-            std::swap(T0, T1);
-        }
-
-        if (T0 > Min)
-        {
-            Min = T0;
-            Normal = { 0, 0, 0 };
-            if (Axis == 0) Normal.x = (Ray.Direction.x > 0) ? -1.0f : 1.0f;
-            if (Axis == 1) Normal.y = (Ray.Direction.y > 0) ? -1.0f : 1.0f;
-            if (Axis == 2) Normal.z = (Ray.Direction.z > 0) ? -1.0f : 1.0f;
-        }
-
-        //Min = std::max(Min, t0);
-        Max = std::min(Max, T1);
-
-        if (Max < Min)
-        {
-            Result.Hit = false;
-            break;
-        }
-    }
-
-    // Ignore hits behind the ray
-    if (Min < 0)
-    {
-        Result.Hit = false;
-    }
-
-    Result.Near = Min;
-    Result.Far = Max;
-    Result.Normal = Normal;
-    return Result;
-}
-
-internal bool FindFirstHit(const ray& Ray, const block* Blocks, u64 BlocksCount, v3* HitPoint, v3* HitNormal, block* HitBlock, u64* HitIndex)
-{
-    f32 ClosestT = INFINITY;
-    bool FoundHit = false;
-
-    for (u64 Index = 0; Index < BlocksCount; Index++)
-    {
-        auto& Block = Blocks[Index];
-
-        if (!Block.Placed)
-            continue;
-
-        aabb Box;
-        Box.Min = Block.Position - v3(0.5f);
-        Box.Max = Block.Position + v3(0.5f);
-
-        if (aabb_raycast_result RayCast = RayIntersectsAABB(Ray, Box))
-        {
-            // Ensure we take the closest intersection
-            if (RayCast.Near < ClosestT)
-            {
-                ClosestT = RayCast.Near;
-                FoundHit = true;
-                *HitBlock = Block;
-                *HitNormal = RayCast.Normal;
-                *HitPoint = Ray.Origin + Ray.Direction * RayCast.Near;
-                *HitIndex = Index;
-            }
-        }
-    }
-
-    return FoundHit;
-}
-
-internal bool FindFirstHit(const ray& Ray, const std::vector<block>& Blocks, v3* HitPoint, v3* HitNormal, block* HitBlock, u64* HitIndex)
-{
-    return FindFirstHit(Ray, Blocks.data(), Blocks.size(), HitPoint, HitNormal, HitBlock, HitIndex);
-}
-
-internal block* LogicBlockGetSafe(game* Game, i32 C, i32 R, i32 L)
-{
-    if (C >= 0 && C < ColumnCount &&
-       R >= 0 && R < RowCount &&
-       L > 0 && L < LayerCount)
-    {
-        return &Game->LogicBlocks[(L * RowCount * ColumnCount) + (R * RowCount) + C];
-    }
-
-    return nullptr;
-}
-
 internal game GameCreate(game_renderer* Renderer)
 {
     game Game = {};
-
-    Game.LogicBlocks.resize(RowCount * ColumnCount * LayerCount);
 
     // Crosshair texture will be separate from block textures
     Game.CrosshairTexture = TextureCreate(Renderer->Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, "Resources/Textures/MC/Crosshair.png");
 
     // Load block textures
     Game.BlockTextures[(u32)block_type::Dirt] = TextureCreate(Renderer->Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, "Resources/Textures/MC/dirt_2.png");
+
+    GameGenerateWorld(&Game);
+
+    return Game;
+}
+
+internal void GameGenerateWorld(game* Game)
+{
+    Game->Blocks.resize(RowCount * ColumnCount * LayerCount);
 
     v3 StartPos = { 0, 0, 0, };
 
@@ -140,13 +35,22 @@ internal game GameCreate(game_renderer* Renderer)
             for (i32 C = 0; C < ColumnCount; C++)
             {
                 // Establish a "Block"
-                auto& Block = Game.LogicBlocks[(L * RowCount * ColumnCount) + (R * RowCount) + C];
-                Block.Texture = Game.BlockTextures[(u32)block_type::Dirt];
-                Block.Position = v3(StartPos.x, StartPos.y, StartPos.z);
-                Block.Type = block_type::Dirt;
-                Block.Color = (CikCak & 1) ? v4(0.2f, 0.2f, 0.2f, 1.0f) : v4(1.0f);
-                //Block.Color = v4(1.0f);
-                Block.Placed = true;
+                auto& Block = Game->Blocks[(L * RowCount * ColumnCount) + (R * RowCount) + C];
+
+                if (L < 16)
+                {
+                    Block.Texture = Game->BlockTextures[(u32)block_type::Dirt];
+                    Block.Position = v3(StartPos.x, StartPos.y, StartPos.z);
+                    Block.Type = block_type::Dirt;
+                    Block.Color = (CikCak & 1) ? v4(0.2f, 0.2f, 0.2f, 1.0f) : v4(1.0f);
+                    Block.Placed = true;
+                }
+                else
+                {
+                    Block.Texture = Game->BlockTextures[(u32)block_type::Dirt];
+                    Block.Position = v3(StartPos.x, StartPos.y, StartPos.z);
+                    Block.Type = block_type::Air;
+                }
 
                 StartPos.x++;
 
@@ -200,29 +104,11 @@ internal game GameCreate(game_renderer* Renderer)
         StartPos.y++;
     }
 
-    return Game;
 }
 
 internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* Input, f32 TimeStep, u32 ClientAreaWidth, u32 ClientAreaHeight)
 {
     GamePlayerUpdate(Game, Input, TimeStep);
-
-    // Physics
-    {
-        // TODO: Separate Static blocks from dynamic since we dont want to iterate over every block twice.
-        // This is ultimately O(n^2)
-
-        if (0)
-        {
-            for (auto& Block : Game->LogicBlocks)
-            {
-                for (auto& Block : Game->LogicBlocks)
-                {
-
-                }
-            }
-        }
-    }
 
     // Update camera
     {
@@ -231,49 +117,48 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
 
         Game->Camera.View = bkm::Inverse(Game->Camera.View);
         Game->Camera.RecalculateProjectionPerspective(ClientAreaWidth, ClientAreaHeight);
-        //Game->Camera.RecalculateProjectionOrtho_V2(ClientAreaWidth, ClientAreaHeight);
     }
 
-    // Render blocks
-    GameRendererSetViewProjection(Renderer, Game->Camera.GetViewProjection());
+    // Set view projection to render player's view
+    GameRendererSetViewProjectionCuboid(Renderer, Game->Camera.GetViewProjection());
 
+    // Render blocks
     if (1)
     {
-        for (auto& Block : Game->LogicBlocks)
+        for (auto& Block : Game->Blocks)
         {
             if (!Block.Placed)
                 continue;
 
             if (Block.Texture.Handle)
             {
-                GameRendererSubmitBlockNoRotScale(Renderer, Block.Position, Block.Texture, Block.Color);
+                GameRendererSubmitCuboidNoRotScale(Renderer, Block.Position, Block.Texture, Block.Color);
             }
             else
             {
-                GameRendererSubmitBlockNoRotScale(Renderer, Block.Position, Block.Color);
+                GameRendererSubmitCuboidNoRotScale(Renderer, Block.Position, Block.Color);
             }
         }
     }
 
+    // Render HUD
+    if(1)
+    {
+        // Orthographic projection: 0, 0, ClientAreaWidth, ClientAreaHeight
+        Game->Camera.RecalculateProjectionOrtho_V2(ClientAreaWidth, ClientAreaHeight);
+        GameRendererSetViewProjectionQuad(Renderer, Game->Camera.Projection);
+        f32 crosshairSize = 15.0f * 2.0f;
+        f32 centerX = ClientAreaWidth / 2.0f - crosshairSize / 2.0f;
+        f32 centerY = ClientAreaHeight / 2.0f - crosshairSize / 2.0f;
 
-    // HUD
-    // HUD
-    // HUD
+        v3 Positions[4];
+        Positions[3] = { centerX, centerY, 0.0f };
+        Positions[2] = { centerX + crosshairSize, centerY, 0.0f };
+        Positions[1] = { centerX + crosshairSize, centerY + crosshairSize, 0.0f };
+        Positions[0] = { centerX, centerY + crosshairSize, 0.0f };
 
-    // Orthographic projection: 0, 0, ClientAreaWidth, ClientAreaHeight
-    Game->Camera.RecalculateProjectionOrtho_V2(ClientAreaWidth, ClientAreaHeight);
-    GameRendererSetViewProjectionLayer(Renderer, Game->Camera.Projection, draw_layer::HUD);
-    f32 crosshairSize = 15.0f * 2.0f;
-    f32 centerX = ClientAreaWidth / 2.0f - crosshairSize / 2.0f;
-    f32 centerY = ClientAreaHeight / 2.0f - crosshairSize / 2.0f;
-
-    v3 Positions[4];
-    Positions[3] = { centerX, centerY, 0.0f };
-    Positions[2] = { centerX + crosshairSize, centerY, 0.0f };
-    Positions[1] = { centerX + crosshairSize, centerY + crosshairSize, 0.0f };
-    Positions[0] = { centerX, centerY + crosshairSize, 0.0f };
-
-    GameRendererSubmitQuadCustom(Renderer, Positions, Game->CrosshairTexture, v4(1.0f, 1.0f, 1.0f, 0.7f), draw_layer::HUD);
+        GameRendererSubmitQuadCustom(Renderer, Positions, Game->CrosshairTexture, v4(1.0f, 1.0f, 1.0f, 0.7f));
+    }
 }
 
 internal void GamePlayerUpdate(game* Game, const game_input* Input, f32 TimeStep)
@@ -383,9 +268,9 @@ internal void GamePlayerUpdate(game* Game, const game_input* Input, f32 TimeStep
 
     if (Game->Player.IsPhysicsObject)
     {
-        const f32 G = -9.81f;
+        const f32 G = -9.81f * 2;
         const f32 CheckRadius = 5.0f;
-        const f32 JumpStrength = 8.0f;
+        const f32 JumpStrength = 10.0f;
         auto& Player = Game->Player;
 
         // Apply gravity and movement forces
@@ -407,14 +292,14 @@ internal void GamePlayerUpdate(game* Game, const game_input* Input, f32 TimeStep
         NextPos.y += NextVelocity.y * TimeStep;
         PlayerAABB = AABBFromV3(NextPos, v3(0.5f, 1.8f, 0.5f));
 
-        for (auto& Block : Game->LogicBlocks)
+        for (auto& Block : Game->Blocks)
         {
             if (!Block.Placed)
                 continue;
 
             aabb BlockAABB = AABBFromV3(Block.Position, v3(1.0f));
 
-            if (CheckCollisionAABB(PlayerAABB, BlockAABB))
+            if (AABBCheckCollision(PlayerAABB, BlockAABB))
             {
                 // Hit something above? Stop jumping.
                 if (NextVelocity.y > 0)
@@ -436,14 +321,14 @@ internal void GamePlayerUpdate(game* Game, const game_input* Input, f32 TimeStep
         NextPos.x += NextVelocity.x * TimeStep;
         PlayerAABB = AABBFromV3(NextPos, v3(0.5f, 1.8f, 0.5f));
 
-        for (auto& Block : Game->LogicBlocks)
+        for (auto& Block : Game->Blocks)
         {
             if (!Block.Placed)
                 continue;
 
             aabb BlockAABB = AABBFromV3(Block.Position, v3(1.0f));
 
-            if (CheckCollisionAABB(PlayerAABB, BlockAABB))
+            if (AABBCheckCollision(PlayerAABB, BlockAABB))
             {
                 // Collision on X-axis: stop only X movement
                 NextVelocity.x = 0;
@@ -456,14 +341,14 @@ internal void GamePlayerUpdate(game* Game, const game_input* Input, f32 TimeStep
         NextPos.z += NextVelocity.z * TimeStep;
         PlayerAABB = AABBFromV3(NextPos, v3(0.5f, 1.8f, 0.5f));
 
-        for (auto& Block : Game->LogicBlocks)
+        for (auto& Block : Game->Blocks)
         {
             if (!Block.Placed)
                 continue;
 
             aabb BlockAABB = AABBFromV3(Block.Position, v3(1.0f));
 
-            if (CheckCollisionAABB(PlayerAABB, BlockAABB))
+            if (AABBCheckCollision(PlayerAABB, BlockAABB))
             {
                 // Collision on Z-axis: stop only Z movement
                 NextVelocity.z = 0;
@@ -480,7 +365,7 @@ internal void GamePlayerUpdate(game* Game, const game_input* Input, f32 TimeStep
         Player.Position += Direction * Speed * TimeStep;
     }
 
-    // Destroy logic block
+    // Destroy block
     if (Input->IsMousePressed(mouse::Left))
     {
         ray Ray;
@@ -491,9 +376,9 @@ internal void GamePlayerUpdate(game* Game, const game_input* Input, f32 TimeStep
         v3 HitNormal;
         block HitBlock;
         u64 HitIndex;
-        if (FindFirstHit(Ray, Game->LogicBlocks, &HitPoint, &HitNormal, &HitBlock, &HitIndex))
+        if (FindFirstHit(Ray, Game->Blocks, &HitPoint, &HitNormal, &HitBlock, &HitIndex))
         {
-            auto& Block = Game->LogicBlocks[HitIndex];
+            auto& Block = Game->Blocks[HitIndex];
             Block.Placed = false;
 
             // Color adjacent blocks
@@ -501,42 +386,42 @@ internal void GamePlayerUpdate(game* Game, const game_input* Input, f32 TimeStep
             {
                 if (Block.Left != INT_MAX)
                 {
-                    auto& Neighbour = Game->LogicBlocks[Block.Left];
+                    auto& Neighbour = Game->Blocks[Block.Left];
                     Neighbour.Color = v4(1.0f, 0.0f, 0.0f, 1.0f);
                     Neighbour.Right = INT_MAX;
                 }
 
                 if (Block.Right != INT_MAX)
                 {
-                    auto& Neighbour = Game->LogicBlocks[Block.Right];
+                    auto& Neighbour = Game->Blocks[Block.Right];
                     Neighbour.Color = v4(1.0f, 0.0f, 0.0f, 1.0f);
                     Neighbour.Left = INT_MAX;
                 }
 
                 if (Block.Front != INT_MAX)
                 {
-                    auto& Neighbour = Game->LogicBlocks[Block.Front];
+                    auto& Neighbour = Game->Blocks[Block.Front];
                     Neighbour.Color = v4(1.0f, 0.0f, 0.0f, 1.0f);
                     Neighbour.Back = INT_MAX;
                 }
 
                 if (Block.Back != INT_MAX)
                 {
-                    auto& Neighbour = Game->LogicBlocks[Block.Back];
+                    auto& Neighbour = Game->Blocks[Block.Back];
                     Neighbour.Color = v4(1.0f, 0.0f, 0.0f, 1.0f);
                     Neighbour.Front = INT_MAX;
                 }
 
                 if (Block.Up != INT_MAX)
                 {
-                    auto& Neighbour = Game->LogicBlocks[Block.Up];
+                    auto& Neighbour = Game->Blocks[Block.Up];
                     Neighbour.Color = v4(1.0f, 0.0f, 0.0f, 1.0f);
                     Neighbour.Down = INT_MAX;
                 }
 
                 if (Block.Down != INT_MAX)
                 {
-                    auto& Neighbour = Game->LogicBlocks[Block.Down];
+                    auto& Neighbour = Game->Blocks[Block.Down];
                     Neighbour.Color = v4(1.0f, 0.0f, 0.0f, 1.0f);
                     Neighbour.Up = INT_MAX;
                 }
@@ -546,7 +431,7 @@ internal void GamePlayerUpdate(game* Game, const game_input* Input, f32 TimeStep
         }
     }
 
-    // Create Logic blocks
+    // Create blocks
     if (Input->IsMousePressed(mouse::Right))
     {
         v2i PlacePos = { 0,0 };
@@ -560,21 +445,25 @@ internal void GamePlayerUpdate(game* Game, const game_input* Input, f32 TimeStep
         block HitBlock;
         u64 HitIndex;
 
-        if (FindFirstHit(Ray, Game->LogicBlocks, &HitPoint, &HitNormal, &HitBlock, &HitIndex))
+        if (FindFirstHit(Ray, Game->Blocks, &HitPoint, &HitNormal, &HitBlock, &HitIndex))
         {
             v3 NewBlockPos = HitBlock.Position + HitNormal;
-            i32 C = NewBlockPos.x;
-            i32 R = NewBlockPos.z;
-            i32 L = NewBlockPos.y;
-            auto SteppedOnBlock = LogicBlockGetSafe(Game, C, R, L);
 
-            if (SteppedOnBlock)
+            aabb BlockAABB = AABBFromV3(NewBlockPos, v3(1.0f));
+            aabb PlayerAABB = AABBFromV3(Player.Position, v3(0.5f, 1.8f, 0.5f));
+            if (!AABBCheckCollision(PlayerAABB, BlockAABB))
             {
-                SteppedOnBlock->Color = v4(1, 0, 1, 1);
-                SteppedOnBlock->Placed = true;
+                i32 C = NewBlockPos.x;
+                i32 R = NewBlockPos.z;
+                i32 L = NewBlockPos.y;
+                auto Block = BlockGetSafe(Game, C, R, L);
 
+                if (Block)
+                {
+                    Block->Color = v4(1, 0, 1, 1);
+                    Block->Placed = true;
+                }
             }
-            //auto& Block = Game->LogicBlocks[HitIndex];
         }
     }
 
@@ -584,7 +473,7 @@ internal void GamePlayerUpdate(game* Game, const game_input* Input, f32 TimeStep
     i32 R = (i32)bkm::Floor(Player.Position.z + 0.5f);
     i32 L = (i32)bkm::Floor(Player.Position.y + 0.5f);
 
-    auto SteppedOnBlock = LogicBlockGetSafe(Game, C, R, L - 1);
+    auto SteppedOnBlock = BlockGetSafe(Game, C, R, L - 1);
     if (SteppedOnBlock)
     {
         SteppedOnBlock->Color = v4(0, 0, 1, 1);

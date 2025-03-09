@@ -2,6 +2,11 @@
  * Win32 game layer
 */
 
+// TODOLIST
+// 
+// -- Chucks and blocks
+// 
+
 // General defines
 #define CountOf(arr) sizeof(arr) / sizeof(arr[0])
 #define STRINGIFY(x) #x

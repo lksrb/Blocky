@@ -10,7 +10,7 @@
 #include "DX12Texture.h"
 #include "DX12Pipeline.h"
 
-internal constexpr inline u32 c_MaxBlocksPerBatch = 1 << 16;
+internal constexpr inline u32 c_MaxCubePerBatch = 1 << 16;
 internal constexpr inline u32 c_MaxQuadsPerBatch = 1 << 16;
 internal constexpr inline u32 c_MaxQuadVertices = c_MaxQuadsPerBatch * 4;
 internal constexpr inline u32 c_MaxQuadIndices = c_MaxQuadsPerBatch * 6;
@@ -24,29 +24,13 @@ struct quad_vertex
     u32 TexIndex;
 };
 
-struct block_vertex
+struct cuboid_vertex
 {
     v4 Position;
     v2 TextureCoord;
 };
 
-// Strong-typed uint
-enum class draw_layer : u32
-{
-    HUD = 0,
-
-    COUNT
-};
-#define DRAW_LAYER_COUNT (u32)draw_layer::COUNT
-
-// Basically a push constant
-// TODO: Standardized push constant minimum value
-struct dx12_root_signature_constant_buffer
-{
-    m4 ViewProjection;
-};
-
-struct block_transform_vertex_data
+struct cuboid_transform_vertex_data
 {
     union
     {
@@ -58,13 +42,12 @@ struct block_transform_vertex_data
     u32 TextureIndex;
 };
 
-struct quad_draw_layer_data
+// Basically a push constant
+// TODO: Look up standardized push constant minimum value
+// I think its 256 bytes
+struct dx12_root_signature_constant_buffer
 {
-    dx12_vertex_buffer VertexBuffer[FIF];
-    quad_vertex* VertexDataBase;
-    quad_vertex* VertexDataPtr;
-    u32 IndexCount = 0;
-    dx12_root_signature_constant_buffer RootSignatureBuffer;
+    m4 ViewProjection;
 };
 
 // API-agnostic type definition
@@ -127,15 +110,19 @@ struct game_renderer
     // Quad
     dx12_pipeline QuadPipeline;
     dx12_index_buffer QuadIndexBuffer;
-    quad_draw_layer_data QuadDrawLayers[DRAW_LAYER_COUNT] = {};
+    dx12_vertex_buffer QuadVertexBuffers[FIF];
+    quad_vertex* QuadVertexDataBase;
+    quad_vertex* QuadVertexDataPtr;
+    u32 QuadIndexCount = 0;
+    dx12_root_signature_constant_buffer QuadRootSignatureBuffer;
 
-    // Block ONLY
-    u32 BlockInstanceCount = 0;
-    dx12_pipeline BlockPipeline = {};
-    dx12_vertex_buffer BlockTransformVertexBuffers[FIF] = {};
-    dx12_vertex_buffer BlockPositionsVertexBuffer = {};
-    block_transform_vertex_data* BlockInstanceData = nullptr;
-    dx12_root_signature_constant_buffer BlockRootSignatureBuffer;
+    // Cuboid
+    u32 CuboidInstanceCount = 0;
+    dx12_pipeline CuboidPipeline = {};
+    dx12_vertex_buffer CuboidTransformVertexBuffers[FIF] = {};
+    dx12_vertex_buffer CuboidPositionsVertexBuffer = {};
+    cuboid_transform_vertex_data* CuboidInstanceData = nullptr;
+    dx12_root_signature_constant_buffer CuboidRootSignatureBuffer;
 };
 
 // Init / Destroy functions
@@ -153,14 +140,14 @@ internal void GameRendererFlush(game_renderer* Renderer);
 // ===============================================================================================================
 //                                                   RENDERER API                                               
 // ===============================================================================================================
-internal void GameRendererSetViewProjectionLayer(game_renderer* Renderer, const m4& ViewProjection, draw_layer Layer);
-internal void GameRendererSetViewProjection(game_renderer* Renderer, const m4& ViewProjection);
+internal void GameRendererSetViewProjectionQuad(game_renderer* Renderer, const m4& ViewProjection);
+internal void GameRendererSetViewProjectionCuboid(game_renderer* Renderer, const m4& ViewProjection);
 
 // Render commands
-internal void GameRendererSubmitQuad(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v2& Scale, const v4& Color, draw_layer Layer);
-internal void GameRendererSubmitQuad(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v2& Scale, const texture& Texture, const v4& Color, draw_layer Layer);
-internal void GameRendererSubmitQuadCustom(game_renderer* Renderer, v3 VertexPositions[4], const texture& Texture, const v4& Color, draw_layer Layer);
-internal void GameRendererSubmitBlock(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale, const texture& Texture, const v4& Color);
-internal void GameRendererSubmitBlock(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale, const v4& Color);
-internal void GameRendererSubmitBlockNoRotScale(game_renderer* Renderer, const v3& Translation, const v4& Color);
-internal void GameRendererSubmitBlockNoRotScale(game_renderer* Renderer, const v3& Translation, const texture& Texture, const v4& Color);
+internal void GameRendererSubmitQuad(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v2& Scale, const v4& Color);
+internal void GameRendererSubmitQuad(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v2& Scale, const texture& Texture, const v4& Color);
+internal void GameRendererSubmitQuadCustom(game_renderer* Renderer, v3 VertexPositions[4], const texture& Texture, const v4& Color);
+internal void GameRendererSubmitCuboid(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale, const texture& Texture, const v4& Color);
+internal void GameRendererSubmitCuboid(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale, const v4& Color);
+internal void GameRendererSubmitCuboidNoRotScale(game_renderer* Renderer, const v3& Translation, const v4& Color);
+internal void GameRendererSubmitCuboidNoRotScale(game_renderer* Renderer, const v3& Translation, const texture& Texture, const v4& Color);

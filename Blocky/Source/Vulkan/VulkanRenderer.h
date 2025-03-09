@@ -1240,7 +1240,7 @@ internal void GameRendererSubmitQuad(game_renderer* Renderer, v3 Translation, v3
     Renderer->QuadIndexCount += 6;
 }
 
-static void GameRendererSetViewProjection(game_renderer* Renderer, const m4& ViewProjection, draw_layer Layer)
+static void GameRendererSetViewProjectionCuboid(game_renderer* Renderer, const m4& ViewProjection, draw_layer Layer)
 {
     Renderer->PushConstant.CameraViewProjection = ViewProjection;
 }

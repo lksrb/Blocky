@@ -1,5 +1,8 @@
 #pragma once
 
+#include "AABB.h"
+#include "RayCast.h"
+
 #include <vector>
 
 struct camera
@@ -39,21 +42,10 @@ struct camera
     m4 GetViewProjection() const { return Projection * View; }
 };
 
-struct ray
-{
-    v3 Origin;
-    v3 Direction;
-};
-
-struct aabb
-{
-    v3 Min;
-    v3 Max;
-};
-
 enum class block_type : u32
 {
     Dirt = 0,
+    Air,
 
     INVALID
 };
@@ -81,7 +73,7 @@ struct block
 
 static const i64 RowCount = 16;
 static const i64 ColumnCount = 16;
-static const i64 LayerCount = 16;
+static const i64 LayerCount = 256;
 
 struct game
 {
@@ -90,113 +82,65 @@ struct game
 
     player Player;
 
-    std::vector<block> LogicBlocks;
+    std::vector<block> Blocks;
 
     texture CrosshairTexture;
 
-    texture BlockTextures[BLOCK_TYPE_COUNT];
+    texture BlockTextures[BLOCK_TYPE_COUNT]; 
 };
 
 internal game GameCreate(game_renderer* Renderer);
 internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* Input, f32 TimeStep, u32 ClientAreaWidth, u32 ClientAreaHeight);
 internal void GamePlayerUpdate(game* Game, const game_input* Input, f32 TimeStep);
+internal void GameGenerateWorld(game* Game);
 
-internal aabb AABBFromV3(v3 Position, v3 Scale)
+internal bool FindFirstHit(const ray& Ray, const block* Blocks, u64 BlocksCount, v3* HitPoint, v3* HitNormal, block* HitBlock, u64* HitIndex)
 {
-    aabb Result;
-    v3 HalfScale = bkm::Abs(Scale) * 0.5f;
-    Result.Min = Position - HalfScale;
-    Result.Max = Position + HalfScale;
-    return Result;
-}
+    f32 ClosestT = INFINITY;
+    bool FoundHit = false;
 
-enum class CollisionSide : u32
-{
-    Top = 0,
-    Bottom = 1 << 0,
-    Left = 1 << 1,
-    Right = 1 << 2,
-    Front = 1 << 3,
-    Back = 1 << 4,
-};
-
-struct collision_result
-{
-    bool Collided;
-    CollisionSide Side;
-};
-
-internal collision_result CheckCollisionAABB(const v3& Center0, const v3& Center1, const aabb& Box0, const aabb& Box1, f32 DeltaTime)
-{
-    collision_result Result;
-    Result.Collided = false;
-
-    v3 HalfSize0 = (Box0.Max - Box0.Min) * 0.5f;
-    v3 halfSizeB = (Box1.Max - Box1.Min) * 0.5f;
-
-    v3 Delta = Center1 - Center0;
-    v3 Overlap = (HalfSize0 + halfSizeB) - bkm::Abs(Delta);
-
-    DeltaTime = 0;
-    // Edge handling: If overlap is very small, treat as a collision
-    if (Overlap.x > DeltaTime && Overlap.y > DeltaTime && Overlap.z > DeltaTime)
+    for (u64 Index = 0; Index < BlocksCount; Index++)
     {
-        Result.Collided = true;
+        auto& Block = Blocks[Index];
 
-        // Check if the AABBs are just touching (edge case detection)
-        if (Overlap.x <= DeltaTime || Overlap.y <= DeltaTime || Overlap.z <= DeltaTime)
+        if (!Block.Placed)
+            continue;
+
+        aabb Box;
+        Box.Min = Block.Position - v3(0.5f);
+        Box.Max = Block.Position + v3(0.5f);
+
+        if (raycast_result RayCast = RayCastIntersectsAABB(Ray, Box))
         {
-            // Edge case detection (exactly touching or almost touching)
-            if (Overlap.x <= DeltaTime)
+            // Ensure we take the closest intersection
+            if (RayCast.Near < ClosestT)
             {
-                Result.Side = (Delta.x > 0) ? CollisionSide::Left : CollisionSide::Right;
-            }
-            else if (Overlap.y <= DeltaTime)
-            {
-                Result.Side = (Delta.y > 0) ? CollisionSide::Top : CollisionSide::Bottom;
-            }
-            else if (Overlap.z <= DeltaTime)
-            {
-                Result.Side = (Delta.z > 0) ? CollisionSide::Front : CollisionSide::Back;
-            }
-        }
-        else
-        {
-            // Normal collision handling (overlap is more than epsilon)
-            if (Overlap.x < Overlap.y && Overlap.x < Overlap.z)
-            {
-                Result.Side = (Delta.x > DeltaTime) ? CollisionSide::Left : CollisionSide::Right;
-            }
-            else if (Overlap.y < Overlap.x && Overlap.y < Overlap.z)
-            {
-                Result.Side = (Delta.y > DeltaTime) ? CollisionSide::Top : CollisionSide::Bottom;
-            }
-            else
-            {
-                Result.Side = (Delta.z > DeltaTime) ? CollisionSide::Front : CollisionSide::Back;
+                ClosestT = RayCast.Near;
+                FoundHit = true;
+                *HitBlock = Block;
+                *HitNormal = RayCast.Normal;
+                *HitPoint = Ray.Origin + Ray.Direction * RayCast.Near;
+                *HitIndex = Index;
             }
         }
     }
 
-    return Result;
+    return FoundHit;
 }
 
-internal bool CheckCollisionAABBX(const aabb& Box0, const aabb& Box1)
+internal bool FindFirstHit(const ray& Ray, const std::vector<block>& Blocks, v3* HitPoint, v3* HitNormal, block* HitBlock, u64* HitIndex)
 {
-    return (Box0.Min.x <= Box1.Max.x + bkm::EPSILON && Box0.Max.x + bkm::EPSILON >= Box1.Min.x);
+    return FindFirstHit(Ray, Blocks.data(), Blocks.size(), HitPoint, HitNormal, HitBlock, HitIndex);
 }
 
-internal bool CheckCollisionAABBY(const aabb& Box0, const aabb& Box1)
+internal block* BlockGetSafe(game* Game, i32 C, i32 R, i32 L)
 {
-    return (Box0.Min.y <= Box1.Max.y + bkm::EPSILON && Box0.Max.y + bkm::EPSILON >= Box1.Min.y);
-}
+    if (C >= 0 && C < ColumnCount &&
+       R >= 0 && R < RowCount &&
+       L > 0 && L < LayerCount)
+    {
+        return &Game->Blocks[(L * RowCount * ColumnCount) + (R * RowCount) + C];
+    }
 
-internal bool CheckCollisionAABBZ(const aabb& Box0, const aabb& Box1)
-{
-    return (Box0.Min.z <= Box1.Max.z + bkm::EPSILON && Box0.Max.z + bkm::EPSILON >= Box1.Min.z);
-}
-
-internal bool CheckCollisionAABB(const aabb& Box0, const aabb& Box1)
-{
-    return CheckCollisionAABBX(Box0, Box1) && CheckCollisionAABBY(Box0, Box1) && CheckCollisionAABBZ(Box0, Box1);
+    return nullptr;
 }
