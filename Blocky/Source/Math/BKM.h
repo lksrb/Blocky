@@ -1,6 +1,6 @@
 #pragma once
 
-#define USE_C_MATH 1
+#define USE_C_MATH 0
 
 #if USE_C_MATH
 #include <cmath>

@@ -10,6 +10,8 @@ internal game GameCreate(game_renderer* Renderer)
     // Load block textures
     Game.BlockTextures[(u32)block_type::Dirt] = TextureCreate(Renderer->Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, "Resources/Textures/MC/dirt_2.png");
 
+    Game.CowTexture = TextureCreate(Renderer->Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, "Resources/Textures/MC/cow.png");
+
     GameGenerateWorld(&Game);
 
     return Game;
@@ -141,8 +143,140 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
         }
     }
 
+    // TODO: When we decide to do ECS stuff, Parent-Child relationship will be needed due to how we're gonna render live entities
+    
+    // Render a COW
+    {
+        auto GetTextureCoords = [](i32 GridWidth, i32 GridHeight, i32 BottomLeftX, i32 BottomLeftY, i32 RotationCount = 0)
+        {
+            texture_coords TextureCoords;
+
+            f32 TextureWidth = 64.0f;
+            f32 TextureHeight = 32.0f;
+
+            f32 PerTexelWidth = 1 / TextureWidth;
+            f32 PerTexelHeight = 1 / TextureHeight;
+
+            // 8x8 Grid
+            TextureCoords.Coords[0] = { 0.0f, 0.0f };
+            TextureCoords.Coords[1] = { GridWidth * PerTexelWidth, 0.0f };
+            TextureCoords.Coords[2] = { GridWidth * PerTexelWidth, GridHeight * PerTexelHeight };
+            TextureCoords.Coords[3] = { 0.0f, GridHeight * PerTexelHeight };
+
+            // Rotate 90 degrees 'RotationCount'
+            while (RotationCount-- > 0)
+            {
+                auto OriginalCoords = TextureCoords;
+
+                TextureCoords.Coords[0] = OriginalCoords.Coords[1];  // New Bottom-left
+                TextureCoords.Coords[1] = OriginalCoords.Coords[2];  // New Bottom-right
+                TextureCoords.Coords[2] = OriginalCoords.Coords[3];  // New Top-right
+                TextureCoords.Coords[3] = OriginalCoords.Coords[0];  // New Top-left
+            }
+
+            // Translation of the Grid
+            TextureCoords.Coords[0] += v2(PerTexelWidth * BottomLeftX, PerTexelHeight * (TextureHeight - BottomLeftY - 1));
+            TextureCoords.Coords[1] += v2(PerTexelWidth * BottomLeftX, PerTexelHeight * (TextureHeight - BottomLeftY - 1));
+            TextureCoords.Coords[2] += v2(PerTexelWidth * BottomLeftX, PerTexelHeight * (TextureHeight - BottomLeftY - 1));
+            TextureCoords.Coords[3] += v2(PerTexelWidth * BottomLeftX, PerTexelHeight * (TextureHeight - BottomLeftY - 1));
+
+            return TextureCoords;
+        };
+
+        local_persist f32 Time = 0;
+        Time += TimeStep;
+
+        local_persist v3 Translation = v3(3, 17, 2);
+
+        Translation.z = bkm::Sin(Time);
+        v3 Scale = v3(0.7f, 0.7f, 1.0f);
+
+        // Body
+        {
+            auto Front = GetTextureCoords(12, 10, 28, 13);
+            auto Back = GetTextureCoords(12, 10, 40, 13);
+
+            auto Left = GetTextureCoords(10, 18, 18, 31, 1);
+            auto Right = GetTextureCoords(10, 18, 40, 31, 3);
+
+            auto Top = GetTextureCoords(12, 18, 50, 31, 2);
+            auto Bottom = GetTextureCoords(12, 18, 28, 31, 0);
+
+            texture_coords TextureCoords[6];
+            TextureCoords[0] = Front;
+            TextureCoords[1] = Back;
+            TextureCoords[2] = Left;
+            TextureCoords[3] = Right;
+            TextureCoords[4] = Top;
+            TextureCoords[5] = Bottom;
+
+            GameRendererSubmitCustomCuboid(Renderer, Translation, v3(0.0f, 0.0f, 0.0f), Scale, Game->CowTexture, TextureCoords, v4(1.0f));
+        }
+
+        // Head
+        {
+            auto Front = GetTextureCoords(8, 8, 6, 13);
+            auto Back = GetTextureCoords(8, 8, 20, 13);
+            auto Left = GetTextureCoords(6, 8, 0, 13);
+            auto Right = GetTextureCoords(6, 8, 14, 13);
+            auto Top = GetTextureCoords(8, 6, 6, 5);
+            auto Bottom = GetTextureCoords(8, 6, 14, 5);
+
+            texture_coords TextureCoords[6];
+            TextureCoords[0] = Front;
+            TextureCoords[1] = Back;
+            TextureCoords[2] = Left;
+            TextureCoords[3] = Right;
+            TextureCoords[4] = Top;
+            TextureCoords[5] = Bottom;
+
+            GameRendererSubmitCustomCuboid(Renderer, Translation + v3(0, 0.3f, 0.7f), v3(0.0f, 0.0f, 0.0f), v3(0.5f, 0.5f, 0.4f), Game->CowTexture, TextureCoords, v4(1.0f));
+        }
+
+        // Legs
+        {
+            f32 DeltaX = 0.20f;
+            f32 DeltaZ = 0.35f;
+            v3 LegScale(0.3f, 0.7f, 0.3f);
+            f32 Y = Translation.y - Scale.y * 0.5f - LegScale.y * 0.5f;
+
+            v3 Offsets[4];
+            Offsets[0] = v3(DeltaX, Y, DeltaZ);
+            Offsets[1] = v3(-DeltaX, Y, DeltaZ);
+            Offsets[2] = v3(-DeltaX, Y, -DeltaZ);
+            Offsets[3] = v3(DeltaX, Y, -DeltaZ);
+
+            // Front Left
+            for (u32 i = 0; i < 4; i++)
+            {
+                auto Left = GetTextureCoords(4, 12, 0, 31);
+                auto Front = GetTextureCoords(4, 12, 4, 31);
+
+                auto Back = GetTextureCoords(4, 12, 12, 31);
+                auto Right = GetTextureCoords(4, 12, 8, 31);
+
+                auto Top = GetTextureCoords(4, 4, 4, 19);
+                auto Bottom = GetTextureCoords(4, 4, 8, 19, 2);
+
+                texture_coords TextureCoords[6];
+                TextureCoords[0] = Front;
+                TextureCoords[1] = Back;
+                TextureCoords[2] = Left;
+                TextureCoords[3] = Right;
+                TextureCoords[4] = Top;
+                TextureCoords[5] = Bottom;
+
+                static f32 Time = 0;
+
+                //Time += TimeStep;
+
+                GameRendererSubmitCustomCuboid(Renderer, v3(Translation.x + Offsets[i].x, Y, Translation.z + Offsets[i].z), v3(0.0f, Time, 0.0f), LegScale, Game->CowTexture, TextureCoords, v4(1.0f));
+            }
+        }
+    }
+
     // Render HUD
-    if(1)
+    if (1)
     {
         // Orthographic projection: 0, 0, ClientAreaWidth, ClientAreaHeight
         Game->Camera.RecalculateProjectionOrtho_V2(ClientAreaWidth, ClientAreaHeight);
@@ -453,9 +587,9 @@ internal void GamePlayerUpdate(game* Game, const game_input* Input, f32 TimeStep
             aabb PlayerAABB = AABBFromV3(Player.Position, v3(0.5f, 1.8f, 0.5f));
             if (!AABBCheckCollision(PlayerAABB, BlockAABB))
             {
-                i32 C = NewBlockPos.x;
-                i32 R = NewBlockPos.z;
-                i32 L = NewBlockPos.y;
+                i32 C = (i32)NewBlockPos.x;
+                i32 R = (i32)NewBlockPos.z;
+                i32 L = (i32)NewBlockPos.y;
                 auto Block = BlockGetSafe(Game, C, R, L);
 
                 if (Block)

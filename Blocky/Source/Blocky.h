@@ -56,7 +56,7 @@ struct player
     v3 Position = v3(0.0f, 18, 1.0f);
     v3 Rotation = v3(-bkm::PI_HALF, 0.0f, 0.0f);
     v3 Velocity = v3(0.0f);
-    bool IsPhysicsObject = true;
+    bool IsPhysicsObject = false;
     bool Grounded = false;
 };
 
@@ -85,6 +85,8 @@ struct game
     std::vector<block> Blocks;
 
     texture CrosshairTexture;
+
+    texture CowTexture;
 
     texture BlockTextures[BLOCK_TYPE_COUNT]; 
 };

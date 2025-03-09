@@ -16,6 +16,19 @@ internal constexpr inline u32 c_MaxQuadVertices = c_MaxQuadsPerBatch * 4;
 internal constexpr inline u32 c_MaxQuadIndices = c_MaxQuadsPerBatch * 6;
 internal constexpr inline u32 c_MaxTexturesPerDrawCall = 32; // TODO: Get this from the driver
 
+struct texture_coords
+{
+    v2 Coords[4];
+
+    //    texture_coords()
+    //    {
+    //        Coords[0] = { 0.0f, 0.0f };
+    //        Coords[1] = { 1.0f, 0.0f };
+    //        Coords[2] = { 1.0f, 1.0f };
+    //        Coords[3] = { 0.0f, 1.0f };
+    //    }
+};
+
 struct quad_vertex
 {
     v3 Position;
@@ -116,13 +129,21 @@ struct game_renderer
     u32 QuadIndexCount = 0;
     dx12_root_signature_constant_buffer QuadRootSignatureBuffer;
 
-    // Cuboid
+    // Basic Cuboid - Has same texture for every quad
     u32 CuboidInstanceCount = 0;
     dx12_pipeline CuboidPipeline = {};
     dx12_vertex_buffer CuboidTransformVertexBuffers[FIF] = {};
     dx12_vertex_buffer CuboidPositionsVertexBuffer = {};
     cuboid_transform_vertex_data* CuboidInstanceData = nullptr;
     dx12_root_signature_constant_buffer CuboidRootSignatureBuffer;
+
+    // Custom Cuboid - Is able to have different texture for each quad - This means it will be slower to submit but are more flexible
+    // NOTE: Basic and Customed might merge in the future, we will see.
+    // They are the same and Quad but is in the same layer as cuboid
+    dx12_vertex_buffer CustomCuboidVertexBuffers[FIF] = {};
+    quad_vertex* CustomCuboidVertexDataBase;
+    quad_vertex* CustomCuboidVertexDataPtr;
+    u32 CustomCuboidIndexCount = 0;
 };
 
 // Init / Destroy functions
@@ -151,3 +172,5 @@ internal void GameRendererSubmitCuboid(game_renderer* Renderer, const v3& Transl
 internal void GameRendererSubmitCuboid(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale, const v4& Color);
 internal void GameRendererSubmitCuboidNoRotScale(game_renderer* Renderer, const v3& Translation, const v4& Color);
 internal void GameRendererSubmitCuboidNoRotScale(game_renderer* Renderer, const v3& Translation, const texture& Texture, const v4& Color);
+
+internal void GameRendererSubmitCustomCuboid(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale, const texture& Texture, texture_coords TextureCoords[6], const v4& Color);
