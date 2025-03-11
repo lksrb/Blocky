@@ -895,7 +895,7 @@ internal void GameRendererSetViewProjectionCuboid(game_renderer* Renderer, const
     Renderer->CuboidRootSignatureBuffer.ViewProjection = ViewProjection;
 }
 
-internal void GameRendererSubmitCustomCuboid(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale, const texture& Texture, texture_coords TextureCoords[6], const v4& Color)
+internal void GameRendererSubmitCustomCuboid(game_renderer* Renderer, const m4& Transform, const texture& Texture, texture_coords TextureCoords[6], const v4& Color)
 {
     Assert(Renderer->CustomCuboidIndexCount < c_MaxQuadIndices, "Renderer->CustomCuboidIndexCount < c_MaxQuadIndices");
     Assert(Texture.Handle != nullptr, "Texture is invalid!");
@@ -919,10 +919,6 @@ internal void GameRendererSubmitCustomCuboid(game_renderer* Renderer, const v3& 
         Renderer->CurrentTextureStackIndex++;
     }
 
-    m4 Transform = bkm::Translate(m4(1.0f), Translation)
-        * bkm::ToM4(qtn(Rotation))
-        * bkm::Scale(m4(1.0f), Scale);
-
     u32 j = 0;
     for (u32 i = 0; i < CountOf(c_CustomCuboidVertices); i++)
     {
@@ -934,11 +930,20 @@ internal void GameRendererSubmitCustomCuboid(game_renderer* Renderer, const v3& 
 
         if ((i + 1) % 4 == 0)
         {
-            j++; 
+            j++;
         }
     }
 
     Renderer->CustomCuboidIndexCount += 36;
+}
+
+internal void GameRendererSubmitCustomCuboid(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale, const texture& Texture, texture_coords TextureCoords[6], const v4& Color)
+{
+    m4 Transform = bkm::Translate(m4(1.0f), Translation)
+        * bkm::ToM4(qtn(Rotation))
+        * bkm::Scale(m4(1.0f), Scale);
+
+    GameRendererSubmitCustomCuboid(Renderer, Transform, Texture, TextureCoords, Color);
 }
 
 internal void GameRendererSubmitQuad(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v2& Scale, const v4& Color)

@@ -113,7 +113,7 @@ struct v3
 
     constexpr explicit v3(f32 scalar)
     {
-        x = y = z = scalar;
+        this->x = this->y = this->z = scalar;
     }
 
     template<typename T>

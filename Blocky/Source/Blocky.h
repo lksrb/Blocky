@@ -51,6 +51,20 @@ enum class block_type : u32
 };
 #define BLOCK_TYPE_COUNT (u32)block_type::INVALID
 
+struct transform
+{
+    v3 Translation = v3(0.0f);
+    v3 Rotation = v3(0.0f);
+    v3 Scale = v3(1.0f);
+
+    inline m4 Matrix()
+    {
+        return bkm::Translate(m4(1.0f), Translation)
+            * bkm::ToM4(qtn(Rotation))
+            * bkm::Scale(m4(1.0f), Scale);
+    }
+};
+
 struct player
 {
     v3 Position = v3(0.0f, 18, 1.0f);
@@ -58,6 +72,12 @@ struct player
     v3 Velocity = v3(0.0f);
     bool IsPhysicsObject = false;
     bool Grounded = false;
+};
+
+struct cow
+{
+    transform Transform;
+    bool IsPhysicsObject = false;
 };
 
 struct block
@@ -94,6 +114,7 @@ struct game
 internal game GameCreate(game_renderer* Renderer);
 internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* Input, f32 TimeStep, u32 ClientAreaWidth, u32 ClientAreaHeight);
 internal void GamePlayerUpdate(game* Game, const game_input* Input, f32 TimeStep);
+internal void GameCowUpdate(game* Game, game_renderer* Renderer, f32 TimeStep);
 internal void GameGenerateWorld(game* Game);
 
 internal bool FindFirstHit(const ray& Ray, const block* Blocks, u64 BlocksCount, v3* HitPoint, v3* HitNormal, block* HitBlock, u64* HitIndex)
@@ -146,3 +167,40 @@ internal block* BlockGetSafe(game* Game, i32 C, i32 R, i32 L)
 
     return nullptr;
 }
+
+internal texture_coords GetTextureCoords(i32 GridWidth, i32 GridHeight, i32 BottomLeftX, i32 BottomLeftY, i32 RotationCount = 0)
+{
+    texture_coords TextureCoords;
+
+    // TODO: Make this more generic?
+    f32 TextureWidth = 64.0f;
+    f32 TextureHeight = 32.0f;
+
+    f32 PerTexelWidth = 1 / TextureWidth;
+    f32 PerTexelHeight = 1 / TextureHeight;
+
+    // 8x8 Grid
+    TextureCoords.Coords[0] = { 0.0f, 0.0f };
+    TextureCoords.Coords[1] = { GridWidth * PerTexelWidth, 0.0f };
+    TextureCoords.Coords[2] = { GridWidth * PerTexelWidth, GridHeight * PerTexelHeight };
+    TextureCoords.Coords[3] = { 0.0f, GridHeight * PerTexelHeight };
+
+    // Rotate 90 degrees 'RotationCount'
+    while (RotationCount-- > 0)
+    {
+        auto OriginalCoords = TextureCoords;
+
+        TextureCoords.Coords[0] = OriginalCoords.Coords[1];  // New Bottom-left
+        TextureCoords.Coords[1] = OriginalCoords.Coords[2];  // New Bottom-right
+        TextureCoords.Coords[2] = OriginalCoords.Coords[3];  // New Top-right
+        TextureCoords.Coords[3] = OriginalCoords.Coords[0];  // New Top-left
+    }
+
+    // Translation of the Grid
+    TextureCoords.Coords[0] += v2(PerTexelWidth * BottomLeftX, PerTexelHeight * (TextureHeight - BottomLeftY - 1));
+    TextureCoords.Coords[1] += v2(PerTexelWidth * BottomLeftX, PerTexelHeight * (TextureHeight - BottomLeftY - 1));
+    TextureCoords.Coords[2] += v2(PerTexelWidth * BottomLeftX, PerTexelHeight * (TextureHeight - BottomLeftY - 1));
+    TextureCoords.Coords[3] += v2(PerTexelWidth * BottomLeftX, PerTexelHeight * (TextureHeight - BottomLeftY - 1));
+
+    return TextureCoords;
+};
