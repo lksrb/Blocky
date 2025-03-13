@@ -77,7 +77,10 @@ struct player
 struct cow
 {
     transform Transform;
-    bool IsPhysicsObject = false;
+    bool IsPhysicsObject = true;
+    bool Grounded = false;
+    texture Texture;
+    v3 Velocity = v3(0.0f);
 };
 
 struct block
@@ -101,14 +104,14 @@ struct game
     v3 CameraOffset = v3(0.0f, 0.8f, 0.0f);
 
     player Player;
+    cow Cow;
 
     std::vector<block> Blocks;
 
     texture CrosshairTexture;
-
-    texture CowTexture;
-
     texture BlockTextures[BLOCK_TYPE_COUNT]; 
+
+    f32 Time;
 };
 
 internal game GameCreate(game_renderer* Renderer);
