@@ -65,22 +65,63 @@ struct transform
     }
 };
 
+struct aabb_physics
+{
+    bool Grounded = false;
+    v3 Velocity = v3(0.0f);
+    v3 BoxSize; // Not exactly an AABB, just scale since the position of the aabb may vary
+};
+
+struct renderable
+{
+    v4 Color = v4(1.0f);
+    texture Texture;
+};
+
+enum class entity_type : u32
+{
+    None = 0,
+    Player,
+    Cow,
+    // ...
+};
+
+enum class entity_flags : u32
+{
+    None = 0,
+    Valid = 1 << 0,
+    InteractsWithBlocks = 1 << 1,
+    Renderable = 1 << 2,
+};
+
+ENABLE_BITWISE_OPERATORS(entity_flags, u32);
+
+// Alive entities
+// One big structure that holds everything, not cache friendly but we will see if it matters
+struct entity
+{
+    entity_type Type = entity_type::None;
+    entity_flags Flags = entity_flags::None;
+    entity* Child = nullptr;
+    entity* Parent = nullptr;
+
+    std::vector<u32> BlocksAround;
+    transform Transform;
+    aabb_physics AABBPhysics;
+    renderable Render;
+
+    inline void SetFlags(entity_flags Flags) { this->Flags |= Flags; }
+    inline void RemoveFlags(entity_flags Flags) { this->Flags &= ~Flags; }
+    inline bool HasFlags(entity_flags Flags) { return u32(this->Flags & Flags) != 0; }
+};
+
 struct player
 {
-    v3 Position = v3(0.0f, 18, 1.0f);
+    v3 Position = v3(0.0f, 20, 1.0f);
     v3 Rotation = v3(-bkm::PI_HALF, 0.0f, 0.0f);
     v3 Velocity = v3(0.0f);
     bool IsPhysicsObject = false;
     bool Grounded = false;
-};
-
-struct cow
-{
-    transform Transform;
-    bool IsPhysicsObject = true;
-    bool Grounded = false;
-    texture Texture;
-    v3 Velocity = v3(0.0f);
 };
 
 struct block
@@ -94,9 +135,10 @@ struct block
     block_type Type = block_type::INVALID;
 };
 
-static const i64 RowCount = 16;
-static const i64 ColumnCount = 16;
-static const i64 LayerCount = 256;
+internal const i64 RowCount = 16;
+internal const i64 ColumnCount = 16;
+internal const i64 LayerCount = 256;
+internal const i32 MaxAliveEntitiesCount = 256;
 
 struct game
 {
@@ -104,7 +146,9 @@ struct game
     v3 CameraOffset = v3(0.0f, 0.8f, 0.0f);
 
     player Player;
-    cow Cow;
+
+    entity AliveEntities[MaxAliveEntitiesCount];
+    i32 AliveEntitiesCount = 0;
 
     std::vector<block> Blocks;
 
@@ -116,8 +160,7 @@ struct game
 
 internal game GameCreate(game_renderer* Renderer);
 internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* Input, f32 TimeStep, u32 ClientAreaWidth, u32 ClientAreaHeight);
-internal void GamePlayerUpdate(game* Game, const game_input* Input, f32 TimeStep);
-internal void GameCowUpdate(game* Game, game_renderer* Renderer, f32 TimeStep);
+internal void GamePlayerUpdate(game* Game, const game_input* Input, game_renderer* Renderer, f32 TimeStep);
 internal void GameGenerateWorld(game* Game);
 
 internal bool FindFirstHit(const ray& Ray, const block* Blocks, u64 BlocksCount, v3* HitPoint, v3* HitNormal, block* HitBlock, u64* HitIndex)
@@ -207,3 +250,17 @@ internal texture_coords GetTextureCoords(i32 GridWidth, i32 GridHeight, i32 Bott
 
     return TextureCoords;
 };
+
+internal entity* EntityCreate(game* Game)
+{
+    Assert(Game->AliveEntitiesCount < MaxAliveEntitiesCount, "Game->AliveEntitiesCount < MaxAliveEntitiesCount");
+
+    entity& NewEntity = Game->AliveEntities[Game->AliveEntitiesCount++];
+
+    return &NewEntity;
+}
+
+internal void EntityDestroy(entity* Entity)
+{
+    Assert(Entity, "Entity == nullptr");
+}

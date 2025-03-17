@@ -41,4 +41,4 @@ include "Blocky/Blocky.lua"
 
 -- Tools
 group "Tools"
-include "Blocky-ResourcePacker/Blocky-ResourcePacker.lua"
+--include "Blocky-ResourcePacker/Blocky-ResourcePacker.lua"

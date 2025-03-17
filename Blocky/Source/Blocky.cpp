@@ -10,12 +10,20 @@ internal game GameCreate(game_renderer* Renderer)
     // Load block textures
     Game.BlockTextures[(u32)block_type::Dirt] = TextureCreate(Renderer->Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, "Resources/Textures/MC/dirt_2.png");
 
-    // Cow
-    Game.Cow.Texture = TextureCreate(Renderer->Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, "Resources/Textures/MC/cow.png");
-    Game.Cow.Transform.Translation = v3(3, 17, 2);
-    Game.Cow.Transform.Scale = v3(0.7f, 0.7f, 1.0f);
-
     GameGenerateWorld(&Game);
+
+    // Create player entity
+    for (size_t i = 0; i < 0; i++)
+    {
+        auto CowEntity = EntityCreate(&Game);
+        CowEntity->Type = entity_type::Cow;
+        CowEntity->Transform.Translation = v3(i, 17, 2);
+        CowEntity->Transform.Scale = v3(0.7f, 0.7f, 1.0f);
+        CowEntity->Transform.Rotation = v3(0.0f, 0.0f, 0.0f);
+        CowEntity->AABBPhysics.BoxSize = v3(0.8f, 1.8, 0.8f);
+        CowEntity->SetFlags(entity_flags::Valid | entity_flags::InteractsWithBlocks);
+        CowEntity->Render.Texture = TextureCreate(Renderer->Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, "Resources/Textures/MC/cow.png");
+    }
 
     return Game;
 }
@@ -113,9 +121,414 @@ internal void GameGenerateWorld(game* Game)
 
 internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* Input, f32 TimeStep, u32 ClientAreaWidth, u32 ClientAreaHeight)
 {
+    //cycle_counter_timer GameUpdateCounter("GameUpdateCounter");
+
     // Live entities
-    GamePlayerUpdate(Game, Input, TimeStep);
-    GameCowUpdate(Game, Renderer, TimeStep);
+    GamePlayerUpdate(Game, Input, Renderer, TimeStep);
+
+    // Physics simulation gave us some state of the entity and now we can use it to react to in the update loop
+    // Entity update
+    {
+        auto Entities = Game->AliveEntities;
+        for (i32 i = 0; i < Game->AliveEntitiesCount; i++)
+        {
+            auto& Entity = Game->AliveEntities[i];
+
+            if (!Entity.HasFlags(entity_flags::Valid))
+                continue;
+
+            if (Entity.Type == entity_type::Cow)
+            {
+                f32 Speed = 1.0f;
+                v3 Direction(1.0f, 0.0f, 0.0f);
+
+                // This way we can actually set velocity while respecting the physics simulation
+                Entity.AABBPhysics.Velocity.x = Speed * Direction.x;
+                Entity.AABBPhysics.Velocity.z = Speed * Direction.y;
+
+                if (bkm::NonZero(v2(Entity.AABBPhysics.Velocity.x, Entity.AABBPhysics.Velocity.z)))
+                {
+                    Entity.Transform.Rotation.y = bkm::Atan2(Entity.AABBPhysics.Velocity.x, Entity.AABBPhysics.Velocity.z);
+                }
+            }
+        }
+    }
+
+    {
+        auto Entities = Game->AliveEntities;
+        for (i32 i = 0; i < Game->AliveEntitiesCount; i++)
+        {
+            auto& Entity = Game->AliveEntities[i];
+            Entity.BlocksAround.clear();
+
+            u32 BlockIndex = 0;
+            for (u32 BlockIndex = 0; BlockIndex < Game->Blocks.size(); BlockIndex++)
+            {
+                auto& Block = Game->Blocks[BlockIndex];
+                if (!Block.Placed)
+                    continue;
+
+                if (bkm::Length(Block.Position - Entity.Transform.Translation) > 2.0f)
+                    continue;
+
+                Entity.BlocksAround.push_back(BlockIndex);
+            }
+        }
+
+        for (i32 i = 0; i < Game->AliveEntitiesCount; i++)
+        {
+            for (u32 BlockIndex : Game->AliveEntities[i].BlocksAround)
+            {
+                Game->Blocks[BlockIndex].Color = v4(1.0f, 0.0f, 0.0f, 1.0f);
+            }
+        }
+    }
+
+    // Physics simulation
+    if (1)
+    {
+        auto Entities = Game->AliveEntities;
+        for (i32 i = 0; i < Game->AliveEntitiesCount; i++)
+        {
+            auto& Entity = Entities[i];
+
+            // Skip all of those
+            if (!Entity.HasFlags(entity_flags::Valid | entity_flags::InteractsWithBlocks))
+                continue;
+
+            const f32 G = -9.81f * 2;
+            const f32 CheckRadius = 2.0f;
+
+            // Apply gravity and movement forces
+            v3 NextVelocity = Entity.AABBPhysics.Velocity;
+            NextVelocity.y += G * TimeStep;  // Gravity
+
+            v3 NextPos = Entity.Transform.Translation;
+            aabb EntityAABB;
+
+            Entity.AABBPhysics.Grounded = false;
+
+            // Y - Gravity
+            NextPos.y += NextVelocity.y * TimeStep;
+            EntityAABB = AABBFromV3(NextPos, Entity.AABBPhysics.BoxSize);
+
+            for (auto& BlockIndex : Entity.BlocksAround)
+            {
+                auto& Block = Game->Blocks[BlockIndex];
+
+                if (!Block.Placed)
+                    continue;
+
+                aabb BlockAABB = AABBFromV3(Block.Position, v3(1.0f));
+
+                if (AABBCheckCollision(EntityAABB, BlockAABB))
+                {
+                    // Hit something above? Stop jumping.
+                    if (NextVelocity.y > 0)
+                    {
+                        NextVelocity.y = 0;
+                    }
+                    // Hit the ground? Reset velocity and allow jumping again.
+                    else if (NextVelocity.y < 0)
+                    {
+                        Entity.AABBPhysics.Grounded = true;
+                        NextVelocity.y = 0;
+                    }
+                    NextPos.y = Entity.Transform.Translation.y; // Revert movement
+                    break;
+                }
+            }
+
+            // Move X-axis
+            NextPos.x += NextVelocity.x * TimeStep;
+            EntityAABB = AABBFromV3(NextPos, Entity.AABBPhysics.BoxSize);
+
+            for (auto& BlockIndex : Entity.BlocksAround)
+            {
+                auto& Block = Game->Blocks[BlockIndex];
+
+                if (!Block.Placed)
+                    continue;
+
+                aabb BlockAABB = AABBFromV3(Block.Position, v3(1.0f));
+
+                if (AABBCheckCollision(EntityAABB, BlockAABB))
+                {
+                    // Collision on X-axis: stop only X movement
+                    NextVelocity.x = 0;
+                    NextPos.x = Entity.Transform.Translation.x;
+                    break;
+                }
+            }
+
+            // Move Z-axis
+            NextPos.z += NextVelocity.z * TimeStep;
+            EntityAABB = AABBFromV3(NextPos, Entity.AABBPhysics.BoxSize);
+
+            for (auto& BlockIndex : Entity.BlocksAround)
+            {
+                auto& Block = Game->Blocks[BlockIndex];
+
+                if (!Block.Placed)
+                    continue;
+
+                aabb BlockAABB = AABBFromV3(Block.Position, v3(1.0f));
+
+                if (AABBCheckCollision(EntityAABB, BlockAABB))
+                {
+                    // Collision on Z-axis: stop only Z movement
+                    NextVelocity.z = 0;
+                    NextPos.z = Entity.Transform.Translation.z;
+                    break;
+                }
+            }
+
+            Entity.Transform.Translation = NextPos;
+            Entity.AABBPhysics.Velocity = NextVelocity;
+        }
+    }
+    else
+    {
+        scoped_timer Timer("Physics simulation");
+
+        auto Entities = Game->AliveEntities;
+        for (i32 i = 0; i < Game->AliveEntitiesCount; i++)
+        {
+            auto& Entity = Entities[i];
+
+            // Skip all of those
+            if (!Entity.HasFlags(entity_flags::Valid | entity_flags::InteractsWithBlocks))
+                continue;
+
+            const f32 G = -9.81f * 2;
+            const f32 CheckRadius = 2.0f;
+
+            // Apply gravity and movement forces
+            v3 NextVelocity = Entity.AABBPhysics.Velocity;
+            NextVelocity.y += G * TimeStep;  // Gravity
+
+            v3 NextPos = Entity.Transform.Translation;
+            aabb EntityAABB;
+
+            Entity.AABBPhysics.Grounded = false;
+
+            // Y - Gravity
+            NextPos.y += NextVelocity.y * TimeStep;
+            EntityAABB = AABBFromV3(NextPos, Entity.AABBPhysics.BoxSize);
+
+            for (auto& Block : Game->Blocks)
+            {
+                if (!Block.Placed)
+                    continue;
+
+                if (bkm::Length(Block.Position - Entity.Transform.Translation) > CheckRadius)
+                    continue;
+
+                aabb BlockAABB = AABBFromV3(Block.Position, v3(1.0f));
+
+                if (AABBCheckCollision(EntityAABB, BlockAABB))
+                {
+                    // Hit something above? Stop jumping.
+                    if (NextVelocity.y > 0)
+                    {
+                        NextVelocity.y = 0;
+                    }
+                    // Hit the ground? Reset velocity and allow jumping again.
+                    else if (NextVelocity.y < 0)
+                    {
+                        Entity.AABBPhysics.Grounded = true;
+                        NextVelocity.y = 0;
+                    }
+                    NextPos.y = Entity.Transform.Translation.y; // Revert movement
+                    break;
+                }
+            }
+
+            // Move X-axis
+            NextPos.x += NextVelocity.x * TimeStep;
+            EntityAABB = AABBFromV3(NextPos, Entity.AABBPhysics.BoxSize);
+
+            for (auto& Block : Game->Blocks)
+            {
+                if (!Block.Placed)
+                    continue;
+
+                if (bkm::Length(Block.Position - Entity.Transform.Translation) > CheckRadius)
+                    continue;
+
+                aabb BlockAABB = AABBFromV3(Block.Position, v3(1.0f));
+
+                if (AABBCheckCollision(EntityAABB, BlockAABB))
+                {
+                    // Collision on X-axis: stop only X movement
+                    NextVelocity.x = 0;
+                    NextPos.x = Entity.Transform.Translation.x;
+                    break;
+                }
+            }
+
+            // Move Z-axis
+            NextPos.z += NextVelocity.z * TimeStep;
+            EntityAABB = AABBFromV3(NextPos, Entity.AABBPhysics.BoxSize);
+
+            for (auto& Block : Game->Blocks)
+            {
+                if (!Block.Placed)
+                    continue;
+
+                if (bkm::Length(Block.Position - Entity.Transform.Translation) > CheckRadius)
+                    continue;
+
+                aabb BlockAABB = AABBFromV3(Block.Position, v3(1.0f));
+
+                if (AABBCheckCollision(EntityAABB, BlockAABB))
+                {
+                    // Collision on Z-axis: stop only Z movement
+                    NextVelocity.z = 0;
+                    NextPos.z = Entity.Transform.Translation.z;
+                    break;
+                }
+            }
+
+            Entity.Transform.Translation = NextPos;
+            Entity.AABBPhysics.Velocity = NextVelocity;
+        }
+    }
+
+    // Render entities
+    {
+        //scoped_timer Timer("Render entities");
+
+        auto Entities = Game->AliveEntities;
+        for (i32 i = 0; i < Game->AliveEntitiesCount; i++)
+        {
+            auto& Entity = Entities[i];
+
+            // Skip all of those
+            if (!Entity.HasFlags(entity_flags::Valid | entity_flags::Renderable))
+                continue;
+
+            if (Entity.Type == entity_type::Cow)
+            {
+                // Body
+                {
+                    auto Front = GetTextureCoords(12, 10, 28, 13);
+                    auto Back = GetTextureCoords(12, 10, 40, 13);
+
+                    auto Left = GetTextureCoords(10, 18, 18, 31, 1);
+                    auto Right = GetTextureCoords(10, 18, 40, 31, 3);
+
+                    auto Top = GetTextureCoords(12, 18, 50, 31, 2);
+                    auto Bottom = GetTextureCoords(12, 18, 28, 31, 0);
+
+                    texture_coords TextureCoords[6];
+                    TextureCoords[0] = Front;
+                    TextureCoords[1] = Back;
+                    TextureCoords[2] = Left;
+                    TextureCoords[3] = Right;
+                    TextureCoords[4] = Top;
+                    TextureCoords[5] = Bottom;
+                    GameRendererSubmitCustomCuboid(Renderer, Entity.Transform.Matrix(), Entity.Render.Texture, TextureCoords, v4(1.0f));
+                }
+
+                // IDEA: Move the head based on its scale to preserve the same position of the head/body
+                // f32 Y = CowTranslation.y - Scale.y * 0.5f - LegScale.y * 0.5f;
+                // Head
+                {
+                    local_persist transform CowHeadTransform;
+                    CowHeadTransform.Translation = v3(0, 0.4f, 0.7f);
+                    //CowHeadTransform.Rotation = v3(bkm::Sin(Time) * 0.5f, 0, 0);
+                    CowHeadTransform.Scale = v3(0.5f / 0.7f, 0.5f / 0.7f, 0.4f);
+
+                    auto Front = GetTextureCoords(8, 8, 6, 13);
+                    auto Back = GetTextureCoords(8, 8, 20, 13);
+                    auto Left = GetTextureCoords(6, 8, 0, 13);
+                    auto Right = GetTextureCoords(6, 8, 14, 13);
+                    auto Top = GetTextureCoords(8, 6, 6, 5);
+                    auto Bottom = GetTextureCoords(8, 6, 14, 5);
+
+                    texture_coords TextureCoords[6];
+                    TextureCoords[0] = Front;
+                    TextureCoords[1] = Back;
+                    TextureCoords[2] = Left;
+                    TextureCoords[3] = Right;
+                    TextureCoords[4] = Top;
+                    TextureCoords[5] = Bottom;
+
+                    GameRendererSubmitCustomCuboid(Renderer, Entity.Transform.Matrix() * CowHeadTransform.Matrix(), Entity.Render.Texture, TextureCoords, v4(1.0f));
+                }
+
+                // Legs
+                if (1)
+                {
+                    f32 DeltaX = 0.30f;
+                    f32 DeltaZ = 0.35f;
+                    f32 ScaleX = 0.3f / 0.7f * 0.9f;
+                    f32 ScaleY = 1.0f;
+                    f32 ScaleZ = 0.3f * 0.9f;
+
+                    transform LegTransform[4];
+                    LegTransform[0].Translation = v3(0, -1.0f, 0);
+                    LegTransform[0].Scale = v3(ScaleX, ScaleY, ScaleZ);
+
+                    LegTransform[1].Translation = v3(0, -1.0f, 0);
+                    LegTransform[1].Scale = v3(ScaleX, ScaleY, ScaleZ);
+
+                    LegTransform[2].Translation = v3(0, -1.0f, 0);
+                    LegTransform[2].Scale = v3(ScaleX, ScaleY, ScaleZ);
+
+                    LegTransform[3].Translation = v3(0, -1.0f, 0);
+                    LegTransform[3].Scale = v3(ScaleX, ScaleY, ScaleZ);
+
+                    //f32 Y = CowTranslation.y - Scale.y * 0.5f - LegScale.y * 0.5f;
+
+                    /*  v3 Offsets[4];
+                      Offsets[0] = v3(DeltaX, Y, DeltaZ);
+                      Offsets[1] = v3(-DeltaX, Y, DeltaZ);
+                      Offsets[2] = v3(-DeltaX, Y, -DeltaZ);
+                      Offsets[3] = v3(DeltaX, Y, -DeltaZ);*/
+
+                    f32 LegRotation = bkm::Sin(Game->Time * 10.3f * bkm::Length(Entity.AABBPhysics.Velocity)) * 0.3f;
+
+                    transform KneeTransform[4] = {};
+                    KneeTransform[0].Translation = v3(DeltaX, 0.0f, -DeltaZ);
+                    KneeTransform[0].Rotation = v3(-LegRotation, 0, 0);
+
+                    KneeTransform[1].Translation = v3(-DeltaX, 0.0f, -DeltaZ);
+                    KneeTransform[1].Rotation = v3(LegRotation, 0, 0);
+
+                    KneeTransform[2].Translation = v3(-DeltaX, 0.0f, DeltaZ);
+                    KneeTransform[2].Rotation = v3(LegRotation, 0, 0);
+
+                    KneeTransform[3].Translation = v3(DeltaX, 0.0f, DeltaZ);
+                    KneeTransform[3].Rotation = v3(-LegRotation, 0, 0);
+
+                    // Front Left
+                    for (u32 i = 0; i < 4; i++)
+                    {
+                        auto Left = GetTextureCoords(4, 12, 0, 31);
+                        auto Right = GetTextureCoords(4, 12, 8, 31);
+
+                        auto Front = GetTextureCoords(4, 12, 4, 31);
+                        auto Back = GetTextureCoords(4, 12, 12, 31);
+
+                        auto Top = GetTextureCoords(4, 4, 4, 19);
+                        auto Bottom = GetTextureCoords(4, 4, 8, 19, 2);
+
+                        texture_coords TextureCoords[6];
+                        TextureCoords[0] = Front;
+                        TextureCoords[1] = Back;
+                        TextureCoords[2] = Left;
+                        TextureCoords[3] = Right;
+                        TextureCoords[4] = Top;
+                        TextureCoords[5] = Bottom;
+
+                        GameRendererSubmitCustomCuboid(Renderer, Entity.Transform.Matrix() * KneeTransform[i].Matrix() * LegTransform[i].Matrix(), Entity.Render.Texture, TextureCoords, v4(1.0f));
+                    }
+                }
+            }
+        }
+    }
 
     // Update camera
     {
@@ -171,7 +584,7 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
     }
 }
 
-internal void GamePlayerUpdate(game* Game, const game_input* Input, f32 TimeStep)
+internal void GamePlayerUpdate(game* Game, const game_input* Input, game_renderer* Renderer, f32 TimeStep)
 {
     auto& Player = Game->Player;
 
@@ -282,97 +695,286 @@ internal void GamePlayerUpdate(game* Game, const game_input* Input, f32 TimeStep
         const f32 CheckRadius = 5.0f;
         const f32 JumpStrength = 10.0f;
 
-        // Apply gravity and movement forces
-        v3 NextVelocity = Player.Velocity;
-        NextVelocity.y += G * TimeStep;  // Gravity
-        NextVelocity.x = Direction.x * Speed;
-        NextVelocity.z = Direction.z * Speed;
-
-        v3 NextPos = Player.Position;
-        aabb PlayerAABB;
-
-        if (Player.Grounded && JumpKeyPressed)
+        if (1)
         {
-            NextVelocity.y = JumpStrength;
-            Player.Grounded = false;
-        }
+            // Apply gravity and movement forces
+            v3 NextVelocity = Player.Velocity;
+            NextVelocity.y += G * TimeStep;  // Gravity
+            NextVelocity.x = Direction.x * Speed;
+            NextVelocity.z = Direction.z * Speed;
 
-        // Y - Gravity
-        NextPos.y += NextVelocity.y * TimeStep;
-        PlayerAABB = AABBFromV3(NextPos, v3(0.5f, 1.8f, 0.5f));
+            v3 NextPos = Player.Position;
 
-        for (auto& Block : Game->Blocks)
-        {
-            if (!Block.Placed)
-                continue;
-
-            aabb BlockAABB = AABBFromV3(Block.Position, v3(1.0f));
-
-            if (AABBCheckCollision(PlayerAABB, BlockAABB))
+            if (Player.Grounded && JumpKeyPressed)
             {
-                // Hit something above? Stop jumping.
-                if (NextVelocity.y > 0)
+                NextVelocity.y = JumpStrength;
+                Player.Grounded = false;
+            }
+
+            NextPos.y += NextVelocity.y * TimeStep;
+
+            aabb PlayerAABB = AABBFromV3(NextPos, v3(0.5f, 1.8f, 0.5f));
+
+            // Stepping on a block
+            // Is kinda wonky
+            i32 C = (i32)bkm::Floor(NextPos.x + 0.5f);
+            i32 R = (i32)bkm::Floor(NextPos.z + 0.5f);
+            i32 L = (i32)bkm::Floor(NextPos.y + 0.5f);
+
+            {
+                auto Block = BlockGetSafe(Game, C, R, L - 1);
+                if (Block && Block->Placed)
                 {
-                    NextVelocity.y = 0;
+                    aabb BlockAABB = AABBFromV3(Block->Position, v3(1.0f));
+                    if (AABBCheckCollision(PlayerAABB, BlockAABB))
+                    {
+                        // Hit something above? Stop jumping.
+                        if (NextVelocity.y > 0)
+                        {
+                            NextVelocity.y = 0;
+                        }
+                        // Hit the ground? Reset velocity and allow jumping again.
+                        else if (NextVelocity.y < 0)
+                        {
+                            Player.Grounded = true;
+                            NextVelocity.y = 0;
+                        }
+                        NextPos.y = Player.Position.y; // Revert movement
+                    }
                 }
-                // Hit the ground? Reset velocity and allow jumping again.
-                else if (NextVelocity.y < 0)
+
+                //Block = BlockGetSafe(Game, C, R, L - 2);
+                //if (Block && Block->Placed)
+                //{
+                //    aabb BlockAABB = AABBFromV3(Block->Position, v3(1.0f));
+                //    if (AABBCheckCollision(PlayerAABB, BlockAABB))
+                //    {
+                //        // Hit something above? Stop jumping.
+                //        if (NextVelocity.y > 0)
+                //        {
+                //            NextVelocity.y = 0;
+                //        }
+                //        // Hit the ground? Reset velocity and allow jumping again.
+                //        else if (NextVelocity.y < 0)
+                //        {
+                //            Player.Grounded = true;
+                //            NextVelocity.y = 0;
+                //        }
+                //        NextPos.y = Player.Position.y; // Revert movement
+                //    }
+                //}
+
+                Block = BlockGetSafe(Game, C, R, L + 2);
+                if (Block && Block->Placed)
                 {
-                    Player.Grounded = true;
-                    NextVelocity.y = 0;
+                    aabb BlockAABB = AABBFromV3(Block->Position, v3(1.0f));
+                    if (AABBCheckCollision(PlayerAABB, BlockAABB))
+                    {
+                        Block->Color = v4(0, 0, 1, 1);
+                        NextPos.y = Player.Position.y;
+                        NextVelocity.y = 0.0f;
+                    }
                 }
-                NextPos.y = Player.Position.y; // Revert movement
-                break;
+                if (Player.Grounded)
+                {
+                }
+                else if(NextVelocity.y > 0) // Jumps
+                {
+                    //auto TopBlock = BlockGetSafe(Game, C, R, L + 2);
+                    
+                }
+
+                // Debug render
+                {
+                    auto Block = BlockGetSafe(Game, C, R, L);
+                    if (Block && false)
+                    {
+                        GameRendererSubmitCuboidNoRotScale(Renderer, Block->Position, Game->BlockTextures[u32(block_type::Dirt)], v4(1.0f, 0.0f, 0.0f, 1.0f));
+                    }
+
+                    Block = BlockGetSafe(Game, C, R, L + 2);
+                    if (Block)
+                    {
+                        GameRendererSubmitCuboidNoRotScale(Renderer, Block->Position, Game->BlockTextures[u32(block_type::Dirt)], v4(1.0f, 0.0f, 0.0f, 1.0f));
+                    }
+                }
             }
-        }
 
-        // Move X-axis
-        NextPos.x += NextVelocity.x * TimeStep;
-        PlayerAABB = AABBFromV3(NextPos, v3(0.5f, 1.8f, 0.5f));
+            NextPos.x += NextVelocity.x * TimeStep;
 
-        for (auto& Block : Game->Blocks)
-        {
-            if (!Block.Placed)
-                continue;
+            // Update coords
+            C = (i32)bkm::Floor(NextPos.x + 0.5f);
+            R = (i32)bkm::Floor(NextPos.z + 0.5f);
+            L = (i32)bkm::Floor(NextPos.y + 0.5f);
 
-            aabb BlockAABB = AABBFromV3(Block.Position, v3(1.0f));
-
-            if (AABBCheckCollision(PlayerAABB, BlockAABB))
+            PlayerAABB = AABBFromV3(NextPos, v3(0.5f, 1.8f, 0.5f));
             {
-                // Collision on X-axis: stop only X movement
-                NextVelocity.x = 0;
-                NextPos.x = Player.Position.x;
-                break;
+                for (i32 i = -1; i <= 1; i++)
+                {
+                    auto Block = BlockGetSafe(Game, C + 1, R, L + i);
+                    if (Block && Block->Placed)
+                    {
+                        aabb BlockAABB = AABBFromV3(Block->Position, v3(1.0f));
+                        if (AABBCheckCollision(PlayerAABB, BlockAABB))
+                        {
+                            Block->Color = v4(0, 0, 1, 1);
+                            NextPos.x = Player.Position.x;
+                            NextVelocity.x = 0.0f;
+                            break;
+                        }
+                    }
+                    Block = BlockGetSafe(Game, C - 1, R, L + i);
+                    if (Block && Block->Placed)
+                    {
+                        aabb BlockAABB = AABBFromV3(Block->Position, v3(1.0f));
+                        if (AABBCheckCollision(PlayerAABB, BlockAABB))
+                        {
+                            Block->Color = v4(0, 0, 1, 1);
+                            NextPos.x = Player.Position.x;
+                            NextVelocity.x = 0.0f;
+                            break;
+                        }
+                    }
+                }
             }
-        }
 
-        // Move Z-axis
-        NextPos.z += NextVelocity.z * TimeStep;
-        PlayerAABB = AABBFromV3(NextPos, v3(0.5f, 1.8f, 0.5f));
+            NextPos.z += NextVelocity.z * TimeStep;
 
-        for (auto& Block : Game->Blocks)
-        {
-            if (!Block.Placed)
-                continue;
+            // Update coords
+            C = (i32)bkm::Floor(NextPos.x + 0.5f);
+            R = (i32)bkm::Floor(NextPos.z + 0.5f);
+            L = (i32)bkm::Floor(NextPos.y + 0.5f);
 
-            aabb BlockAABB = AABBFromV3(Block.Position, v3(1.0f));
-
-            if (AABBCheckCollision(PlayerAABB, BlockAABB))
+            PlayerAABB = AABBFromV3(NextPos, v3(0.5f, 1.8f, 0.5f));
             {
-                // Collision on Z-axis: stop only Z movement
-                NextVelocity.z = 0;
-                NextPos.z = Player.Position.z;
-                break;
-            }
-        }
+                for (i32 i = -1; i <= 1; i++)
+                {
+                    auto Block = BlockGetSafe(Game, C, R + 1, L + i);
+                    if (Block && Block->Placed)
+                    {
+                        aabb BlockAABB = AABBFromV3(Block->Position, v3(1.0f));
+                        if (AABBCheckCollision(PlayerAABB, BlockAABB))
+                        {
+                            Block->Color = v4(0, 0, 1, 1);
+                            NextPos.z = Player.Position.z;
+                            NextVelocity.z = 0.0f;
+                            break;
+                        }
+                    }
 
-        Player.Position = NextPos;
-        Player.Velocity = NextVelocity;
-    }
+                    Block = BlockGetSafe(Game, C, R - 1, L + i);
+                    if (Block && Block->Placed)
+                    {
+                        aabb BlockAABB = AABBFromV3(Block->Position, v3(1.0f));
+                        if (AABBCheckCollision(PlayerAABB, BlockAABB))
+                        {
+                            Block->Color = v4(0, 0, 1, 1);
+                            NextPos.z = Player.Position.z;
+                            NextVelocity.z = 0.0f;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            Player.Position = NextPos;
+            Player.Velocity = NextVelocity;
+        }
+        else
+        {
+            // Apply gravity and movement forces
+            v3 NextVelocity = Player.Velocity;
+            NextVelocity.y += G * TimeStep;  // Gravity
+            NextVelocity.x = Direction.x * Speed;
+            NextVelocity.z = Direction.z * Speed;
+
+            v3 NextPos = Player.Position;
+            aabb PlayerAABB;
+
+            if (Player.Grounded && JumpKeyPressed)
+            {
+                NextVelocity.y = JumpStrength;
+                Player.Grounded = false;
+            }
+
+            // Y - Gravity
+            NextPos.y += NextVelocity.y * TimeStep;
+            PlayerAABB = AABBFromV3(NextPos, v3(0.5f, 1.8f, 0.5f));
+
+            for (auto& Block : Game->Blocks)
+            {
+                if (!Block.Placed)
+                    continue;
+
+                aabb BlockAABB = AABBFromV3(Block.Position, v3(1.0f));
+
+                if (AABBCheckCollision(PlayerAABB, BlockAABB))
+                {
+                    // Hit something above? Stop jumping.
+                    if (NextVelocity.y > 0)
+                    {
+                        NextVelocity.y = 0;
+                    }
+                    // Hit the ground? Reset velocity and allow jumping again.
+                    else if (NextVelocity.y < 0)
+                    {
+                        Player.Grounded = true;
+                        NextVelocity.y = 0;
+                    }
+                    NextPos.y = Player.Position.y; // Revert movement
+                    break;
+                }
+            }
+
+            // Move X-axis
+            NextPos.x += NextVelocity.x * TimeStep;
+            PlayerAABB = AABBFromV3(NextPos, v3(0.5f, 1.8f, 0.5f));
+
+            for (auto& Block : Game->Blocks)
+            {
+                if (!Block.Placed)
+                    continue;
+
+                aabb BlockAABB = AABBFromV3(Block.Position, v3(1.0f));
+
+                if (AABBCheckCollision(PlayerAABB, BlockAABB))
+                {
+                    // Collision on X-axis: stop only X movement
+                    NextVelocity.x = 0;
+                    NextPos.x = Player.Position.x;
+                    break;
+                }
+            }
+
+            // Move Z-axis
+            NextPos.z += NextVelocity.z * TimeStep;
+            PlayerAABB = AABBFromV3(NextPos, v3(0.5f, 1.8f, 0.5f));
+
+            for (auto& Block : Game->Blocks)
+            {
+                if (!Block.Placed)
+                    continue;
+
+                aabb BlockAABB = AABBFromV3(Block.Position, v3(1.0f));
+
+                if (AABBCheckCollision(PlayerAABB, BlockAABB))
+                {
+                    // Collision on Z-axis: stop only Z movement
+                    NextVelocity.z = 0;
+                    NextPos.z = Player.Position.z;
+                    break;
+                }
+            }
+
+            Player.Position = NextPos;
+            Player.Velocity = NextVelocity;
+        }
+    } // No physics
     else
     {
         Player.Position += Direction * Speed * TimeStep;
     }
+
 
     // Destroy block
     if (Input->IsMousePressed(mouse::Left))
@@ -482,247 +1084,15 @@ internal void GamePlayerUpdate(game* Game, const game_input* Input, f32 TimeStep
     i32 R = (i32)bkm::Floor(Player.Position.z + 0.5f);
     i32 L = (i32)bkm::Floor(Player.Position.y + 0.5f);
 
-    auto SteppedOnBlock = BlockGetSafe(Game, C, R, L - 1);
-    if (SteppedOnBlock)
-    {
-        SteppedOnBlock->Color = v4(0, 0, 1, 1);
-    }
+    //if (SteppedOnBlock)
+    //{
+    //    SteppedOnBlock->Color = v4(0, 0, 1, 1);
+    //}
+
+    //auto InFrontBlock = BlockGetSafe(Game, C + 1, R, L);
+    //if (InFrontBlock)
+    //{
+    //    InFrontBlock->Color = v4(0, 1, 1, 1);
+    //}
 }
 
-internal void GameCowUpdate(game* Game, game_renderer* Renderer, f32 TimeStep)
-{
-    auto& Cow = Game->Cow;
-    f32 Time = Game->Time;
-    const f32 Speed = 1.0f;
-    v3 Direction = v3(0.0f);
-
-    // Movement
-    {
-        Direction.x = 1.0f;
-
-        if (Cow.IsPhysicsObject)
-        {
-            const f32 G = -9.81f * 2;
-            const f32 CheckRadius = 5.0f;
-            const f32 JumpStrength = 10.0f;
-
-            // Apply gravity and movement forces
-            v3 NextVelocity = Cow.Velocity;
-            NextVelocity.y += G * TimeStep;  // Gravity
-            NextVelocity.x = Direction.x * Speed;
-            NextVelocity.z = Direction.z * Speed;
-
-            v3 NextPos = Cow.Transform.Translation;
-            aabb CowAABB;
-
-            /*if (Cow.Grounded)
-            {
-                NextVelocity.y = JumpStrength;
-                Cow.Grounded = false;
-            }*/
-
-            // Y - Gravity
-            NextPos.y += NextVelocity.y * TimeStep;
-            CowAABB = AABBFromV3(NextPos, v3(1.0f));
-
-            for (auto& Block : Game->Blocks)
-            {
-                if (!Block.Placed)
-                    continue;
-
-                aabb BlockAABB = AABBFromV3(Block.Position, v3(1.0f));
-
-                if (AABBCheckCollision(CowAABB, BlockAABB))
-                {
-                    // Hit something above? Stop jumping.
-                    if (NextVelocity.y > 0)
-                    {
-                        NextVelocity.y = 0;
-                    }
-                    // Hit the ground? Reset velocity and allow jumping again.
-                    else if (NextVelocity.y < 0)
-                    {
-                        Cow.Grounded = true;
-                        NextVelocity.y = 0;
-                    }
-                    NextPos.y = Cow.Transform.Translation.y; // Revert movement
-                    break;
-                }
-            }
-
-            // Move X-axis
-            NextPos.x += NextVelocity.x * TimeStep;
-            CowAABB = AABBFromV3(NextPos, v3(1.0f));
-
-            for (auto& Block : Game->Blocks)
-            {
-                if (!Block.Placed)
-                    continue;
-
-                aabb BlockAABB = AABBFromV3(Block.Position, v3(1.0f));
-
-                if (AABBCheckCollision(CowAABB, BlockAABB))
-                {
-                    // Collision on X-axis: stop only X movement
-                    NextVelocity.x = 0;
-                    NextPos.x = Cow.Transform.Translation.x;
-                    break;
-                }
-            }
-
-            // Move Z-axis
-            NextPos.z += NextVelocity.z * TimeStep;
-            CowAABB = AABBFromV3(NextPos, v3(1.0f));
-
-            for (auto& Block : Game->Blocks)
-            {
-                if (!Block.Placed)
-                    continue;
-
-                aabb BlockAABB = AABBFromV3(Block.Position, v3(1.0f));
-
-                if (AABBCheckCollision(CowAABB, BlockAABB))
-                {
-                    // Collision on Z-axis: stop only Z movement
-                    NextVelocity.z = 0;
-                    NextPos.z = Cow.Transform.Translation.z;
-                    break;
-                }
-            }
-
-            Cow.Transform.Translation = NextPos;
-            Cow.Velocity = NextVelocity;
-        }
-        else
-        {
-            Cow.Transform.Translation += Direction * Speed * TimeStep;
-        }
-
-        /* Cow.Velocity.x = bkm::Sin(Time);*/
-
-        //Cow.Transform.Rotation.y = Time;
-
-        //Cow.Transform.Scale = v3((0.7f + bkm::Sin(Time) * 0.7f), (0.7f + bkm::Sin(Time) * 0.7f), (1.0f + bkm::Sin(Time) * 1.0f));
-
-        Cow.Transform.Rotation.y = bkm::Atan2(Cow.Velocity.x, Cow.Velocity.z);
-        //Cow.Transform.Translation += Cow.Velocity * TimeStep;
-    }
-
-    // Render 
-     
-    // Body
-    {
-        auto Front = GetTextureCoords(12, 10, 28, 13);
-        auto Back = GetTextureCoords(12, 10, 40, 13);
-
-        auto Left = GetTextureCoords(10, 18, 18, 31, 1);
-        auto Right = GetTextureCoords(10, 18, 40, 31, 3);
-
-        auto Top = GetTextureCoords(12, 18, 50, 31, 2);
-        auto Bottom = GetTextureCoords(12, 18, 28, 31, 0);
-
-        texture_coords TextureCoords[6];
-        TextureCoords[0] = Front;
-        TextureCoords[1] = Back;
-        TextureCoords[2] = Left;
-        TextureCoords[3] = Right;
-        TextureCoords[4] = Top;
-        TextureCoords[5] = Bottom;
-        GameRendererSubmitCustomCuboid(Renderer, Cow.Transform.Matrix(), Cow.Texture, TextureCoords, v4(1.0f));
-    }
-
-    // IDEA: Move the head based on its scale to preserve the same position of the head/body
-    // f32 Y = CowTranslation.y - Scale.y * 0.5f - LegScale.y * 0.5f;
-    // Head
-    {
-        local_persist transform CowHeadTransform;
-        CowHeadTransform.Translation = v3(0, 0.4f, 0.7f);
-        //CowHeadTransform.Rotation = v3(bkm::Sin(Time) * 0.5f, 0, 0);
-        CowHeadTransform.Scale = v3(0.5f / 0.7f, 0.5f / 0.7f, 0.4f);
-
-        auto Front = GetTextureCoords(8, 8, 6, 13);
-        auto Back = GetTextureCoords(8, 8, 20, 13);
-        auto Left = GetTextureCoords(6, 8, 0, 13);
-        auto Right = GetTextureCoords(6, 8, 14, 13);
-        auto Top = GetTextureCoords(8, 6, 6, 5);
-        auto Bottom = GetTextureCoords(8, 6, 14, 5);
-
-        texture_coords TextureCoords[6];
-        TextureCoords[0] = Front;
-        TextureCoords[1] = Back;
-        TextureCoords[2] = Left;
-        TextureCoords[3] = Right;
-        TextureCoords[4] = Top;
-        TextureCoords[5] = Bottom;
-
-        GameRendererSubmitCustomCuboid(Renderer, Cow.Transform.Matrix() * CowHeadTransform.Matrix(), Cow.Texture, TextureCoords, v4(1.0f));
-    }
-
-    // Legs
-#if 1
-    {
-        f32 DeltaX = 0.30f;
-        f32 DeltaZ = 0.35f;
-        f32 ScaleX = 0.3f / 0.7f * 0.9f;
-        f32 ScaleY = 1.0f;
-        f32 ScaleZ = 0.3f * 0.9f;
-
-        transform LegTransform[4];
-        LegTransform[0].Translation = v3(0, -1.0f, 0);
-        LegTransform[0].Scale = v3(ScaleX, ScaleY, ScaleZ);
-
-        LegTransform[1].Translation = v3(0, -1.0f, 0);
-        LegTransform[1].Scale = v3(ScaleX, ScaleY, ScaleZ);
-
-        LegTransform[2].Translation = v3(0, -1.0f, 0);
-        LegTransform[2].Scale = v3(ScaleX, ScaleY, ScaleZ);
-
-        LegTransform[3].Translation = v3(0, -1.0f, 0);
-        LegTransform[3].Scale = v3(ScaleX, ScaleY, ScaleZ);
-
-        //f32 Y = CowTranslation.y - Scale.y * 0.5f - LegScale.y * 0.5f;
-
-      /*  v3 Offsets[4];
-        Offsets[0] = v3(DeltaX, Y, DeltaZ);
-        Offsets[1] = v3(-DeltaX, Y, DeltaZ);
-        Offsets[2] = v3(-DeltaX, Y, -DeltaZ);
-        Offsets[3] = v3(DeltaX, Y, -DeltaZ);*/
-
-        transform KneeTransform[4] = {};
-        KneeTransform[0].Translation = v3(DeltaX, 0.0f, -DeltaZ);
-        KneeTransform[0].Rotation = v3(-bkm::Sin(Time * 10.3f) * 0.3f, 0, 0);
-
-        KneeTransform[1].Translation = v3(-DeltaX, 0.0f, -DeltaZ);
-        KneeTransform[1].Rotation = v3(bkm::Sin(Time * 10.3f) * 0.3f, 0, 0);
-
-        KneeTransform[2].Translation = v3(-DeltaX, 0.0f, DeltaZ);
-        KneeTransform[2].Rotation = v3(bkm::Sin(Time * 10.3f) * 0.3f, 0, 0);
-
-        KneeTransform[3].Translation = v3(DeltaX, 0.0f, DeltaZ);
-        KneeTransform[3].Rotation = v3(-bkm::Sin(Time * 10.3f) * 0.3f, 0, 0);
-
-        // Front Left
-        for (u32 i = 0; i < 4; i++)
-        {
-            auto Left = GetTextureCoords(4, 12, 0, 31);
-            auto Front = GetTextureCoords(4, 12, 4, 31);
-
-            auto Back = GetTextureCoords(4, 12, 12, 31);
-            auto Right = GetTextureCoords(4, 12, 8, 31);
-
-            auto Top = GetTextureCoords(4, 4, 4, 19);
-            auto Bottom = GetTextureCoords(4, 4, 8, 19, 2);
-
-            texture_coords TextureCoords[6];
-            TextureCoords[0] = Front;
-            TextureCoords[1] = Back;
-            TextureCoords[2] = Left;
-            TextureCoords[3] = Right;
-            TextureCoords[4] = Top;
-            TextureCoords[5] = Bottom;
-
-            GameRendererSubmitCustomCuboid(Renderer, Cow.Transform.Matrix() * KneeTransform[i].Matrix() * LegTransform[i].Matrix(), Cow.Texture, TextureCoords, v4(1.0f));
-        }
-    }
-#endif
-}

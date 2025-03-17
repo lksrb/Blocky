@@ -209,10 +209,10 @@ struct buffer
     u64 Size;
 };
 
-class ScopedTimer
+class scoped_timer
 {
 public:
-    ScopedTimer(const char* name, bool output = true)
+    scoped_timer(const char* name, bool output = true)
         : m_Name(name), m_Output(output)
     {
         ::QueryPerformanceCounter(&m_Start);
@@ -232,7 +232,7 @@ public:
         return timeStep * 1000.0f;
     }
 
-    ~ScopedTimer()
+    ~scoped_timer()
     {
         if (m_Output == false)
             return;
@@ -253,6 +253,23 @@ private:
     LARGE_INTEGER m_Start;
     const char* m_Name;
     bool m_Output;
+};
+
+struct cycle_counter_timer
+{
+    u64 Begin;
+    const char* Tag;
+
+    cycle_counter_timer(const char* Tag)
+    {
+        this->Tag = Tag;
+        Begin = __rdtsc();
+    }
+
+    ~cycle_counter_timer()
+    {
+        Trace("%s took %d cycles", Tag, i32(__rdtsc() - Begin));
+    }
 };
 
 #define USE_VULKAN_RENDERER 0
@@ -399,9 +416,9 @@ internal void Win32ProcessEvents(game_window Window, game_input* Input)
                             break;
                         }
                         case VK_CONTROL: { Input->SetKeyState(key::Control, IsDown); break; }
-                        case VK_SHIFT:   { Input->SetKeyState(key::Shift, IsDown); break; }
-                        case VK_SPACE:   { Input->SetKeyState(key::Space, IsDown); break; }
-                        case VK_BACK:    { Input->SetKeyState(key::BackSpace, IsDown); break; }
+                        case VK_SHIFT: { Input->SetKeyState(key::Shift, IsDown); break; }
+                        case VK_SPACE: { Input->SetKeyState(key::Space, IsDown); break; }
+                        case VK_BACK: { Input->SetKeyState(key::BackSpace, IsDown); break; }
                         case VK_F4:
                         {
                             if (AltKeyWasDown)
@@ -634,16 +651,20 @@ int main(int argc, char** argv)
     // Show window after initialization
     ShowWindow(Window.WindowHandle, SW_SHOW);
 
-    LARGE_INTEGER LastCounter;
-    QueryPerformanceCounter(&LastCounter);
-
     // NOTE: This value represent how many increments of performance counter is happening
     LARGE_INTEGER CounterFrequency;
     QueryPerformanceFrequency(&CounterFrequency);
+
+    LARGE_INTEGER LastCounter;
+    QueryPerformanceCounter(&LastCounter);
+
+    // How many cycles per some work done by CPU elapsed?
+    // Not super accurate since the OS can insert some other instructions (scheduler)
+    DWORD64 LastCycleCount = __rdtsc();
+
     bool IsMinimized = false;
     f32 TimeStep = 0.0f;
     g_IsRunning = true;
-
     game_input Input = {};
     while (g_IsRunning)
     {
@@ -673,20 +694,29 @@ int main(int argc, char** argv)
             GameRendererRender(&GameRenderer, g_ClientWidth, g_ClientHeight);
         }
 
+        DWORD64 EndCycleCount = __rdtsc();
+
         // Timestep
         LARGE_INTEGER EndCounter;
         QueryPerformanceCounter(&EndCounter);
 
+        LONGLONG CounterElapsed = EndCounter.QuadPart - LastCounter.QuadPart;
+        TimeStep = CounterElapsed / (f32)CounterFrequency.QuadPart;
+        LastCounter = EndCounter;
+
+        LONGLONG FPS = CounterFrequency.QuadPart / CounterElapsed;
+
+        DWORD64 CyclesElapsed = EndCycleCount - LastCycleCount;
+        LastCycleCount = EndCycleCount;
+
+        // Display it on the title bar
+        if(1)
         {
-            char Title[64];
-            sprintf_s(Title, "Blocky %.3f ms", TimeStep * 1000.0f);
+            char Title[128];
+            sprintf_s(Title, "Blocky | TimeStep: %.3f ms | FPS: %d | CycleCount: %d", TimeStep * 1000.0f, (i32)FPS, (i32)CyclesElapsed);
 
             SetWindowTextA(Window.WindowHandle, Title);
         }
-
-        i64 CounterElapsed = EndCounter.QuadPart - LastCounter.QuadPart;
-        TimeStep = (CounterElapsed / static_cast<f32>(CounterFrequency.QuadPart));
-        LastCounter = EndCounter;
     }
 
     GameRendererDestroy(&GameRenderer);

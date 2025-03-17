@@ -283,6 +283,12 @@ namespace bkm {
         return Dot(v, v) > 0.0f;
     }
 
+    inline bool NonZero(const v3& v)
+    {
+        // TODO: Is there faster way?
+        return Dot(v, v) > 0.0f;
+    }
+
     inline f32 InverseSqrt(f32 x)
     {
         return 1.0f / Sqrt(x);
@@ -315,8 +321,7 @@ namespace bkm {
 
     inline v3 Cross(const v3& a, const v3& b)
     {
-        return v3(
-            a.y * b.z - b.y * a.z,
+        return v3(a.y * b.z - b.y * a.z,
             a.z * b.x - b.z * a.x,
             a.x * b.y - b.x * a.y);
     }
