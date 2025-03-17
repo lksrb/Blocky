@@ -721,162 +721,103 @@ internal void GamePlayerUpdate(game* Game, const game_input* Input, game_rendere
             i32 R = (i32)bkm::Floor(NextPos.z + 0.5f);
             i32 L = (i32)bkm::Floor(NextPos.y + 0.5f);
 
+            for (i32 l = -1; l <= 1; l += 2)
             {
-                auto Block = BlockGetSafe(Game, C, R, L - 1);
-                if (Block && Block->Placed)
+                for (i32 c = -1; c <= 1; c++)
                 {
-                    aabb BlockAABB = AABBFromV3(Block->Position, v3(1.0f));
-                    if (AABBCheckCollision(PlayerAABB, BlockAABB))
+                    for (i32 r = -1; r <= 1; r++)
                     {
-                        // Hit something above? Stop jumping.
-                        if (NextVelocity.y > 0)
+                        auto Block = BlockGetSafe(Game, C + c, R + r, L + l);
+
+                        if (Block && Block->Placed)
                         {
-                            NextVelocity.y = 0;
+                            aabb BlockAABB = AABBFromV3(Block->Position, v3(1.0f));
+                            if (AABBCheckCollision(PlayerAABB, BlockAABB))
+                            {
+                                // Hit something above? Stop jumping.
+                                if (NextVelocity.y > 0)
+                                {
+                                    NextVelocity.y = 0;
+                                }
+                                // Hit the ground? Reset velocity and allow jumping again.
+                                else if (NextVelocity.y < 0)
+                                {
+                                    Player.Grounded = true;
+                                    NextVelocity.y = 0;
+                                }
+                                NextPos.y = Player.Position.y; // Revert movement
+                            }
                         }
-                        // Hit the ground? Reset velocity and allow jumping again.
-                        else if (NextVelocity.y < 0)
-                        {
-                            Player.Grounded = true;
-                            NextVelocity.y = 0;
-                        }
-                        NextPos.y = Player.Position.y; // Revert movement
-                    }
-                }
-
-                //Block = BlockGetSafe(Game, C, R, L - 2);
-                //if (Block && Block->Placed)
-                //{
-                //    aabb BlockAABB = AABBFromV3(Block->Position, v3(1.0f));
-                //    if (AABBCheckCollision(PlayerAABB, BlockAABB))
-                //    {
-                //        // Hit something above? Stop jumping.
-                //        if (NextVelocity.y > 0)
-                //        {
-                //            NextVelocity.y = 0;
-                //        }
-                //        // Hit the ground? Reset velocity and allow jumping again.
-                //        else if (NextVelocity.y < 0)
-                //        {
-                //            Player.Grounded = true;
-                //            NextVelocity.y = 0;
-                //        }
-                //        NextPos.y = Player.Position.y; // Revert movement
-                //    }
-                //}
-
-                Block = BlockGetSafe(Game, C, R, L + 2);
-                if (Block && Block->Placed)
-                {
-                    aabb BlockAABB = AABBFromV3(Block->Position, v3(1.0f));
-                    if (AABBCheckCollision(PlayerAABB, BlockAABB))
-                    {
-                        Block->Color = v4(0, 0, 1, 1);
-                        NextPos.y = Player.Position.y;
-                        NextVelocity.y = 0.0f;
-                    }
-                }
-                if (Player.Grounded)
-                {
-                }
-                else if(NextVelocity.y > 0) // Jumps
-                {
-                    //auto TopBlock = BlockGetSafe(Game, C, R, L + 2);
-                    
-                }
-
-                // Debug render
-                {
-                    auto Block = BlockGetSafe(Game, C, R, L);
-                    if (Block && false)
-                    {
-                        GameRendererSubmitCuboidNoRotScale(Renderer, Block->Position, Game->BlockTextures[u32(block_type::Dirt)], v4(1.0f, 0.0f, 0.0f, 1.0f));
-                    }
-
-                    Block = BlockGetSafe(Game, C, R, L + 2);
-                    if (Block)
-                    {
-                        GameRendererSubmitCuboidNoRotScale(Renderer, Block->Position, Game->BlockTextures[u32(block_type::Dirt)], v4(1.0f, 0.0f, 0.0f, 1.0f));
                     }
                 }
             }
 
+            // XXX
             NextPos.x += NextVelocity.x * TimeStep;
 
-            // Update coords
+            PlayerAABB = AABBFromV3(NextPos, v3(0.5f, 1.8f, 0.5f));
+
             C = (i32)bkm::Floor(NextPos.x + 0.5f);
             R = (i32)bkm::Floor(NextPos.z + 0.5f);
             L = (i32)bkm::Floor(NextPos.y + 0.5f);
 
-            PlayerAABB = AABBFromV3(NextPos, v3(0.5f, 1.8f, 0.5f));
+            for (i32 c = -1; c <= 1; c += 2)
             {
-                for (i32 i = -1; i <= 1; i++)
+                for (i32 r = -1; r <= 1; r++)
                 {
-                    auto Block = BlockGetSafe(Game, C + 1, R, L + i);
-                    if (Block && Block->Placed)
+                    for (i32 l = -1; l <= 1; l++)
                     {
-                        aabb BlockAABB = AABBFromV3(Block->Position, v3(1.0f));
-                        if (AABBCheckCollision(PlayerAABB, BlockAABB))
+                        auto Block = BlockGetSafe(Game, C + c, R + r, L + l);
+
+                        if (Block && Block->Placed)
                         {
-                            Block->Color = v4(0, 0, 1, 1);
-                            NextPos.x = Player.Position.x;
-                            NextVelocity.x = 0.0f;
-                            break;
-                        }
-                    }
-                    Block = BlockGetSafe(Game, C - 1, R, L + i);
-                    if (Block && Block->Placed)
-                    {
-                        aabb BlockAABB = AABBFromV3(Block->Position, v3(1.0f));
-                        if (AABBCheckCollision(PlayerAABB, BlockAABB))
-                        {
-                            Block->Color = v4(0, 0, 1, 1);
-                            NextPos.x = Player.Position.x;
-                            NextVelocity.x = 0.0f;
-                            break;
+                            aabb BlockAABB = AABBFromV3(Block->Position, v3(1.0f));
+                            if (AABBCheckCollision(PlayerAABB, BlockAABB))
+                            {
+                                Block->Color = v4(0, 0, 1, 1);
+                                NextPos.x = Player.Position.x;
+                                NextVelocity.x = 0.0f;
+                                goto ExitLoopX;
+                            }
                         }
                     }
                 }
             }
+        ExitLoopX:
 
+            // ZZZ
             NextPos.z += NextVelocity.z * TimeStep;
 
-            // Update coords
+            PlayerAABB = AABBFromV3(NextPos, v3(0.5f, 1.8f, 0.5f));
+
             C = (i32)bkm::Floor(NextPos.x + 0.5f);
             R = (i32)bkm::Floor(NextPos.z + 0.5f);
             L = (i32)bkm::Floor(NextPos.y + 0.5f);
 
-            PlayerAABB = AABBFromV3(NextPos, v3(0.5f, 1.8f, 0.5f));
+            for (i32 r = -1; r <= 1; r += 2)
             {
-                for (i32 i = -1; i <= 1; i++)
+                for (i32 c = -1; c <= 1; c++)
                 {
-                    auto Block = BlockGetSafe(Game, C, R + 1, L + i);
-                    if (Block && Block->Placed)
+                    for (i32 l = -1; l <= 1; l++)
                     {
-                        aabb BlockAABB = AABBFromV3(Block->Position, v3(1.0f));
-                        if (AABBCheckCollision(PlayerAABB, BlockAABB))
-                        {
-                            Block->Color = v4(0, 0, 1, 1);
-                            NextPos.z = Player.Position.z;
-                            NextVelocity.z = 0.0f;
-                            break;
-                        }
-                    }
+                        auto Block = BlockGetSafe(Game, C + c, R + r, L + l);
 
-                    Block = BlockGetSafe(Game, C, R - 1, L + i);
-                    if (Block && Block->Placed)
-                    {
-                        aabb BlockAABB = AABBFromV3(Block->Position, v3(1.0f));
-                        if (AABBCheckCollision(PlayerAABB, BlockAABB))
+                        if (Block && Block->Placed)
                         {
-                            Block->Color = v4(0, 0, 1, 1);
-                            NextPos.z = Player.Position.z;
-                            NextVelocity.z = 0.0f;
-                            break;
+                            aabb BlockAABB = AABBFromV3(Block->Position, v3(1.0f));
+                            if (AABBCheckCollision(PlayerAABB, BlockAABB))
+                            {
+                                Block->Color = v4(0, 0, 1, 1);
+                                NextPos.z = Player.Position.z;
+                                NextVelocity.z = 0.0f;
+                                goto ExitLoopZ;
+                            }
                         }
                     }
                 }
             }
 
+        ExitLoopZ:
             Player.Position = NextPos;
             Player.Velocity = NextVelocity;
         }
@@ -973,6 +914,71 @@ internal void GamePlayerUpdate(game* Game, const game_input* Input, game_rendere
     else
     {
         Player.Position += Direction * Speed * TimeStep;
+
+        //// Update coords
+        i32 C = (i32)bkm::Floor(Player.Position.x + 0.5f);
+        i32 R = (i32)bkm::Floor(Player.Position.z + 0.5f);
+        i32 L = (i32)bkm::Floor(Player.Position.y + 0.5f);
+
+        //auto Block = BlockGetSafe(Game, C, R, L - 1);
+
+        //if (Block)
+        //{
+        //    GameRendererSubmitCuboidNoRotScale(Renderer, Block->Position, Game->BlockTextures[u32(block_type::Dirt)], v4(1.0f, 0.0f, 0.0f, 1.0f));
+        //}
+
+        //for (i32 i = -1; i <= 1; i++)
+        //{
+        //    for (i32 j = -1; j <= 1; j++)
+        //    {
+        //        Block = BlockGetSafe(Game, C + i, R + j, L - 1);
+
+        //        if (Block)
+        //        {
+        //            GameRendererSubmitCuboidNoRotScale(Renderer, Block->Position, Game->BlockTextures[u32(block_type::Dirt)], v4(1.0f, 0.0f, 0.0f, 1.0f));
+        //        }
+        //    }
+        //}
+
+     /*   for (i32 i = -1; i <= 1; i++)
+        {
+            for (i32 j = -1; j <= 1; j++)
+            {
+                auto Block = BlockGetSafe(Game, C + 1, R + i, L + j);
+
+                if (Block)
+                {
+                    GameRendererSubmitCuboidNoRotScale(Renderer, Block->Position, Game->BlockTextures[u32(block_type::Dirt)], v4(1.0f, 0.0f, 0.0f, 1.0f));
+                }
+            }
+        }*/
+
+
+        /* for (i32 i = -1; i <= 1; i++)
+         {
+             for (i32 j = -1; j <= 1; j++)
+             {
+                 auto Block = BlockGetSafe(Game, C - 1, R + i, L + j);
+
+                 if (Block)
+                 {
+                     GameRendererSubmitCuboidNoRotScale(Renderer, Block->Position, Game->BlockTextures[u32(block_type::Dirt)], v4(1.0f, 0.0f, 0.0f, 1.0f));
+                 }
+             }
+         }*/
+
+        for (i32 i = -1; i <= 1; i++)
+        {
+            for (i32 j = -1; j <= 1; j++)
+            {
+                auto Block = BlockGetSafe(Game, C + i, R + 1, L + j);
+
+                if (Block)
+                {
+                    GameRendererSubmitCuboidNoRotScale(Renderer, Block->Position, Game->BlockTextures[u32(block_type::Dirt)], v4(1.0f, 0.0f, 0.0f, 1.0f));
+                }
+            }
+        }
     }
 
 

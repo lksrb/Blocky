@@ -709,13 +709,21 @@ int main(int argc, char** argv)
         DWORD64 CyclesElapsed = EndCycleCount - LastCycleCount;
         LastCycleCount = EndCycleCount;
 
+        local_persist f32 EverySecond = 1.0f;
+
         // Display it on the title bar
-        if(1)
+
+        if (EverySecond >= 1.0f)
         {
+            EverySecond = 0.0f;
             char Title[128];
             sprintf_s(Title, "Blocky | TimeStep: %.3f ms | FPS: %d | CycleCount: %d", TimeStep * 1000.0f, (i32)FPS, (i32)CyclesElapsed);
 
             SetWindowTextA(Window.WindowHandle, Title);
+        }
+        else
+        {
+            EverySecond += TimeStep;
         }
     }
 
