@@ -105,7 +105,6 @@ struct entity
     entity* Child = nullptr;
     entity* Parent = nullptr;
 
-    std::vector<u32> BlocksAround;
     transform Transform;
     aabb_physics AABBPhysics;
     renderable Render;
@@ -124,15 +123,15 @@ struct player
     bool Grounded = false;
 };
 
+// TODO: Possible cache optimalizations
 struct block
 {
-    bool Placed = false;
-    v3 Position = {};
-    v3 Scale = v3(1.0f);
-    v4 Color = v4(1.0f);
-    texture Texture = {};
-    i32 Left = INT_MAX, Right = INT_MAX, Front = INT_MAX, Back = INT_MAX, Up = INT_MAX, Down = INT_MAX; // Neighbours
     block_type Type = block_type::INVALID;
+    v3 Position = {};
+    v4 Color = v4(1.0f);
+
+    inline bool Placed() const { return Type != block_type::Air; }
+    //i32 Left = INT_MAX, Right = INT_MAX, Front = INT_MAX, Back = INT_MAX, Up = INT_MAX, Down = INT_MAX; // Neighbours
 };
 
 internal const i64 RowCount = 16;
@@ -172,7 +171,7 @@ internal bool FindFirstHit(const ray& Ray, const block* Blocks, u64 BlocksCount,
     {
         auto& Block = Blocks[Index];
 
-        if (!Block.Placed)
+        if (!Block.Placed())
             continue;
 
         aabb Box;

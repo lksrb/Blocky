@@ -56,15 +56,12 @@ internal void GameGenerateWorld(game* Game)
 
                 if (L < 16)
                 {
-                    Block.Texture = Game->BlockTextures[(u32)block_type::Dirt];
                     Block.Position = v3(StartPos.x, StartPos.y, StartPos.z);
                     Block.Type = block_type::Dirt;
                     Block.Color = (CikCak & 1) ? v4(0.2f, 0.2f, 0.2f, 1.0f) : v4(1.0f);
-                    Block.Placed = true;
                 }
                 else
                 {
-                    Block.Texture = Game->BlockTextures[(u32)block_type::Dirt];
                     Block.Position = v3(StartPos.x, StartPos.y, StartPos.z);
                     Block.Type = block_type::Air;
                 }
@@ -72,7 +69,7 @@ internal void GameGenerateWorld(game* Game)
                 StartPos.x++;
 
                 CikCak++;
-
+#if 0
                 // Left
                 if (Block.Left == INT_MAX && C > 0 && C < ColumnCount)
                 {
@@ -108,6 +105,7 @@ internal void GameGenerateWorld(game* Game)
                 {
                     Block.Down = GlobalIndex - ColumnCount * RowCount;
                 }
+#endif
 
                 GlobalIndex++;
             }
@@ -158,36 +156,6 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
         }
     }
 
-    {
-        auto Entities = Game->AliveEntities;
-        for (i32 i = 0; i < Game->AliveEntitiesCount; i++)
-        {
-            auto& Entity = Game->AliveEntities[i];
-            Entity.BlocksAround.clear();
-
-            u32 BlockIndex = 0;
-            for (u32 BlockIndex = 0; BlockIndex < Game->Blocks.size(); BlockIndex++)
-            {
-                auto& Block = Game->Blocks[BlockIndex];
-                if (!Block.Placed)
-                    continue;
-
-                if (bkm::Length(Block.Position - Entity.Transform.Translation) > 2.0f)
-                    continue;
-
-                Entity.BlocksAround.push_back(BlockIndex);
-            }
-        }
-
-        for (i32 i = 0; i < Game->AliveEntitiesCount; i++)
-        {
-            for (u32 BlockIndex : Game->AliveEntities[i].BlocksAround)
-            {
-                Game->Blocks[BlockIndex].Color = v4(1.0f, 0.0f, 0.0f, 1.0f);
-            }
-        }
-    }
-
     // Physics simulation
     if (1)
     {
@@ -232,7 +200,7 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
                     {
                         auto Block = BlockGetSafe(Game, C + c, R + r, L + l);
 
-                        if (Block && Block->Placed)
+                        if (Block && Block->Placed())
                         {
                             aabb BlockAABB = AABBFromV3(Block->Position, v3(1.0f));
                             if (AABBCheckCollision(EntityAABB, BlockAABB))
@@ -275,7 +243,7 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
                     {
                         auto Block = BlockGetSafe(Game, C + c, R + r, L + l);
 
-                        if (Block && Block->Placed)
+                        if (Block && Block->Placed())
                         {
                             aabb BlockAABB = AABBFromV3(Block->Position, v3(1.0f));
                             if (AABBCheckCollision(EntityAABB, BlockAABB))
@@ -308,7 +276,7 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
                     {
                         auto Block = BlockGetSafe(Game, C + c, R + r, L + l);
 
-                        if (Block && Block->Placed)
+                        if (Block && Block->Placed())
                         {
                             aabb BlockAABB = AABBFromV3(Block->Position, v3(1.0f));
                             if (AABBCheckCollision(EntityAABB, BlockAABB))
@@ -483,21 +451,14 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
     // Render blocks
     if (1)
     {
-        debug_cycle_counter GameUpdateCounter("Render Blocks");
+        //debug_cycle_counter GameUpdateCounter("Render Blocks");
 
         for (auto& Block : Game->Blocks)
         {
-            if (!Block.Placed)
+            if (!Block.Placed())
                 continue;
 
-            if (Block.Texture.Handle)
-            {
-                GameRendererSubmitCuboidNoRotScale(Renderer, Block.Position, Block.Texture, Block.Color);
-            }
-            else
-            {
-                GameRendererSubmitCuboidNoRotScale(Renderer, Block.Position, Block.Color);
-            }
+            GameRendererSubmitCuboidNoRotScale(Renderer, Block.Position, Game->BlockTextures[(u32)Block.Type], Block.Color);
         }
     }
 
@@ -632,223 +593,131 @@ internal void GamePlayerUpdate(game* Game, const game_input* Input, game_rendere
         const f32 CheckRadius = 5.0f;
         const f32 JumpStrength = 10.0f;
 
-        if (1)
+        // Apply gravity and movement forces
+        v3 NextVelocity = Player.Velocity;
+        NextVelocity.y += G * TimeStep;  // Gravity
+        NextVelocity.x = Direction.x * Speed;
+        NextVelocity.z = Direction.z * Speed;
+
+        v3 NextPos = Player.Position;
+
+        if (Player.Grounded && JumpKeyPressed)
         {
-            // Apply gravity and movement forces
-            v3 NextVelocity = Player.Velocity;
-            NextVelocity.y += G * TimeStep;  // Gravity
-            NextVelocity.x = Direction.x * Speed;
-            NextVelocity.z = Direction.z * Speed;
+            NextVelocity.y = JumpStrength;
+            Player.Grounded = false;
+        }
 
-            v3 NextPos = Player.Position;
+        NextPos.y += NextVelocity.y * TimeStep;
 
-            if (Player.Grounded && JumpKeyPressed)
-            {
-                NextVelocity.y = JumpStrength;
-                Player.Grounded = false;
-            }
+        aabb PlayerAABB = AABBFromV3(NextPos, v3(0.5f, 1.8f, 0.5f));
 
-            NextPos.y += NextVelocity.y * TimeStep;
+        // Stepping on a block
+        // Is kinda wonky
+        i32 C = (i32)bkm::Floor(NextPos.x + 0.5f);
+        i32 R = (i32)bkm::Floor(NextPos.z + 0.5f);
+        i32 L = (i32)bkm::Floor(NextPos.y + 0.5f);
 
-            aabb PlayerAABB = AABBFromV3(NextPos, v3(0.5f, 1.8f, 0.5f));
-
-            // Stepping on a block
-            // Is kinda wonky
-            i32 C = (i32)bkm::Floor(NextPos.x + 0.5f);
-            i32 R = (i32)bkm::Floor(NextPos.z + 0.5f);
-            i32 L = (i32)bkm::Floor(NextPos.y + 0.5f);
-
-            for (i32 l = -1; l <= 1; l += 2)
-            {
-                for (i32 c = -1; c <= 1; c++)
-                {
-                    for (i32 r = -1; r <= 1; r++)
-                    {
-                        auto Block = BlockGetSafe(Game, C + c, R + r, L + l);
-
-                        if (Block && Block->Placed)
-                        {
-                            aabb BlockAABB = AABBFromV3(Block->Position, v3(1.0f));
-                            if (AABBCheckCollision(PlayerAABB, BlockAABB))
-                            {
-                                // Hit something above? Stop jumping.
-                                if (NextVelocity.y > 0)
-                                {
-                                    NextVelocity.y = 0;
-                                }
-                                // Hit the ground? Reset velocity and allow jumping again.
-                                else if (NextVelocity.y < 0)
-                                {
-                                    Player.Grounded = true;
-                                    NextVelocity.y = 0;
-                                }
-                                NextPos.y = Player.Position.y; // Revert movement
-                            }
-                        }
-                    }
-                }
-            }
-
-            // XXX
-            NextPos.x += NextVelocity.x * TimeStep;
-
-            PlayerAABB = AABBFromV3(NextPos, v3(0.5f, 1.8f, 0.5f));
-
-            C = (i32)bkm::Floor(NextPos.x + 0.5f);
-            R = (i32)bkm::Floor(NextPos.z + 0.5f);
-            L = (i32)bkm::Floor(NextPos.y + 0.5f);
-
-            for (i32 c = -1; c <= 1; c += 2)
+        for (i32 l = -1; l <= 1; l += 2)
+        {
+            for (i32 c = -1; c <= 1; c++)
             {
                 for (i32 r = -1; r <= 1; r++)
                 {
-                    for (i32 l = -1; l <= 1; l++)
-                    {
-                        auto Block = BlockGetSafe(Game, C + c, R + r, L + l);
+                    auto Block = BlockGetSafe(Game, C + c, R + r, L + l);
 
-                        if (Block && Block->Placed)
+                    if (Block && Block->Placed())
+                    {
+                        aabb BlockAABB = AABBFromV3(Block->Position, v3(1.0f));
+                        if (AABBCheckCollision(PlayerAABB, BlockAABB))
                         {
-                            aabb BlockAABB = AABBFromV3(Block->Position, v3(1.0f));
-                            if (AABBCheckCollision(PlayerAABB, BlockAABB))
+                            // Hit something above? Stop jumping.
+                            if (NextVelocity.y > 0)
                             {
-                                Block->Color = v4(0, 0, 1, 1);
-                                NextPos.x = Player.Position.x;
-                                NextVelocity.x = 0.0f;
-                                goto ExitLoopX;
+                                NextVelocity.y = 0;
                             }
+                            // Hit the ground? Reset velocity and allow jumping again.
+                            else if (NextVelocity.y < 0)
+                            {
+                                Player.Grounded = true;
+                                NextVelocity.y = 0;
+                            }
+                            NextPos.y = Player.Position.y; // Revert movement
                         }
                     }
                 }
             }
-        ExitLoopX:
-
-            // ZZZ
-            NextPos.z += NextVelocity.z * TimeStep;
-
-            PlayerAABB = AABBFromV3(NextPos, v3(0.5f, 1.8f, 0.5f));
-
-            C = (i32)bkm::Floor(NextPos.x + 0.5f);
-            R = (i32)bkm::Floor(NextPos.z + 0.5f);
-            L = (i32)bkm::Floor(NextPos.y + 0.5f);
-
-            for (i32 r = -1; r <= 1; r += 2)
-            {
-                for (i32 c = -1; c <= 1; c++)
-                {
-                    for (i32 l = -1; l <= 1; l++)
-                    {
-                        auto Block = BlockGetSafe(Game, C + c, R + r, L + l);
-
-                        if (Block && Block->Placed)
-                        {
-                            aabb BlockAABB = AABBFromV3(Block->Position, v3(1.0f));
-                            if (AABBCheckCollision(PlayerAABB, BlockAABB))
-                            {
-                                Block->Color = v4(0, 0, 1, 1);
-                                NextPos.z = Player.Position.z;
-                                NextVelocity.z = 0.0f;
-                                goto ExitLoopZ;
-                            }
-                        }
-                    }
-                }
-            }
-
-        ExitLoopZ:
-            Player.Position = NextPos;
-            Player.Velocity = NextVelocity;
         }
-        else
+
+        // XXX
+        NextPos.x += NextVelocity.x * TimeStep;
+
+        PlayerAABB = AABBFromV3(NextPos, v3(0.5f, 1.8f, 0.5f));
+
+        C = (i32)bkm::Floor(NextPos.x + 0.5f);
+        R = (i32)bkm::Floor(NextPos.z + 0.5f);
+        L = (i32)bkm::Floor(NextPos.y + 0.5f);
+
+        for (i32 c = -1; c <= 1; c += 2)
         {
-            // Apply gravity and movement forces
-            v3 NextVelocity = Player.Velocity;
-            NextVelocity.y += G * TimeStep;  // Gravity
-            NextVelocity.x = Direction.x * Speed;
-            NextVelocity.z = Direction.z * Speed;
-
-            v3 NextPos = Player.Position;
-            aabb PlayerAABB;
-
-            if (Player.Grounded && JumpKeyPressed)
+            for (i32 r = -1; r <= 1; r++)
             {
-                NextVelocity.y = JumpStrength;
-                Player.Grounded = false;
-            }
-
-            // Y - Gravity
-            NextPos.y += NextVelocity.y * TimeStep;
-            PlayerAABB = AABBFromV3(NextPos, v3(0.5f, 1.8f, 0.5f));
-
-            for (auto& Block : Game->Blocks)
-            {
-                if (!Block.Placed)
-                    continue;
-
-                aabb BlockAABB = AABBFromV3(Block.Position, v3(1.0f));
-
-                if (AABBCheckCollision(PlayerAABB, BlockAABB))
+                for (i32 l = -1; l <= 1; l++)
                 {
-                    // Hit something above? Stop jumping.
-                    if (NextVelocity.y > 0)
+                    auto Block = BlockGetSafe(Game, C + c, R + r, L + l);
+
+                    if (Block && Block->Placed())
                     {
-                        NextVelocity.y = 0;
+                        aabb BlockAABB = AABBFromV3(Block->Position, v3(1.0f));
+                        if (AABBCheckCollision(PlayerAABB, BlockAABB))
+                        {
+                            Block->Color = v4(0, 0, 1, 1);
+                            NextPos.x = Player.Position.x;
+                            NextVelocity.x = 0.0f;
+                            goto ExitLoopX;
+                        }
                     }
-                    // Hit the ground? Reset velocity and allow jumping again.
-                    else if (NextVelocity.y < 0)
-                    {
-                        Player.Grounded = true;
-                        NextVelocity.y = 0;
-                    }
-                    NextPos.y = Player.Position.y; // Revert movement
-                    break;
                 }
             }
-
-            // Move X-axis
-            NextPos.x += NextVelocity.x * TimeStep;
-            PlayerAABB = AABBFromV3(NextPos, v3(0.5f, 1.8f, 0.5f));
-
-            for (auto& Block : Game->Blocks)
-            {
-                if (!Block.Placed)
-                    continue;
-
-                aabb BlockAABB = AABBFromV3(Block.Position, v3(1.0f));
-
-                if (AABBCheckCollision(PlayerAABB, BlockAABB))
-                {
-                    // Collision on X-axis: stop only X movement
-                    NextVelocity.x = 0;
-                    NextPos.x = Player.Position.x;
-                    break;
-                }
-            }
-
-            // Move Z-axis
-            NextPos.z += NextVelocity.z * TimeStep;
-            PlayerAABB = AABBFromV3(NextPos, v3(0.5f, 1.8f, 0.5f));
-
-            for (auto& Block : Game->Blocks)
-            {
-                if (!Block.Placed)
-                    continue;
-
-                aabb BlockAABB = AABBFromV3(Block.Position, v3(1.0f));
-
-                if (AABBCheckCollision(PlayerAABB, BlockAABB))
-                {
-                    // Collision on Z-axis: stop only Z movement
-                    NextVelocity.z = 0;
-                    NextPos.z = Player.Position.z;
-                    break;
-                }
-            }
-
-            Player.Position = NextPos;
-            Player.Velocity = NextVelocity;
         }
-    } // No physics
-    else
+    ExitLoopX:
+
+        // ZZZ
+        NextPos.z += NextVelocity.z * TimeStep;
+
+        PlayerAABB = AABBFromV3(NextPos, v3(0.5f, 1.8f, 0.5f));
+
+        C = (i32)bkm::Floor(NextPos.x + 0.5f);
+        R = (i32)bkm::Floor(NextPos.z + 0.5f);
+        L = (i32)bkm::Floor(NextPos.y + 0.5f);
+
+        for (i32 r = -1; r <= 1; r += 2)
+        {
+            for (i32 c = -1; c <= 1; c++)
+            {
+                for (i32 l = -1; l <= 1; l++)
+                {
+                    auto Block = BlockGetSafe(Game, C + c, R + r, L + l);
+
+                    if (Block && Block->Placed())
+                    {
+                        aabb BlockAABB = AABBFromV3(Block->Position, v3(1.0f));
+                        if (AABBCheckCollision(PlayerAABB, BlockAABB))
+                        {
+                            Block->Color = v4(0, 0, 1, 1);
+                            NextPos.z = Player.Position.z;
+                            NextVelocity.z = 0.0f;
+                            goto ExitLoopZ;
+                        }
+                    }
+                }
+            }
+        }
+
+    ExitLoopZ:
+        Player.Position = NextPos;
+        Player.Velocity = NextVelocity;
+    }
+    else // No physics
     {
         Player.Position += Direction * Speed * TimeStep;
 
@@ -856,53 +725,6 @@ internal void GamePlayerUpdate(game* Game, const game_input* Input, game_rendere
         i32 C = (i32)bkm::Floor(Player.Position.x + 0.5f);
         i32 R = (i32)bkm::Floor(Player.Position.z + 0.5f);
         i32 L = (i32)bkm::Floor(Player.Position.y + 0.5f);
-
-        //auto Block = BlockGetSafe(Game, C, R, L - 1);
-
-        //if (Block)
-        //{
-        //    GameRendererSubmitCuboidNoRotScale(Renderer, Block->Position, Game->BlockTextures[u32(block_type::Dirt)], v4(1.0f, 0.0f, 0.0f, 1.0f));
-        //}
-
-        //for (i32 i = -1; i <= 1; i++)
-        //{
-        //    for (i32 j = -1; j <= 1; j++)
-        //    {
-        //        Block = BlockGetSafe(Game, C + i, R + j, L - 1);
-
-        //        if (Block)
-        //        {
-        //            GameRendererSubmitCuboidNoRotScale(Renderer, Block->Position, Game->BlockTextures[u32(block_type::Dirt)], v4(1.0f, 0.0f, 0.0f, 1.0f));
-        //        }
-        //    }
-        //}
-
-     /*   for (i32 i = -1; i <= 1; i++)
-        {
-            for (i32 j = -1; j <= 1; j++)
-            {
-                auto Block = BlockGetSafe(Game, C + 1, R + i, L + j);
-
-                if (Block)
-                {
-                    GameRendererSubmitCuboidNoRotScale(Renderer, Block->Position, Game->BlockTextures[u32(block_type::Dirt)], v4(1.0f, 0.0f, 0.0f, 1.0f));
-                }
-            }
-        }*/
-
-
-        /* for (i32 i = -1; i <= 1; i++)
-         {
-             for (i32 j = -1; j <= 1; j++)
-             {
-                 auto Block = BlockGetSafe(Game, C - 1, R + i, L + j);
-
-                 if (Block)
-                 {
-                     GameRendererSubmitCuboidNoRotScale(Renderer, Block->Position, Game->BlockTextures[u32(block_type::Dirt)], v4(1.0f, 0.0f, 0.0f, 1.0f));
-                 }
-             }
-         }*/
 
         for (i32 i = -1; i <= 1; i++)
         {
@@ -918,7 +740,6 @@ internal void GamePlayerUpdate(game* Game, const game_input* Input, game_rendere
         }
     }
 
-
     // Destroy block
     if (Input->IsMousePressed(mouse::Left))
     {
@@ -933,53 +754,52 @@ internal void GamePlayerUpdate(game* Game, const game_input* Input, game_rendere
         if (FindFirstHit(Ray, Game->Blocks, &HitPoint, &HitNormal, &HitBlock, &HitIndex))
         {
             auto& Block = Game->Blocks[HitIndex];
-            Block.Placed = false;
+            Block.Type = block_type::Air;
 
             // Color adjacent blocks
-            if (0)
+#if 0
+            if (Block.Left != INT_MAX)
             {
-                if (Block.Left != INT_MAX)
-                {
-                    auto& Neighbour = Game->Blocks[Block.Left];
-                    Neighbour.Color = v4(1.0f, 0.0f, 0.0f, 1.0f);
-                    Neighbour.Right = INT_MAX;
-                }
-
-                if (Block.Right != INT_MAX)
-                {
-                    auto& Neighbour = Game->Blocks[Block.Right];
-                    Neighbour.Color = v4(1.0f, 0.0f, 0.0f, 1.0f);
-                    Neighbour.Left = INT_MAX;
-                }
-
-                if (Block.Front != INT_MAX)
-                {
-                    auto& Neighbour = Game->Blocks[Block.Front];
-                    Neighbour.Color = v4(1.0f, 0.0f, 0.0f, 1.0f);
-                    Neighbour.Back = INT_MAX;
-                }
-
-                if (Block.Back != INT_MAX)
-                {
-                    auto& Neighbour = Game->Blocks[Block.Back];
-                    Neighbour.Color = v4(1.0f, 0.0f, 0.0f, 1.0f);
-                    Neighbour.Front = INT_MAX;
-                }
-
-                if (Block.Up != INT_MAX)
-                {
-                    auto& Neighbour = Game->Blocks[Block.Up];
-                    Neighbour.Color = v4(1.0f, 0.0f, 0.0f, 1.0f);
-                    Neighbour.Down = INT_MAX;
-                }
-
-                if (Block.Down != INT_MAX)
-                {
-                    auto& Neighbour = Game->Blocks[Block.Down];
-                    Neighbour.Color = v4(1.0f, 0.0f, 0.0f, 1.0f);
-                    Neighbour.Up = INT_MAX;
-                }
+                auto& Neighbour = Game->Blocks[Block.Left];
+                Neighbour.Color = v4(1.0f, 0.0f, 0.0f, 1.0f);
+                Neighbour.Right = INT_MAX;
             }
+
+            if (Block.Right != INT_MAX)
+            {
+                auto& Neighbour = Game->Blocks[Block.Right];
+                Neighbour.Color = v4(1.0f, 0.0f, 0.0f, 1.0f);
+                Neighbour.Left = INT_MAX;
+            }
+
+            if (Block.Front != INT_MAX)
+            {
+                auto& Neighbour = Game->Blocks[Block.Front];
+                Neighbour.Color = v4(1.0f, 0.0f, 0.0f, 1.0f);
+                Neighbour.Back = INT_MAX;
+            }
+
+            if (Block.Back != INT_MAX)
+            {
+                auto& Neighbour = Game->Blocks[Block.Back];
+                Neighbour.Color = v4(1.0f, 0.0f, 0.0f, 1.0f);
+                Neighbour.Front = INT_MAX;
+            }
+
+            if (Block.Up != INT_MAX)
+            {
+                auto& Neighbour = Game->Blocks[Block.Up];
+                Neighbour.Color = v4(1.0f, 0.0f, 0.0f, 1.0f);
+                Neighbour.Down = INT_MAX;
+            }
+
+            if (Block.Down != INT_MAX)
+            {
+                auto& Neighbour = Game->Blocks[Block.Down];
+                Neighbour.Color = v4(1.0f, 0.0f, 0.0f, 1.0f);
+                Neighbour.Up = INT_MAX;
+            }
+#endif
 
             Info("Block destroyed.");
         }
@@ -1015,7 +835,7 @@ internal void GamePlayerUpdate(game* Game, const game_input* Input, game_rendere
                 if (Block)
                 {
                     Block->Color = v4(1, 0, 1, 1);
-                    Block->Placed = true;
+                    Block->Type = block_type::Dirt;
                 }
             }
         }

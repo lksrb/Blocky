@@ -1163,6 +1163,7 @@ internal void GameRendererSubmitCuboidNoRotScale(game_renderer* Renderer, const 
     // TODO: We can do better by simply copying data and then calculate everything at one swoop
 #if ENABLE_SIMD
     Cuboid.XmmTransform = XMMatrixTranslationFromVector(XMVectorSet(Translation.x, Translation.y, Translation.z, 0.0f));
+
     Cuboid.Color = Color;
     Cuboid.TextureIndex = TextureIndex;
     Renderer->CuboidInstanceCount++;
