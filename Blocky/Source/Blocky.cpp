@@ -123,7 +123,7 @@ internal void GameGenerateWorld(game* Game)
 
 internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* Input, f32 TimeStep, u32 ClientAreaWidth, u32 ClientAreaHeight)
 {
-    debug_cycle_counter GameUpdateCounter("GameUpdateCounter");
+    //debug_cycle_counter GameUpdateCounter("GameUpdateCounter");
 
     // Live entities
     GamePlayerUpdate(Game, Input, Renderer, TimeStep);
@@ -302,6 +302,61 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
         debug_cycle_counter GameUpdateCounter("Render Entities");
         //scoped_timer Timer("Render entities");
 
+        texture_coords BodyTextureCoords[6];
+        {
+            auto Front = GetTextureCoords(12, 10, 28, 13);
+            auto Back = GetTextureCoords(12, 10, 40, 13);
+
+            auto Left = GetTextureCoords(10, 18, 18, 31, 1);
+            auto Right = GetTextureCoords(10, 18, 40, 31, 3);
+
+            auto Top = GetTextureCoords(12, 18, 50, 31, 2);
+            auto Bottom = GetTextureCoords(12, 18, 28, 31, 0);
+
+            BodyTextureCoords[0] = Front;
+            BodyTextureCoords[1] = Back;
+            BodyTextureCoords[2] = Left;
+            BodyTextureCoords[3] = Right;
+            BodyTextureCoords[4] = Top;
+            BodyTextureCoords[5] = Bottom;
+        }
+
+        texture_coords HeadTextureCoords[6];
+        {
+            auto Front = GetTextureCoords(8, 8, 6, 13);
+            auto Back = GetTextureCoords(8, 8, 20, 13);
+            auto Left = GetTextureCoords(6, 8, 0, 13);
+            auto Right = GetTextureCoords(6, 8, 14, 13);
+            auto Top = GetTextureCoords(8, 6, 6, 5);
+            auto Bottom = GetTextureCoords(8, 6, 14, 5);
+
+            HeadTextureCoords[0] = Front;
+            HeadTextureCoords[1] = Back;
+            HeadTextureCoords[2] = Left;
+            HeadTextureCoords[3] = Right;
+            HeadTextureCoords[4] = Top;
+            HeadTextureCoords[5] = Bottom;
+        }
+
+        texture_coords LegTextureCoords[6];
+        {
+            auto Left = GetTextureCoords(4, 12, 0, 31);
+            auto Right = GetTextureCoords(4, 12, 8, 31);
+
+            auto Front = GetTextureCoords(4, 12, 4, 31);
+            auto Back = GetTextureCoords(4, 12, 12, 31);
+
+            auto Top = GetTextureCoords(4, 4, 4, 19);
+            auto Bottom = GetTextureCoords(4, 4, 8, 19, 2);
+
+            LegTextureCoords[0] = Front;
+            LegTextureCoords[1] = Back;
+            LegTextureCoords[2] = Left;
+            LegTextureCoords[3] = Right;
+            LegTextureCoords[4] = Top;
+            LegTextureCoords[5] = Bottom;
+        }
+
         auto Entities = Game->AliveEntities;
         for (i32 i = 0; i < Game->AliveEntitiesCount; i++)
         {
@@ -314,121 +369,77 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
             if (Entity.Type == entity_type::Cow)
             {
                 // Body
+                GameRendererSubmitCustomCuboid(Renderer, Entity.Transform.Matrix(), Entity.Render.Texture, BodyTextureCoords, v4(1.0f));
+
+                if (0)
                 {
-                    auto Front = GetTextureCoords(12, 10, 28, 13);
-                    auto Back = GetTextureCoords(12, 10, 40, 13);
 
-                    auto Left = GetTextureCoords(10, 18, 18, 31, 1);
-                    auto Right = GetTextureCoords(10, 18, 40, 31, 3);
-
-                    auto Top = GetTextureCoords(12, 18, 50, 31, 2);
-                    auto Bottom = GetTextureCoords(12, 18, 28, 31, 0);
-
-                    texture_coords TextureCoords[6];
-                    TextureCoords[0] = Front;
-                    TextureCoords[1] = Back;
-                    TextureCoords[2] = Left;
-                    TextureCoords[3] = Right;
-                    TextureCoords[4] = Top;
-                    TextureCoords[5] = Bottom;
-                    GameRendererSubmitCustomCuboid(Renderer, Entity.Transform.Matrix(), Entity.Render.Texture, TextureCoords, v4(1.0f));
-                }
-
-                // IDEA: Move the head based on its scale to preserve the same position of the head/body
-                // f32 Y = CowTranslation.y - Scale.y * 0.5f - LegScale.y * 0.5f;
-                // Head
-                {
-                    local_persist transform CowHeadTransform;
-                    CowHeadTransform.Translation = v3(0, 0.4f, 0.7f);
-                    //CowHeadTransform.Rotation = v3(bkm::Sin(Time) * 0.5f, 0, 0);
-                    CowHeadTransform.Scale = v3(0.5f / 0.7f, 0.5f / 0.7f, 0.4f);
-
-                    auto Front = GetTextureCoords(8, 8, 6, 13);
-                    auto Back = GetTextureCoords(8, 8, 20, 13);
-                    auto Left = GetTextureCoords(6, 8, 0, 13);
-                    auto Right = GetTextureCoords(6, 8, 14, 13);
-                    auto Top = GetTextureCoords(8, 6, 6, 5);
-                    auto Bottom = GetTextureCoords(8, 6, 14, 5);
-
-                    texture_coords TextureCoords[6];
-                    TextureCoords[0] = Front;
-                    TextureCoords[1] = Back;
-                    TextureCoords[2] = Left;
-                    TextureCoords[3] = Right;
-                    TextureCoords[4] = Top;
-                    TextureCoords[5] = Bottom;
-
-                    GameRendererSubmitCustomCuboid(Renderer, Entity.Transform.Matrix() * CowHeadTransform.Matrix(), Entity.Render.Texture, TextureCoords, v4(1.0f));
-                }
-
-                // Legs
-                if (1)
-                {
-                    f32 DeltaX = 0.30f;
-                    f32 DeltaZ = 0.35f;
-                    f32 ScaleX = 0.3f / 0.7f * 0.9f;
-                    f32 ScaleY = 1.0f;
-                    f32 ScaleZ = 0.3f * 0.9f;
-
-                    transform LegTransform[4];
-                    LegTransform[0].Translation = v3(0, -1.0f, 0);
-                    LegTransform[0].Scale = v3(ScaleX, ScaleY, ScaleZ);
-
-                    LegTransform[1].Translation = v3(0, -1.0f, 0);
-                    LegTransform[1].Scale = v3(ScaleX, ScaleY, ScaleZ);
-
-                    LegTransform[2].Translation = v3(0, -1.0f, 0);
-                    LegTransform[2].Scale = v3(ScaleX, ScaleY, ScaleZ);
-
-                    LegTransform[3].Translation = v3(0, -1.0f, 0);
-                    LegTransform[3].Scale = v3(ScaleX, ScaleY, ScaleZ);
-
-                    //f32 Y = CowTranslation.y - Scale.y * 0.5f - LegScale.y * 0.5f;
-
-                    /*  v3 Offsets[4];
-                      Offsets[0] = v3(DeltaX, Y, DeltaZ);
-                      Offsets[1] = v3(-DeltaX, Y, DeltaZ);
-                      Offsets[2] = v3(-DeltaX, Y, -DeltaZ);
-                      Offsets[3] = v3(DeltaX, Y, -DeltaZ);*/
-
-                    f32 LegRotation = bkm::Sin(Game->Time * 10.3f * bkm::Length(Entity.AABBPhysics.Velocity)) * 0.3f;
-
-                    transform KneeTransform[4] = {};
-                    KneeTransform[0].Translation = v3(DeltaX, 0.0f, -DeltaZ);
-                    KneeTransform[0].Rotation = v3(-LegRotation, 0, 0);
-
-                    KneeTransform[1].Translation = v3(-DeltaX, 0.0f, -DeltaZ);
-                    KneeTransform[1].Rotation = v3(LegRotation, 0, 0);
-
-                    KneeTransform[2].Translation = v3(-DeltaX, 0.0f, DeltaZ);
-                    KneeTransform[2].Rotation = v3(LegRotation, 0, 0);
-
-                    KneeTransform[3].Translation = v3(DeltaX, 0.0f, DeltaZ);
-                    KneeTransform[3].Rotation = v3(-LegRotation, 0, 0);
-
-                    // Front Left
-                    for (u32 i = 0; i < 4; i++)
+                    // IDEA: Move the head based on its scale to preserve the same position of the head/body
+                    // f32 Y = CowTranslation.y - Scale.y * 0.5f - LegScale.y * 0.5f;
+                    // Head
                     {
-                        auto Left = GetTextureCoords(4, 12, 0, 31);
-                        auto Right = GetTextureCoords(4, 12, 8, 31);
+                        local_persist transform CowHeadTransform;
+                        CowHeadTransform.Translation = v3(0, 0.4f, 0.7f);
+                        //CowHeadTransform.Rotation = v3(bkm::Sin(Time) * 0.5f, 0, 0);
+                        CowHeadTransform.Scale = v3(0.5f / 0.7f, 0.5f / 0.7f, 0.4f);
 
-                        auto Front = GetTextureCoords(4, 12, 4, 31);
-                        auto Back = GetTextureCoords(4, 12, 12, 31);
+                        GameRendererSubmitCustomCuboid_FAST(Renderer, Entity.Transform.Matrix() * CowHeadTransform.Matrix(), Entity.Render.Texture, HeadTextureCoords, v4(1.0f));
+                    }
 
-                        auto Top = GetTextureCoords(4, 4, 4, 19);
-                        auto Bottom = GetTextureCoords(4, 4, 8, 19, 2);
+                    // Legs
+                    if (1)
+                    {
+                        f32 DeltaX = 0.30f;
+                        f32 DeltaZ = 0.35f;
+                        f32 ScaleX = 0.3f / 0.7f * 0.9f;
+                        f32 ScaleY = 1.0f;
+                        f32 ScaleZ = 0.3f * 0.9f;
 
-                        texture_coords TextureCoords[6];
-                        TextureCoords[0] = Front;
-                        TextureCoords[1] = Back;
-                        TextureCoords[2] = Left;
-                        TextureCoords[3] = Right;
-                        TextureCoords[4] = Top;
-                        TextureCoords[5] = Bottom;
+                        transform LegTransform[4];
+                        LegTransform[0].Translation = v3(0, -1.0f, 0);
+                        LegTransform[0].Scale = v3(ScaleX, ScaleY, ScaleZ);
 
-                        GameRendererSubmitCustomCuboid(Renderer, Entity.Transform.Matrix() * KneeTransform[i].Matrix() * LegTransform[i].Matrix(), Entity.Render.Texture, TextureCoords, v4(1.0f));
+                        LegTransform[1].Translation = v3(0, -1.0f, 0);
+                        LegTransform[1].Scale = v3(ScaleX, ScaleY, ScaleZ);
+
+                        LegTransform[2].Translation = v3(0, -1.0f, 0);
+                        LegTransform[2].Scale = v3(ScaleX, ScaleY, ScaleZ);
+
+                        LegTransform[3].Translation = v3(0, -1.0f, 0);
+                        LegTransform[3].Scale = v3(ScaleX, ScaleY, ScaleZ);
+
+                        //f32 Y = CowTranslation.y - Scale.y * 0.5f - LegScale.y * 0.5f;
+
+                        /*  v3 Offsets[4];
+                          Offsets[0] = v3(DeltaX, Y, DeltaZ);
+                          Offsets[1] = v3(-DeltaX, Y, DeltaZ);
+                          Offsets[2] = v3(-DeltaX, Y, -DeltaZ);
+                          Offsets[3] = v3(DeltaX, Y, -DeltaZ);*/
+
+                        f32 LegRotation = bkm::Sin(Game->Time * 10.3f * bkm::Length(Entity.AABBPhysics.Velocity)) * 0.3f;
+
+                        transform KneeTransform[4] = {};
+                        KneeTransform[0].Translation = v3(DeltaX, 0.0f, -DeltaZ);
+                        KneeTransform[0].Rotation = v3(-LegRotation, 0, 0);
+
+                        KneeTransform[1].Translation = v3(-DeltaX, 0.0f, -DeltaZ);
+                        KneeTransform[1].Rotation = v3(LegRotation, 0, 0);
+
+                        KneeTransform[2].Translation = v3(-DeltaX, 0.0f, DeltaZ);
+                        KneeTransform[2].Rotation = v3(LegRotation, 0, 0);
+
+                        KneeTransform[3].Translation = v3(DeltaX, 0.0f, DeltaZ);
+                        KneeTransform[3].Rotation = v3(-LegRotation, 0, 0);
+
+                        // Front Left
+                        for (u32 i = 0; i < 4; i++)
+                        {
+                            GameRendererSubmitCustomCuboid_FAST(Renderer, Entity.Transform.Matrix() * KneeTransform[i].Matrix() * LegTransform[i].Matrix(), Entity.Render.Texture, LegTextureCoords, v4(1.0f));
+                        }
                     }
                 }
+
+
             }
         }
     }

@@ -137,7 +137,7 @@ internal void GameRendererDestroy(game_renderer* Renderer)
 #if DX12_ENABLE_DEBUG_LAYER
     // Report all memory leaks
     Renderer->DxgiDebugInterface->ReportLiveObjects(DXGI_DEBUG_ALL, DXGI_DEBUG_RLO_FLAGS(DXGI_DEBUG_RLO_ALL | DXGI_DEBUG_RLO_IGNORE_INTERNAL));
-    DX12DumpInfoQueue(Renderer->DebugInfoQueue);
+    DX12DumpInfoQueue(g_DebugInfoQueue);
 #endif
 
     // Zero everything to make sure nothing can reference this
@@ -170,11 +170,11 @@ internal void GameRendererInitD3D(game_renderer* Renderer, game_window Window)
     // Debug info queue
     if (DX12_ENABLE_DEBUG_LAYER)
     {
-        DxAssert(Renderer->Device->QueryInterface(IID_PPV_ARGS(&Renderer->DebugInfoQueue)));
-        Renderer->DebugInfoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_CORRUPTION, false);
-        Renderer->DebugInfoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_ERROR, false);
-        Renderer->DebugInfoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_WARNING, false);
-        Renderer->DebugInfoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_INFO, false);
+        DxAssert(Renderer->Device->QueryInterface(IID_PPV_ARGS(&g_DebugInfoQueue)));
+        g_DebugInfoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_CORRUPTION, false);
+        g_DebugInfoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_ERROR, false);
+        g_DebugInfoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_WARNING, false);
+        g_DebugInfoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_INFO, false);
         //InfoQueue->Release();
         //Renderer->DebugInterface->Release();
 
@@ -204,7 +204,7 @@ internal void GameRendererInitD3D(game_renderer* Renderer, game_window Window)
             NewFilter.DenyList.NumIDs = CountOf(DenyIds);
             NewFilter.DenyList.pIDList = DenyIds;
 
-            DxAssert(Renderer->DebugInfoQueue->PushStorageFilter(&NewFilter));
+            DxAssert(g_DebugInfoQueue->PushStorageFilter(&NewFilter));
         }
     }
 
@@ -532,6 +532,40 @@ internal void GameRendererInitD3DPipeline(game_renderer* Renderer)
         memset(Renderer->CustomCuboidVertexDataBase, 0, sizeof(quad_vertex) * c_MaxQuadVertices);
     }
 
+    // FAST Custom cuboid
+    {
+        // Define the vertex input layout.
+        D3D12_INPUT_ELEMENT_DESC InputElementDescs[] =
+        {
+            // Per vertex
+            { "POSITION", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+
+            // Per instance
+            { "TRANSFORMA", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
+            { "TRANSFORMB", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1},
+            { "TRANSFORMC", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
+            { "TRANSFORMD", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
+
+            { "TEXCOORD", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
+            { "TEXCOORD", 1, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
+            { "TEXCOORD", 2, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
+            { "TEXCOORD", 3, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
+            { "TEXCOORD", 4, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
+            { "TEXCOORD", 5, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
+
+            { "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
+            { "TEXINDEX", 0, DXGI_FORMAT_R32_UINT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
+        };
+
+        Renderer->FastCuboidPipeline = DX12PipelineCreate(Device, Renderer->RootSignature, InputElementDescs, CountOf(InputElementDescs), L"Resources/FastCuboid.hlsl");
+
+        for (u32 i = 0; i < FIF; i++)
+        {
+            Renderer->FastCuboidTransformVertexBuffers[i] = DX12VertexBufferCreate(Device, sizeof(fast_cuboid_transform_vertex_data) * c_MaxCubePerBatch);
+        }
+        Renderer->FastCuboidInstanceData = new fast_cuboid_transform_vertex_data[sizeof(fast_cuboid_transform_vertex_data) * c_MaxCubePerBatch];
+    }
+
     // Create white texture
     {
         u32 WhiteColor = 0xffffffff;
@@ -696,6 +730,8 @@ internal void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
 
         DX12VertexBufferSendData(&Renderer->CuboidTransformVertexBuffers[CurrentBackBufferIndex], Renderer->DirectCommandList, Renderer->CuboidInstanceData, Renderer->CuboidInstanceCount * sizeof(cuboid_transform_vertex_data));
 
+        DX12VertexBufferSendData(&Renderer->FastCuboidTransformVertexBuffers[CurrentBackBufferIndex], Renderer->DirectCommandList, Renderer->FastCuboidInstanceData, Renderer->FastCuboidInstanceCount * sizeof(cuboid_transform_vertex_data));
+
         DX12VertexBufferSendData(&Renderer->CustomCuboidVertexBuffers[CurrentBackBufferIndex], Renderer->DirectCommandList, Renderer->CustomCuboidVertexDataBase, sizeof(quad_vertex) * Renderer->CustomCuboidIndexCount);
     }
 
@@ -759,6 +795,39 @@ internal void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
 
         // Issue draw call
         CommandList->DrawIndexedInstanced(36, Renderer->CuboidInstanceCount, 0, 0, 0);
+    }
+
+    // Render fast instanced cuboids
+    if (Renderer->FastCuboidInstanceCount > 0)
+    {
+        CommandList->SetPipelineState(Renderer->FastCuboidPipeline.Handle);
+
+        CommandList->SetGraphicsRoot32BitConstants(0, 16, &Renderer->CuboidRootSignatureBuffer, 0);
+
+        // Bind vertex positions
+        local_persist D3D12_VERTEX_BUFFER_VIEW FastCuboidVertexBufferView;
+        FastCuboidVertexBufferView.BufferLocation = Renderer->CuboidPositionsVertexBuffer.Buffer.Handle->GetGPUVirtualAddress();
+        FastCuboidVertexBufferView.SizeInBytes = (u32)Renderer->CuboidPositionsVertexBuffer.Buffer.Size;
+        FastCuboidVertexBufferView.StrideInBytes = sizeof(cuboid_vertex);
+
+        // Bind transforms
+        local_persist D3D12_VERTEX_BUFFER_VIEW TransformVertexBufferView;
+        TransformVertexBufferView.BufferLocation = Renderer->FastCuboidTransformVertexBuffers[CurrentBackBufferIndex].Buffer.Handle->GetGPUVirtualAddress();
+        TransformVertexBufferView.SizeInBytes = Renderer->FastCuboidInstanceCount * sizeof(fast_cuboid_transform_vertex_data);
+        TransformVertexBufferView.StrideInBytes = sizeof(fast_cuboid_transform_vertex_data);
+
+        D3D12_VERTEX_BUFFER_VIEW VertexBufferViews[] = { FastCuboidVertexBufferView, TransformVertexBufferView };
+        CommandList->IASetVertexBuffers(0, 2, VertexBufferViews);
+
+        // Bind index buffer
+        local_persist D3D12_INDEX_BUFFER_VIEW IndexBufferView;
+        IndexBufferView.BufferLocation = Renderer->QuadIndexBuffer.Buffer.Handle->GetGPUVirtualAddress();
+        IndexBufferView.SizeInBytes = 36 * sizeof(u32);
+        IndexBufferView.Format = DXGI_FORMAT_R32_UINT;
+        CommandList->IASetIndexBuffer(&IndexBufferView);
+
+        // Issue draw call
+        CommandList->DrawIndexedInstanced(36, Renderer->FastCuboidInstanceCount, 0, 0, 0);
     }
 
     // Render custom cuboids
@@ -842,6 +911,7 @@ internal void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
     // Reset Cuboid indices
     Renderer->CuboidInstanceCount = 0;
     Renderer->CustomCuboidIndexCount = 0;
+    Renderer->FastCuboidInstanceCount = 0;
     Renderer->CustomCuboidVertexDataPtr = Renderer->CustomCuboidVertexDataBase;
 
     // Reset textures
@@ -856,7 +926,7 @@ internal void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
     Renderer->CurrentBackBufferIndex = Renderer->SwapChain->GetCurrentBackBufferIndex();
 
     // Log dx12 stuff
-    DX12DumpInfoQueue(Renderer->DebugInfoQueue);
+    DumpInfoQueue();
 }
 
 internal u64 GameRendererSignal(ID3D12CommandQueue* CommandQueue, ID3D12Fence* Fence, u64* FenceValue)
@@ -1190,6 +1260,61 @@ internal void GameRendererSubmitCuboidNoRotScale(game_renderer* Renderer, const 
     Cuboid.Color = Color;
     Cuboid.Transform = bkm::Translate(m4(1.0f), Translation);
     Cuboid.TextureIndex = 0;
+    Renderer->CuboidInstanceCount++;
+#endif
+}
+
+
+internal void GameRendererSubmitCustomCuboid_FAST(game_renderer* Renderer, const m4& Transform, const texture& Texture, texture_coords TextureCoords[6], const v4& Color)
+{
+    Assert(Renderer->FastCuboidInstanceCount < c_MaxCubePerBatch, "Renderer->FastCuboidInstanceCount < c_MaxCuboidsPerBatch");
+
+    u32 TextureIndex = 0;
+    for (u32 i = 1; i < Renderer->CurrentTextureStackIndex; i++)
+    {
+        if (Renderer->TextureStack[i].Handle == Texture.Handle)
+        {
+            TextureIndex = i;
+            break;
+        }
+    }
+
+    if (TextureIndex == 0)
+    {
+        Assert(Renderer->CurrentTextureStackIndex < c_MaxTexturesPerDrawCall, "Renderer->TextureStackIndex < c_MaxTexturesPerDrawCall");
+        TextureIndex = Renderer->CurrentTextureStackIndex;
+        Renderer->TextureStack[TextureIndex] = Texture;
+        Renderer->CurrentTextureStackIndex++;
+    }
+
+    auto& Cuboid = Renderer->FastCuboidInstanceData[Renderer->FastCuboidInstanceCount];
+
+#if ENABLE_SIMD
+    /*   XMMATRIX XmmScale = XMMatrixScalingFromVector(XMVectorSet(Scale.x, Scale.y, Scale.z, 0.0f));
+       XMMATRIX XmmRot = XMMatrixRotationQuaternion(XMQuaternionRotationRollPitchYaw(Rotation.x, Rotation.y, Rotation.z));
+       XMMATRIX XmmTrans = XMMatrixTranslationFromVector(XMVectorSet(Translation.x, Translation.y, Translation.z, 0.0f));
+       XMMATRIX XmmTransform = XmmScale * XmmRot * XmmTrans;
+       */
+
+    Cuboid.Color = Color;
+    Cuboid.Transform = Transform;
+    Cuboid.TextureIndex = TextureIndex;
+
+    // Copy texture coords
+    for (i32 i = 0; i < 6; i++)
+    {
+        Cuboid.TextureCoords[i] = TextureCoords[i];
+    }
+
+    Renderer->FastCuboidInstanceCount++;
+#else
+    m4 Transform = bkm::Translate(m4(1.0f), Translation)
+        * bkm::ToM4(qtn(Rotation))
+        * bkm::Scale(m4(1.0f), Scale);
+
+    Cuboid.Color = Color;
+    Cuboid.Transform = Transform;
+    Cuboid.TextureIndex = TextureIndex;
     Renderer->CuboidInstanceCount++;
 #endif
 }

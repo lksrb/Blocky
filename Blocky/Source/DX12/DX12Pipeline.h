@@ -9,31 +9,109 @@ struct dx12_pipeline
 internal dx12_pipeline DX12PipelineCreate(ID3D12Device* Device, ID3D12RootSignature* RootSignature, D3D12_INPUT_ELEMENT_DESC Inputs[], u32 InputsCount, const wchar_t* ShaderPath)
 {
     dx12_pipeline Pipeline = {};
+
+    IDxcBlob* VertexShader = nullptr;
+    IDxcBlob* PixelShader = nullptr;
+
+    // Initialize DXC
+    IDxcCompiler3* Compiler;
+    IDxcLibrary* Library;
+    DxAssert(DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&Compiler)));
+    DxAssert(DxcCreateInstance(CLSID_DxcLibrary, IID_PPV_ARGS(&Library)));
+
+    IDxcBlobEncoding* SourceShader;
+    DxAssert(Library->CreateBlobFromFile(ShaderPath, nullptr, &SourceShader));
+
+    // VERTEX
+    {
 #if defined(BK_DEBUG)
-    // Enable better shader debugging with the graphics debugging tools.
-    const UINT CompileFlags = D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
+        LPCWSTR Arguments[] = {
+            L"-T", L"vs_6_0",  // Shader profile
+            L"-E", L"VSMain", // Entry point
+            L"-Zi",            // Debug info
+            L"-Qembed_debug",  // Embed debug info
+        };
 #else
-    const UINT CompileFlags = 0;
+        LPCWSTR Arguments[] = {
+            L"-T", L"vs_6_0",  // Shader profile
+            L"-E", L"VSMain", // Entry point
+            //L"-Zi",            // Debug info
+            //L"-Qembed_debug",  // Embed debug info
+        };
 #endif
 
-    ID3DBlob* VertexShader = nullptr;
-    ID3DBlob* PixelShader = nullptr;
+        DxcBuffer Buffer = {};
 
-    ID3DBlob* ErrorMessage = nullptr;
+        BOOL Known;
+        SourceShader->GetEncoding(&Known, &Buffer.Encoding);
+        Buffer.Ptr = SourceShader->GetBufferPointer();
+        Buffer.Size = SourceShader->GetBufferSize();
 
-    // Really? Why isn't there some ANSI version?
-    if (FAILED(D3DCompileFromFile(ShaderPath, nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "VSMain", "vs_5_1", CompileFlags, 0, &VertexShader, &ErrorMessage)))
-    {
-        if (ErrorMessage)
+        IDxcResult* Result;
+        DxAssert(Compiler->Compile(&Buffer, Arguments, CountOf(Arguments), nullptr, IID_PPV_ARGS(&Result)));
+
+        HRESULT ErrorCode;
+        Result->GetStatus(&ErrorCode);
+
+        if (FAILED(ErrorCode))
+        {
+            IDxcBlobEncoding* ErrorMessage = nullptr;
+
+            Result->GetErrorBuffer(&ErrorMessage);
+
             Err("%s", (const char*)ErrorMessage->GetBufferPointer());
-        Assert(false, "");
+            Assert(false, "");
+        }
+        else
+        {
+            Result->GetResult(&VertexShader);
+        }
     }
 
-    if (FAILED(D3DCompileFromFile(ShaderPath, nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "PSMain", "ps_5_1", CompileFlags, 0, &PixelShader, &ErrorMessage)))
+    // FRAGMENT
     {
-        if (ErrorMessage)
+#if defined(BK_DEBUG)
+        LPCWSTR Arguments[] = {
+           L"-T", L"ps_6_0",  // Shader profile
+           L"-E", L"PSMain", // Entry point
+           L"-Zi",            // Debug info
+           L"-Qembed_debug",  // Embed debug info
+        };
+#else
+        LPCWSTR Arguments[] = {
+           L"-T", L"ps_6_0",  // Shader profile
+           L"-E", L"PSMain", // Entry point
+           //L"-Zi",            // Debug info
+           //L"-Qembed_debug",  // Embed debug info
+        };
+#endif
+
+        DxcBuffer Buffer = {};
+
+        BOOL Known;
+        SourceShader->GetEncoding(&Known, &Buffer.Encoding);
+        Buffer.Ptr = SourceShader->GetBufferPointer();
+        Buffer.Size = SourceShader->GetBufferSize();
+
+        IDxcResult* Result;
+        DxAssert(Compiler->Compile(&Buffer, Arguments, CountOf(Arguments), nullptr, IID_PPV_ARGS(&Result)));
+
+        HRESULT ErrorCode;
+        Result->GetStatus(&ErrorCode);
+
+        if (FAILED(ErrorCode))
+        {
+            IDxcBlobEncoding* ErrorMessage = nullptr;
+
+            Result->GetErrorBuffer(&ErrorMessage);
+
             Err("%s", (const char*)ErrorMessage->GetBufferPointer());
-        Assert(false, "");
+            Assert(false, "");
+        }
+        else
+        {
+            Result->GetResult(&PixelShader);
+        }
     }
 
     D3D12_GRAPHICS_PIPELINE_STATE_DESC PipelineDesc = {};
@@ -78,15 +156,15 @@ internal dx12_pipeline DX12PipelineCreate(ID3D12Device* Device, ID3D12RootSignat
 
     PipelineDesc.InputLayout = { Inputs, InputsCount };
     PipelineDesc.pRootSignature = RootSignature;
-    PipelineDesc.VS = CD3DX12_SHADER_BYTECODE(VertexShader);
-    PipelineDesc.PS = CD3DX12_SHADER_BYTECODE(PixelShader);
+    PipelineDesc.VS = { VertexShader->GetBufferPointer(), VertexShader->GetBufferSize() };
+    PipelineDesc.PS = { PixelShader->GetBufferPointer(), PixelShader->GetBufferSize() };
     PipelineDesc.SampleMask = UINT_MAX;
     PipelineDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
     PipelineDesc.NumRenderTargets = 1;
     PipelineDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
     PipelineDesc.SampleDesc.Count = 1;
     DxAssert(Device->CreateGraphicsPipelineState(&PipelineDesc, IID_PPV_ARGS(&Pipeline.Handle)));
-    
+
     return Pipeline;
 }
 

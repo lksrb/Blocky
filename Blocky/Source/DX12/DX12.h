@@ -4,18 +4,22 @@
 
 #include <d3d12.h>
 #include <dxgi1_6.h>
-#include <d3dcompiler.h>
+#include <d3d12shader.h>
+#include <dxcapi.h>
 #include <DirectXMath.h>
 using namespace DirectX;
 
+#pragma comment(lib, "dxcompiler.lib")
 #pragma comment(lib, "d3d12.lib")
-#pragma comment(lib, "d3dcompiler.lib")
 #pragma comment(lib, "dxgi.lib")
 
 // D3D12 extension
 #include "d3dx12.h"
 
-#define DxAssert(x) Assert(SUCCEEDED(x), #x)
+// TODO: Better approach?
+inline ID3D12InfoQueue* g_DebugInfoQueue; // Created by GameRenderer
+#define DumpInfoQueue() DX12DumpInfoQueue(g_DebugInfoQueue)
+#define DxAssert(x) do { HRESULT __Result = x; if (FAILED(__Result)) { DumpInfoQueue(); Assert(false, #x); } } while(0)
 #define FIF 2
 
 #if BK_DEBUG

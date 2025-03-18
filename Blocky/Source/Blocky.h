@@ -114,6 +114,12 @@ struct entity
     inline bool HasFlags(entity_flags Flags) { return u32(this->Flags & Flags) != 0; }
 };
 
+struct fast_entity
+{
+    transform* Transforms;
+    renderable* Renderables;
+};
+
 struct player
 {
     v3 Position = v3(0.0f, 20, 1.0f);

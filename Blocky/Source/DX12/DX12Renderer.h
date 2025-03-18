@@ -43,18 +43,6 @@ struct cuboid_vertex
     v2 TextureCoord;
 };
 
-struct custom_cuboid_transform_vertex_data
-{
-    union
-    {
-        m4 Transform;
-        XMMATRIX XmmTransform;
-    };
-
-    v4 Color; // 6 colors needed as well?
-    texture_coords TextureCoord[6];
-};
-
 struct cuboid_transform_vertex_data
 {
     union
@@ -63,6 +51,19 @@ struct cuboid_transform_vertex_data
         XMMATRIX XmmTransform;
     };
 
+    v4 Color;
+    u32 TextureIndex;
+};
+
+struct fast_cuboid_transform_vertex_data
+{
+    union
+    {
+        m4 Transform;
+        XMMATRIX XmmTransform;
+    };
+
+    texture_coords TextureCoords[6];
     v4 Color;
     u32 TextureIndex;
 };
@@ -88,8 +89,6 @@ struct game_renderer
 #if BK_DEBUG
     IDXGIDebug1* DxgiDebugInterface;
 #endif
-
-    ID3D12InfoQueue* DebugInfoQueue;
 
     ID3D12CommandAllocator* DirectCommandAllocators[FIF];
     ID3D12GraphicsCommandList2* DirectCommandList;
@@ -156,6 +155,12 @@ struct game_renderer
     quad_vertex* CustomCuboidVertexDataBase;
     quad_vertex* CustomCuboidVertexDataPtr;
     u32 CustomCuboidIndexCount = 0;
+
+    // FAST Custom Cuboid
+    dx12_pipeline FastCuboidPipeline = {};
+    fast_cuboid_transform_vertex_data* FastCuboidInstanceData = nullptr;
+    u32 FastCuboidInstanceCount = 0;
+    dx12_vertex_buffer FastCuboidTransformVertexBuffers[FIF] = {};
 };
 
 // Init / Destroy functions
@@ -188,3 +193,5 @@ internal void GameRendererSubmitCuboidNoRotScale(game_renderer* Renderer, const 
 internal void GameRendererSubmitCustomCuboid(game_renderer* Renderer, const m4& Transform, const texture& Texture, texture_coords TextureCoords[6], const v4& Color);
 
 internal void GameRendererSubmitCustomCuboid(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale, const texture& Texture, texture_coords TextureCoords[6], const v4& Color);
+
+internal void GameRendererSubmitCustomCuboid_FAST(game_renderer* Renderer, const m4& Transform, const texture& Texture, texture_coords TextureCoords[6], const v4& Color);
