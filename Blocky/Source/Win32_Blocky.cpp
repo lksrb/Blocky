@@ -209,10 +209,10 @@ struct buffer
     u64 Size;
 };
 
-class scoped_timer
+class debug_scoped_timer
 {
 public:
-    scoped_timer(const char* name, bool output = true)
+    debug_scoped_timer(const char* name, bool output = true)
         : m_Name(name), m_Output(output)
     {
         ::QueryPerformanceCounter(&m_Start);
@@ -232,7 +232,7 @@ public:
         return timeStep * 1000.0f;
     }
 
-    ~scoped_timer()
+    ~debug_scoped_timer()
     {
         if (m_Output == false)
             return;
@@ -255,18 +255,18 @@ private:
     bool m_Output;
 };
 
-struct cycle_counter_timer
+struct debug_cycle_counter
 {
-    u64 Begin;
+    DWORD64 Begin;
     const char* Tag;
 
-    cycle_counter_timer(const char* Tag)
+    debug_cycle_counter(const char* Tag)
     {
         this->Tag = Tag;
         Begin = __rdtsc();
     }
 
-    ~cycle_counter_timer()
+    ~debug_cycle_counter()
     {
         Trace("%s took %d cycles", Tag, i32(__rdtsc() - Begin));
     }
@@ -581,8 +581,8 @@ internal void Win32ProcessEvents(game_window Window, game_input* Input)
 internal game_window CreateGameWindow()
 {
     game_window Window;
-    const u32 DefaultWindowWidth = u32(1600 * 1.3f);
-    const u32 DefaultWindowHeight = u32(900 * 1.3f);
+    const u32 DefaultWindowWidth = u32(1600 * 1.0f);
+    const u32 DefaultWindowHeight = u32(900 * 1.0f);
 
     // Show window on primary window
     // TODO: User should choose on which monitor to display

@@ -147,7 +147,7 @@ struct game
 
     player Player;
 
-    entity AliveEntities[MaxAliveEntitiesCount];
+    entity* AliveEntities = nullptr;
     i32 AliveEntitiesCount = 0;
 
     std::vector<block> Blocks;

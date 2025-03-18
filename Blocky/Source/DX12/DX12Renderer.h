@@ -43,6 +43,18 @@ struct cuboid_vertex
     v2 TextureCoord;
 };
 
+struct custom_cuboid_transform_vertex_data
+{
+    union
+    {
+        m4 Transform;
+        XMMATRIX XmmTransform;
+    };
+
+    v4 Color; // 6 colors needed as well?
+    texture_coords TextureCoord[6];
+};
+
 struct cuboid_transform_vertex_data
 {
     union

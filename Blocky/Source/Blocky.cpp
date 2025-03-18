@@ -12,8 +12,12 @@ internal game GameCreate(game_renderer* Renderer)
 
     GameGenerateWorld(&Game);
 
+    Game.AliveEntities = new entity[MaxAliveEntitiesCount];
+
+    texture CowTexture = TextureCreate(Renderer->Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, "Resources/Textures/MC/cow.png");;
+
     // Create player entity
-    for (size_t i = 0; i < 0; i++)
+    for (size_t i = 0; i < 100; i++)
     {
         auto CowEntity = EntityCreate(&Game);
         CowEntity->Type = entity_type::Cow;
@@ -22,7 +26,7 @@ internal game GameCreate(game_renderer* Renderer)
         CowEntity->Transform.Rotation = v3(0.0f, 0.0f, 0.0f);
         CowEntity->AABBPhysics.BoxSize = v3(0.8f, 1.8, 0.8f);
         CowEntity->SetFlags(entity_flags::Valid | entity_flags::InteractsWithBlocks);
-        CowEntity->Render.Texture = TextureCreate(Renderer->Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, "Resources/Textures/MC/cow.png");
+        CowEntity->Render.Texture = CowTexture;
     }
 
     return Game;
@@ -121,7 +125,7 @@ internal void GameGenerateWorld(game* Game)
 
 internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* Input, f32 TimeStep, u32 ClientAreaWidth, u32 ClientAreaHeight)
 {
-    //cycle_counter_timer GameUpdateCounter("GameUpdateCounter");
+    debug_cycle_counter GameUpdateCounter("GameUpdateCounter");
 
     // Live entities
     GamePlayerUpdate(Game, Input, Renderer, TimeStep);
@@ -187,109 +191,8 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
     // Physics simulation
     if (1)
     {
-        auto Entities = Game->AliveEntities;
-        for (i32 i = 0; i < Game->AliveEntitiesCount; i++)
-        {
-            auto& Entity = Entities[i];
-
-            // Skip all of those
-            if (!Entity.HasFlags(entity_flags::Valid | entity_flags::InteractsWithBlocks))
-                continue;
-
-            const f32 G = -9.81f * 2;
-            const f32 CheckRadius = 2.0f;
-
-            // Apply gravity and movement forces
-            v3 NextVelocity = Entity.AABBPhysics.Velocity;
-            NextVelocity.y += G * TimeStep;  // Gravity
-
-            v3 NextPos = Entity.Transform.Translation;
-            aabb EntityAABB;
-
-            Entity.AABBPhysics.Grounded = false;
-
-            // Y - Gravity
-            NextPos.y += NextVelocity.y * TimeStep;
-            EntityAABB = AABBFromV3(NextPos, Entity.AABBPhysics.BoxSize);
-
-            for (auto& BlockIndex : Entity.BlocksAround)
-            {
-                auto& Block = Game->Blocks[BlockIndex];
-
-                if (!Block.Placed)
-                    continue;
-
-                aabb BlockAABB = AABBFromV3(Block.Position, v3(1.0f));
-
-                if (AABBCheckCollision(EntityAABB, BlockAABB))
-                {
-                    // Hit something above? Stop jumping.
-                    if (NextVelocity.y > 0)
-                    {
-                        NextVelocity.y = 0;
-                    }
-                    // Hit the ground? Reset velocity and allow jumping again.
-                    else if (NextVelocity.y < 0)
-                    {
-                        Entity.AABBPhysics.Grounded = true;
-                        NextVelocity.y = 0;
-                    }
-                    NextPos.y = Entity.Transform.Translation.y; // Revert movement
-                    break;
-                }
-            }
-
-            // Move X-axis
-            NextPos.x += NextVelocity.x * TimeStep;
-            EntityAABB = AABBFromV3(NextPos, Entity.AABBPhysics.BoxSize);
-
-            for (auto& BlockIndex : Entity.BlocksAround)
-            {
-                auto& Block = Game->Blocks[BlockIndex];
-
-                if (!Block.Placed)
-                    continue;
-
-                aabb BlockAABB = AABBFromV3(Block.Position, v3(1.0f));
-
-                if (AABBCheckCollision(EntityAABB, BlockAABB))
-                {
-                    // Collision on X-axis: stop only X movement
-                    NextVelocity.x = 0;
-                    NextPos.x = Entity.Transform.Translation.x;
-                    break;
-                }
-            }
-
-            // Move Z-axis
-            NextPos.z += NextVelocity.z * TimeStep;
-            EntityAABB = AABBFromV3(NextPos, Entity.AABBPhysics.BoxSize);
-
-            for (auto& BlockIndex : Entity.BlocksAround)
-            {
-                auto& Block = Game->Blocks[BlockIndex];
-
-                if (!Block.Placed)
-                    continue;
-
-                aabb BlockAABB = AABBFromV3(Block.Position, v3(1.0f));
-
-                if (AABBCheckCollision(EntityAABB, BlockAABB))
-                {
-                    // Collision on Z-axis: stop only Z movement
-                    NextVelocity.z = 0;
-                    NextPos.z = Entity.Transform.Translation.z;
-                    break;
-                }
-            }
-
-            Entity.Transform.Translation = NextPos;
-            Entity.AABBPhysics.Velocity = NextVelocity;
-        }
-    }
-    else
-    {
-        scoped_timer Timer("Physics simulation");
+        //debug_cycle_counter CC("Fast physics simulation");
+        //debug_scoped_timer Timer("Fast physics simulation");
 
         auto Entities = Game->AliveEntities;
         for (i32 i = 0; i < Game->AliveEntitiesCount; i++)
@@ -308,88 +211,119 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
             NextVelocity.y += G * TimeStep;  // Gravity
 
             v3 NextPos = Entity.Transform.Translation;
-            aabb EntityAABB;
 
             Entity.AABBPhysics.Grounded = false;
 
-            // Y - Gravity
             NextPos.y += NextVelocity.y * TimeStep;
-            EntityAABB = AABBFromV3(NextPos, Entity.AABBPhysics.BoxSize);
 
-            for (auto& Block : Game->Blocks)
+            aabb EntityAABB = AABBFromV3(NextPos, Entity.AABBPhysics.BoxSize);
+
+            // Stepping on a block
+            // Is kinda wonky
+            i32 C = (i32)bkm::Floor(NextPos.x + 0.5f);
+            i32 R = (i32)bkm::Floor(NextPos.z + 0.5f);
+            i32 L = (i32)bkm::Floor(NextPos.y + 0.5f);
+
+            for (i32 l = -1; l <= 1; l += 2)
             {
-                if (!Block.Placed)
-                    continue;
-
-                if (bkm::Length(Block.Position - Entity.Transform.Translation) > CheckRadius)
-                    continue;
-
-                aabb BlockAABB = AABBFromV3(Block.Position, v3(1.0f));
-
-                if (AABBCheckCollision(EntityAABB, BlockAABB))
+                for (i32 c = -1; c <= 1; c++)
                 {
-                    // Hit something above? Stop jumping.
-                    if (NextVelocity.y > 0)
+                    for (i32 r = -1; r <= 1; r++)
                     {
-                        NextVelocity.y = 0;
+                        auto Block = BlockGetSafe(Game, C + c, R + r, L + l);
+
+                        if (Block && Block->Placed)
+                        {
+                            aabb BlockAABB = AABBFromV3(Block->Position, v3(1.0f));
+                            if (AABBCheckCollision(EntityAABB, BlockAABB))
+                            {
+                                // Hit something above? Stop jumping.
+                                if (NextVelocity.y > 0)
+                                {
+                                    NextVelocity.y = 0;
+                                }
+                                // Hit the ground? Reset velocity and allow jumping again.
+                                else if (NextVelocity.y < 0)
+                                {
+                                    Entity.AABBPhysics.Grounded = true;
+                                    NextVelocity.y = 0;
+                                }
+                                NextPos.y = Entity.Transform.Translation.y; // Revert movement
+                                goto ExitLoopY;
+                            }
+                        }
                     }
-                    // Hit the ground? Reset velocity and allow jumping again.
-                    else if (NextVelocity.y < 0)
-                    {
-                        Entity.AABBPhysics.Grounded = true;
-                        NextVelocity.y = 0;
-                    }
-                    NextPos.y = Entity.Transform.Translation.y; // Revert movement
-                    break;
                 }
             }
 
-            // Move X-axis
+        ExitLoopY:
+
+            // XXX
             NextPos.x += NextVelocity.x * TimeStep;
+
             EntityAABB = AABBFromV3(NextPos, Entity.AABBPhysics.BoxSize);
 
-            for (auto& Block : Game->Blocks)
+            C = (i32)bkm::Floor(NextPos.x + 0.5f);
+            R = (i32)bkm::Floor(NextPos.z + 0.5f);
+            L = (i32)bkm::Floor(NextPos.y + 0.5f);
+
+            for (i32 c = -1; c <= 1; c += 2)
             {
-                if (!Block.Placed)
-                    continue;
-
-                if (bkm::Length(Block.Position - Entity.Transform.Translation) > CheckRadius)
-                    continue;
-
-                aabb BlockAABB = AABBFromV3(Block.Position, v3(1.0f));
-
-                if (AABBCheckCollision(EntityAABB, BlockAABB))
+                for (i32 r = -1; r <= 1; r++)
                 {
-                    // Collision on X-axis: stop only X movement
-                    NextVelocity.x = 0;
-                    NextPos.x = Entity.Transform.Translation.x;
-                    break;
+                    for (i32 l = -1; l <= 1; l++)
+                    {
+                        auto Block = BlockGetSafe(Game, C + c, R + r, L + l);
+
+                        if (Block && Block->Placed)
+                        {
+                            aabb BlockAABB = AABBFromV3(Block->Position, v3(1.0f));
+                            if (AABBCheckCollision(EntityAABB, BlockAABB))
+                            {
+                                Block->Color = v4(0, 0, 1, 1);
+                                NextPos.x = Entity.Transform.Translation.x;
+                                NextVelocity.x = 0.0f;
+                                goto ExitLoopX;
+                            }
+                        }
+                    }
                 }
             }
+        ExitLoopX:
 
-            // Move Z-axis
+            // ZZZ
             NextPos.z += NextVelocity.z * TimeStep;
+
             EntityAABB = AABBFromV3(NextPos, Entity.AABBPhysics.BoxSize);
 
-            for (auto& Block : Game->Blocks)
+            C = (i32)bkm::Floor(NextPos.x + 0.5f);
+            R = (i32)bkm::Floor(NextPos.z + 0.5f);
+            L = (i32)bkm::Floor(NextPos.y + 0.5f);
+
+            for (i32 r = -1; r <= 1; r += 2)
             {
-                if (!Block.Placed)
-                    continue;
-
-                if (bkm::Length(Block.Position - Entity.Transform.Translation) > CheckRadius)
-                    continue;
-
-                aabb BlockAABB = AABBFromV3(Block.Position, v3(1.0f));
-
-                if (AABBCheckCollision(EntityAABB, BlockAABB))
+                for (i32 c = -1; c <= 1; c++)
                 {
-                    // Collision on Z-axis: stop only Z movement
-                    NextVelocity.z = 0;
-                    NextPos.z = Entity.Transform.Translation.z;
-                    break;
+                    for (i32 l = -1; l <= 1; l++)
+                    {
+                        auto Block = BlockGetSafe(Game, C + c, R + r, L + l);
+
+                        if (Block && Block->Placed)
+                        {
+                            aabb BlockAABB = AABBFromV3(Block->Position, v3(1.0f));
+                            if (AABBCheckCollision(EntityAABB, BlockAABB))
+                            {
+                                Block->Color = v4(0, 0, 1, 1);
+                                NextPos.z = Entity.Transform.Translation.z;
+                                NextVelocity.z = 0.0f;
+                                goto ExitLoopZ;
+                            }
+                        }
+                    }
                 }
             }
 
+        ExitLoopZ:
             Entity.Transform.Translation = NextPos;
             Entity.AABBPhysics.Velocity = NextVelocity;
         }
@@ -397,6 +331,7 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
 
     // Render entities
     {
+        debug_cycle_counter GameUpdateCounter("Render Entities");
         //scoped_timer Timer("Render entities");
 
         auto Entities = Game->AliveEntities;
@@ -548,6 +483,8 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
     // Render blocks
     if (1)
     {
+        debug_cycle_counter GameUpdateCounter("Render Blocks");
+
         for (auto& Block : Game->Blocks)
         {
             if (!Block.Placed)
