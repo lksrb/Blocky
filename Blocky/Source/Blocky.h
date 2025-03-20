@@ -114,11 +114,14 @@ struct entity
     inline bool HasFlags(entity_flags Flags) { return u32(this->Flags & Flags) != 0; }
 };
 
-struct fast_entity
+struct entity_registry
 {
     transform* Transforms;
     renderable* Renderables;
 };
+
+using entity_index = u32;
+
 
 struct player
 {

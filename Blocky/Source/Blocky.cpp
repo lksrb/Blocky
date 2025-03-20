@@ -357,6 +357,19 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
             LegTextureCoords[5] = Bottom;
         }
 
+        {
+            //GameRendererSubmitCuboidNoRotScale(Renderer, v3(0, 20, 0), Game->BlockTextures[(u32)block_type::Dirt], v4(1.0f));
+
+            texture_coords TextureCoords[6];
+
+            for (i32 i = 0; i < 6; i++)
+            {
+                TextureCoords[i] = texture_coords();
+            }
+            m4 Transform = bkm::Translate(m4(1.0f), v3(0, 20, 0));
+            GameRendererSubmitCustomCuboid_FAST(Renderer, Transform, Game->BlockTextures[(u32)block_type::Dirt], TextureCoords, v4(1.0f, 0.0f, 0.0f, 1.0f));
+        }
+
         auto Entities = Game->AliveEntities;
         for (i32 i = 0; i < Game->AliveEntitiesCount; i++)
         {
@@ -369,9 +382,9 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
             if (Entity.Type == entity_type::Cow)
             {
                 // Body
-                GameRendererSubmitCustomCuboid(Renderer, Entity.Transform.Matrix(), Entity.Render.Texture, BodyTextureCoords, v4(1.0f));
+                GameRendererSubmitCustomCuboid_FAST(Renderer, Entity.Transform.Matrix(), Entity.Render.Texture, BodyTextureCoords, v4(1.0f));
 
-                if (0)
+                if (1)
                 {
 
                     // IDEA: Move the head based on its scale to preserve the same position of the head/body
@@ -732,11 +745,11 @@ internal void GamePlayerUpdate(game* Game, const game_input* Input, game_rendere
     {
         Player.Position += Direction * Speed * TimeStep;
 
-        //// Update coords
+        // Update coords
         i32 C = (i32)bkm::Floor(Player.Position.x + 0.5f);
         i32 R = (i32)bkm::Floor(Player.Position.z + 0.5f);
         i32 L = (i32)bkm::Floor(Player.Position.y + 0.5f);
-
+#if 0
         for (i32 i = -1; i <= 1; i++)
         {
             for (i32 j = -1; j <= 1; j++)
@@ -749,6 +762,7 @@ internal void GamePlayerUpdate(game* Game, const game_input* Input, game_rendere
                 }
             }
         }
+#endif
     }
 
     // Destroy block

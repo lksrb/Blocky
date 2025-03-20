@@ -141,7 +141,7 @@ internal dx12_pipeline DX12PipelineCreate(ID3D12Device* Device, ID3D12RootSignat
     PipelineDesc.BlendState = {};
     PipelineDesc.BlendState.AlphaToCoverageEnable = FALSE;
     PipelineDesc.BlendState.IndependentBlendEnable = FALSE;
-    for (UINT i = 0; i < D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT; ++i)
+    for (i32 i = 0; i < D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT; ++i)
     {
         auto& Desc = PipelineDesc.BlendState.RenderTarget[i];
         Desc.BlendEnable = TRUE;

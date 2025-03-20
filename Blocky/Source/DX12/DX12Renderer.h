@@ -20,13 +20,13 @@ struct texture_coords
 {
     v2 Coords[4];
 
-    //    texture_coords()
-    //    {
-    //        Coords[0] = { 0.0f, 0.0f };
-    //        Coords[1] = { 1.0f, 0.0f };
-    //        Coords[2] = { 1.0f, 1.0f };
-    //        Coords[3] = { 0.0f, 1.0f };
-    //    }
+    explicit texture_coords()
+    {
+        Coords[0] = { 0.0f, 0.0f };
+        Coords[1] = { 1.0f, 0.0f };
+        Coords[2] = { 1.0f, 1.0f };
+        Coords[3] = { 0.0f, 1.0f };
+    }
 };
 
 struct quad_vertex
@@ -161,6 +161,8 @@ struct game_renderer
     fast_cuboid_transform_vertex_data* FastCuboidInstanceData = nullptr;
     u32 FastCuboidInstanceCount = 0;
     dx12_vertex_buffer FastCuboidTransformVertexBuffers[FIF] = {};
+
+    dx12_vertex_buffer FastCuboidVertexBufferPositions;
 };
 
 // Init / Destroy functions
