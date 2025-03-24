@@ -114,14 +114,16 @@ struct entity
     inline bool HasFlags(entity_flags Flags) { return u32(this->Flags & Flags) != 0; }
 };
 
-struct entity_registry
-{
-    transform* Transforms;
-    renderable* Renderables;
-};
-
 using entity_index = u32;
 
+struct entity_registry
+{
+    std::vector<u32> SparseEntities; // These index into an array
+    std::vector<u32> DenseEntities;
+
+    std::vector<transform> Transforms;
+    std::vector<renderable> Renderables;
+};
 
 struct player
 {

@@ -458,7 +458,7 @@ internal void GameRendererInitD3DPipeline(game_renderer* Renderer)
             Renderer->QuadVertexBuffers[i] = DX12VertexBufferCreate(Device, sizeof(quad_vertex) * c_MaxQuadVertices);
         }
 
-        Renderer->QuadVertexDataBase = new quad_vertex[c_MaxQuadVertices]; // TODO: Arena allocator
+        Renderer->QuadVertexDataBase = VmAllocArray(quad_vertex, c_MaxQuadVertices);
         Renderer->QuadVertexDataPtr = Renderer->QuadVertexDataBase;
 
         // For better debugging
@@ -467,7 +467,7 @@ internal void GameRendererInitD3DPipeline(game_renderer* Renderer)
 
         // Quad Index buffer
         {
-            u32* QuadIndices = new u32[c_MaxQuadIndices];
+            u32* QuadIndices = VmAllocArray(u32, c_MaxQuadIndices);
             u32 Offset = 0;
             for (u32 i = 0; i < c_MaxQuadIndices; i += 6)
             {
@@ -516,7 +516,7 @@ internal void GameRendererInitD3DPipeline(game_renderer* Renderer)
         {
             Renderer->CuboidTransformVertexBuffers[i] = DX12VertexBufferCreate(Device, sizeof(cuboid_transform_vertex_data) * c_MaxCubePerBatch);
         }
-        Renderer->CuboidInstanceData = new cuboid_transform_vertex_data[sizeof(cuboid_transform_vertex_data) * c_MaxCubePerBatch];
+        Renderer->CuboidInstanceData = VmAllocArray(cuboid_transform_vertex_data, c_MaxCubePerBatch);
     }
 
     // Custom Cuboid
@@ -526,7 +526,7 @@ internal void GameRendererInitD3DPipeline(game_renderer* Renderer)
             Renderer->CustomCuboidVertexBuffers[i] = DX12VertexBufferCreate(Device, sizeof(quad_vertex) * c_MaxQuadVertices);
         }
 
-        Renderer->CustomCuboidVertexDataBase = new quad_vertex[c_MaxQuadVertices]; // TODO: Arena allocator
+        Renderer->CustomCuboidVertexDataBase = VmAllocArray(quad_vertex, c_MaxQuadVertices);
         Renderer->CustomCuboidVertexDataPtr = Renderer->CustomCuboidVertexDataBase;
 
         // For better debugging
@@ -587,7 +587,8 @@ internal void GameRendererInitD3DPipeline(game_renderer* Renderer)
         {
             Renderer->FastCuboidTransformVertexBuffers[i] = DX12VertexBufferCreate(Device, sizeof(fast_cuboid_transform_vertex_data) * c_MaxCubePerBatch);
         }
-        Renderer->FastCuboidInstanceData = new fast_cuboid_transform_vertex_data[sizeof(fast_cuboid_transform_vertex_data) * c_MaxCubePerBatch];
+        // TODO: MEMORY POOLS
+        Renderer->FastCuboidInstanceData = VmAllocArray(fast_cuboid_transform_vertex_data, c_MaxCubePerBatch);
 
         Renderer->FastCuboidVertexBufferPositions = DX12VertexBufferCreate(Device, sizeof(c_CuboidVerticesPositions));
 

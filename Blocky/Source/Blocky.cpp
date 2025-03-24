@@ -384,9 +384,8 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
                 // Body
                 GameRendererSubmitCustomCuboid_FAST(Renderer, Entity.Transform.Matrix(), Entity.Render.Texture, BodyTextureCoords, v4(1.0f));
 
-                if (1)
+                if (0)
                 {
-
                     // IDEA: Move the head based on its scale to preserve the same position of the head/body
                     // f32 Y = CowTranslation.y - Scale.y * 0.5f - LegScale.y * 0.5f;
                     // Head

@@ -11,7 +11,7 @@
 #include "DX12Pipeline.h"
 
 internal constexpr inline u32 c_MaxCubePerBatch = 1 << 16;
-internal constexpr inline u32 c_MaxQuadsPerBatch = 1 << 16;
+internal constexpr inline u32 c_MaxQuadsPerBatch = 1 << 4;
 internal constexpr inline u32 c_MaxQuadVertices = c_MaxQuadsPerBatch * 4;
 internal constexpr inline u32 c_MaxQuadIndices = c_MaxQuadsPerBatch * 6;
 internal constexpr inline u32 c_MaxTexturesPerDrawCall = 32; // TODO: Get this from the driver
