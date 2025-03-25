@@ -22,7 +22,7 @@ internal game GameCreate(game_renderer* Renderer)
     {
         auto CowEntity = EntityCreate(&Game);
         CowEntity->Type = entity_type::Cow;
-        CowEntity->Transform.Translation = v3(i, 17, 2);
+        CowEntity->Transform.Translation = v3((f32)i, 17, 2);
         CowEntity->Transform.Scale = v3(0.7f, 0.7f, 1.0f);
         CowEntity->Transform.Rotation = v3(0.0f, 0.0f, 0.0f);
         CowEntity->AABBPhysics.BoxSize = v3(0.8f, 1.8, 0.8f);
@@ -35,7 +35,8 @@ internal game GameCreate(game_renderer* Renderer)
 
 internal void GameGenerateWorld(game* Game)
 {
-    Game->Blocks.resize(RowCount * ColumnCount * LayerCount);
+    Game->BlocksCount = RowCount * ColumnCount * LayerCount;
+    Game->Blocks = new block[Game->BlocksCount];
 
     v3 StartPos = { 0, 0, 0, };
 
@@ -451,8 +452,6 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
                         }
                     }
                 }
-
-
             }
         }
     }
@@ -477,8 +476,10 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
     {
         //debug_cycle_counter GameUpdateCounter("Render Blocks");
 
-        for (auto& Block : Game->Blocks)
+        for (u32 i = 0; i < Game->BlocksCount; i++)
         {
+            auto& Block = Game->Blocks[i];
+
             if (!Block.Placed())
                 continue;
 
@@ -776,7 +777,7 @@ internal void GamePlayerUpdate(game* Game, const game_input* Input, game_rendere
         v3 HitNormal;
         block HitBlock;
         u64 HitIndex;
-        if (FindFirstHit(Ray, Game->Blocks, &HitPoint, &HitNormal, &HitBlock, &HitIndex))
+        if (FindFirstHit(Ray, Game->Blocks, Game->BlocksCount, &HitPoint, &HitNormal, &HitBlock, &HitIndex))
         {
             auto& Block = Game->Blocks[HitIndex];
             Block.Type = block_type::Air;
@@ -844,7 +845,7 @@ internal void GamePlayerUpdate(game* Game, const game_input* Input, game_rendere
         block HitBlock;
         u64 HitIndex;
 
-        if (FindFirstHit(Ray, Game->Blocks, &HitPoint, &HitNormal, &HitBlock, &HitIndex))
+        if (FindFirstHit(Ray, Game->Blocks, Game->BlocksCount, &HitPoint, &HitNormal, &HitBlock, &HitIndex))
         {
             v3 NewBlockPos = HitBlock.Position + HitNormal;
 

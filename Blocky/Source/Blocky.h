@@ -3,7 +3,7 @@
 #include "AABB.h"
 #include "RayCast.h"
 
-#include <vector>
+//#include <vector>
 
 struct camera
 {
@@ -149,7 +149,8 @@ struct game
     entity* AliveEntities = nullptr;
     i32 AliveEntitiesCount = 0;
 
-    std::vector<block> Blocks;
+    block* Blocks;
+    u32 BlocksCount = 0;
 
     texture CrosshairTexture;
     texture BlockTextures[BLOCK_TYPE_COUNT]; 
@@ -196,10 +197,10 @@ internal bool FindFirstHit(const ray& Ray, const block* Blocks, u64 BlocksCount,
     return FoundHit;
 }
 
-internal bool FindFirstHit(const ray& Ray, const std::vector<block>& Blocks, v3* HitPoint, v3* HitNormal, block* HitBlock, u64* HitIndex)
-{
-    return FindFirstHit(Ray, Blocks.data(), Blocks.size(), HitPoint, HitNormal, HitBlock, HitIndex);
-}
+//internal bool FindFirstHit(const ray& Ray, const std::vector<block>& Blocks, v3* HitPoint, v3* HitNormal, block* HitBlock, u64* HitIndex)
+//{
+//    return FindFirstHit(Ray, Blocks.data(), Blocks.size(), HitPoint, HitNormal, HitBlock, HitIndex);
+//}
 
 internal block* BlockGetSafe(game* Game, i32 C, i32 R, i32 L)
 {
