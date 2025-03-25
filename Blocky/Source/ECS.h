@@ -2,17 +2,19 @@
 
 // My own implementation of an ECS system
 
-#define INVALID_ID ECS_entity((u32)-1)
+#define INVALID_ID ecs_entity((ecs_entity_type)-1)
 
-//enum class entity : u32 {};
+using ecs_entity_type = u32;
+enum class ecs_entity : ecs_entity_type {};
 
-using ECS_entity = u32;
+#define to_entity(__EntityType) static_cast<ecs_entity>(__EntityType) 
+#define to_entity_type(__Entity) static_cast<ecs_entity_type>(__Entity)
 
 struct transform_sparse_set
 {
-    i32 Sparse[16];
-    i32 Dense[16];
-    i32 DenseCount = 0;
+    ecs_entity_type Sparse[16];
+    ecs_entity_type Dense[16];
+    u32 DenseCount = 0; // TODO: Should this be entity type
 
     transform DenseTransforms[16]; // Matches dense array
 
@@ -24,60 +26,41 @@ struct transform_sparse_set
     }
 };
 
-bool TransformSparseSetContains(transform_sparse_set* Set, i32 ID)
+bool TransformSparseSetContains(transform_sparse_set* Set, ecs_entity_type Entity)
 {
-    i32 DenseIndex = Set->Sparse[ID];
+    ecs_entity_type DenseIndex = Set->Sparse[to_entity_type(Entity)];
 
     // TODO: optimalization
-    return DenseIndex < Set->DenseCount && Set->Dense[DenseIndex] == ID;
+    return DenseIndex < Set->DenseCount && Set->Dense[DenseIndex] == Entity;
 }
 
-void TransformSparseSetAdd(transform_sparse_set* Set, ECS_entity Entity, const transform& Transform)
+transform& TransformSparseSetAdd(transform_sparse_set* Set, ecs_entity_type Entity)
 {
-    if (TransformSparseSetContains(Set, Entity))
-        return;
+    Assert(!TransformSparseSetContains(Set, Entity), "Entity already has this component!");
 
     Set->Dense[Set->DenseCount] = Entity;
     Set->Sparse[Entity] = Set->DenseCount;
 
-    // Set the actual transform
-    Set->DenseTransforms[Set->DenseCount] = Transform;
-
-    Set->DenseCount++;
+    // Get the actual transform
+    return Set->DenseTransforms[Set->DenseCount++];
 }
 
-i32 TransformSparseSetAdd(transform_sparse_set* Set, transform Transform)
-{
-    i32 Entity = Set->DenseCount;
-
-    Set->Dense[Set->DenseCount] = Entity;
-    Set->Sparse[Entity] = Set->DenseCount;
-
-    // Set the actual transform
-    Set->DenseTransforms[Set->DenseCount] = Transform;
-
-    Set->DenseCount++;
-
-    return Entity;
-}
-
-transform& TransformSparseSetGet(transform_sparse_set* Set, ECS_entity Entity)
+transform& TransformSparseSetGet(transform_sparse_set* Set, ecs_entity_type Entity)
 {
     return Set->DenseTransforms[Set->Sparse[Entity]];
 }
 
-void TransformSparseSetRemove(transform_sparse_set* Set, i32 ID)
+void TransformSparseSetRemove(transform_sparse_set* Set, ecs_entity_type Entity)
 {
-    if (!TransformSparseSetContains(Set, ID))
-        return;
+    Assert(TransformSparseSetContains(Set, Entity), "Entity does not have this component!");
 
     Set->DenseCount--;
 
     // We need to ensure that dense array stays dense,
     // so we need the last item to fill in the hole that is made by removing stuff
 
-    i32 DenseIndex = Set->Sparse[ID];
-    i32& Last = Set->Dense[Set->DenseCount];
+    ecs_entity_type DenseIndex = Set->Sparse[Entity];
+    ecs_entity_type& Last = Set->Dense[Set->DenseCount];
 
     {
         // Update dense transforms based on the dense index array
@@ -95,11 +78,11 @@ void TransformSparseSetRemove(transform_sparse_set* Set, i32 ID)
 
 struct entity_registry
 {
-    ECS_entity Entities[16];
+    ecs_entity Entities[16];
     u32 EntitiesCount = 0;
     transform_sparse_set TransformSet;
 
-    ECS_entity FreeList = INVALID_ID;
+    ecs_entity FreeList = INVALID_ID;
 
     entity_registry()
     {
@@ -107,66 +90,125 @@ struct entity_registry
     }
 };
 
-ECS_entity ECS_CreateEntity(entity_registry* Registry)
+ecs_entity ECS_CreateEntity(entity_registry* Registry)
 {
     if (Registry->FreeList == INVALID_ID)
     {
-        ECS_entity Entity = Registry->EntitiesCount;
-        Registry->Entities[Entity] = Entity;
+        ecs_entity Entity = to_entity(Registry->EntitiesCount);
+        Registry->Entities[to_entity_type(Entity)] = Entity;
         ++Registry->EntitiesCount;
 
         return Entity;
     }
     else
     {
-        ECS_entity Entity = Registry->FreeList;
-        Registry->FreeList = Registry->Entities[Entity];
-        Registry->Entities[Entity] = Entity;
+        ecs_entity Entity = Registry->FreeList;
+        Registry->FreeList = Registry->Entities[to_entity_type(Entity)];
+        Registry->Entities[to_entity_type(Entity)] = Entity;
         return Entity;
     }
 }
 
-void ECS_DestroyEntity(entity_registry* Registry, ECS_entity Entity)
+void ECS_DestroyEntity(entity_registry* Registry, ecs_entity Entity)
 {
-    if (TransformSparseSetContains(&Registry->TransformSet, Entity))
+    if (TransformSparseSetContains(&Registry->TransformSet, to_entity_type(Entity)))
     {
-        TransformSparseSetRemove(&Registry->TransformSet, Entity);
+        TransformSparseSetRemove(&Registry->TransformSet, to_entity_type(Entity));
     }
 
     if (Registry->FreeList == INVALID_ID)
     {
-        Registry->Entities[Entity] = INVALID_ID;
+        // Set free list entity to an invalid value to signalize that the its the last in the chain
+        Registry->Entities[to_entity_type(Entity)] = INVALID_ID;
 
         // Set free list to entity index
         Registry->FreeList = Entity;
 
-        // Set free list entity to an invalid value to signalize that the its the last in the chain
-        Registry->Entities[Registry->FreeList] = INVALID_ID;
+        //Registry->Entities[to_ecs_entity_type(Registry->FreeList)] = INVALID_ID;
     }
     else
     {
-        Registry->Entities[Entity] = Registry->FreeList;
+        Registry->Entities[to_entity_type(Entity)] = Registry->FreeList;
         Registry->FreeList = Entity;
     }
 }
 
-void ECS_AddTransformComponent(entity_registry* Registry, ECS_entity Entity, const transform& Transform)
+bool ECS_ValidEntity(entity_registry* Registry, ecs_entity Entity)
 {
-    assert(!TransformSparseSetContains(&Registry->TransformSet, Entity));
-
-    TransformSparseSetAdd(&Registry->TransformSet, Entity, Transform);
+    return Registry->EntitiesCount < to_entity_type(Entity) && Registry->Entities[to_entity_type(Entity)] == Entity;
 }
 
-void ECS_RemoveTransformComponent(entity_registry* Registry, ECS_entity Entity)
+transform& ECS_AddTransformComponent(entity_registry* Registry, ecs_entity Entity)
 {
-    assert(TransformSparseSetContains(&Registry->TransformSet, Entity));
-
-    TransformSparseSetRemove(&Registry->TransformSet, Entity);
+    Assert(!TransformSparseSetContains(&Registry->TransformSet, to_entity_type(Entity)), "Entity already has this component!");
+    return TransformSparseSetAdd(&Registry->TransformSet, to_entity_type(Entity));
 }
 
-transform& ECS_GetTransformComponent(entity_registry* Registry, ECS_entity Entity)
+void ECS_RemoveTransformComponent(entity_registry* Registry, ecs_entity Entity)
 {
-    assert(TransformSparseSetContains(&Registry->TransformSet, Entity));
+    Assert(TransformSparseSetContains(&Registry->TransformSet, to_entity_type(Entity)), "Entity does not have this component!");
 
-    return TransformSparseSetGet(&Registry->TransformSet, Entity);
+    TransformSparseSetRemove(&Registry->TransformSet, to_entity_type(Entity));
+}
+
+transform& ECS_GetTransformComponent(entity_registry* Registry, ecs_entity Entity)
+{
+    Assert(TransformSparseSetContains(&Registry->TransformSet, to_entity_type(Entity)), "Entity does not have this component!");
+
+    return TransformSparseSetGet(&Registry->TransformSet, to_entity_type(Entity));
+}
+
+void ECS_Test()
+{
+    entity_registry Registry;
+
+    for (size_t i = 0; i < 10; i++)
+    {
+
+        for (i32 i = 0; i < 10; i++)
+        {
+            ecs_entity Entity = ECS_CreateEntity(&Registry);
+
+            auto& T = ECS_AddTransformComponent(&Registry, Entity);
+            T.Translation.x = i;
+        }
+
+        auto E = to_entity(0);
+
+        bool Exists = ECS_ValidEntity(&Registry, E);
+        ECS_DestroyEntity(&Registry, E);
+        Exists = ECS_ValidEntity(&Registry, E);
+
+        for (i32 i = 0; i < 5; i++)
+        {
+            ECS_DestroyEntity(&Registry, to_entity(i));
+        }
+
+        for (i32 i = 0; i < 10; i++)
+        {
+            ecs_entity Entity = ECS_CreateEntity(&Registry);
+
+            auto& T = ECS_AddTransformComponent(&Registry, Entity);
+            T.Translation.x = -i;
+        }
+
+        /*for (u32 i = 0; i < Registry.EntitiesCount; i++)
+        {
+            if(ECS_enti)
+
+            ECS_DestroyEntity(&Registry, to_entity(i));
+        }*/
+
+    }
+
+
+    for (size_t i = 0; i < Registry.TransformSet.DenseCount; i++)
+    {
+        auto& Transform = Registry.TransformSet.DenseTransforms[i];
+        Transform.Translation.x += 1.0f;
+
+        TraceV3(Transform.Translation);
+    }
+
+    ExitProcess(0);
 }

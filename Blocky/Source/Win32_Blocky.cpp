@@ -632,6 +632,8 @@ internal game_window CreateGameWindow()
 
 int main(int argc, char** argv)
 {
+    ECS_Test();
+
     Trace("Hello, Blocky!");
 
     // If the application is not DPI aware, Windows will automatically scale the pixels to a DPI scale value (150% for example)
