@@ -166,10 +166,10 @@ struct game_renderer
 };
 
 // Init / Destroy functions
-internal game_renderer GameRendererCreate(game_window Window);
+internal game_renderer GameRendererCreate(const game_window& Window);
 internal void GameRendererDestroy(game_renderer* Renderer);
 
-internal void GameRendererInitD3D(game_renderer* Renderer, game_window Window);
+internal void GameRendererInitD3D(game_renderer* Renderer, const game_window& Window);
 internal void GameRendererInitD3DPipeline(game_renderer* Renderer);
 internal void GameRendererResizeSwapChain(game_renderer* Renderer, u32 RequestWidth, u32 RequestHeight);
 internal void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height);
@@ -197,3 +197,5 @@ internal void GameRendererSubmitCustomCuboid(game_renderer* Renderer, const m4& 
 internal void GameRendererSubmitCustomCuboid(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale, const texture& Texture, texture_coords TextureCoords[6], const v4& Color);
 
 internal void GameRendererSubmitCustomCuboid_FAST(game_renderer* Renderer, const m4& Transform, const texture& Texture, texture_coords TextureCoords[6], const v4& Color);
+
+internal void GameRendererSubmitCustomCuboid_FAST(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale, const texture& Texture, texture_coords TextureCoords[6], const v4& Color);

@@ -5,7 +5,11 @@
  * It uses sparse sets which ensure that particular component instances are tighly packed together
  * at the cost of memory, we have to keep two arrays, one for the dense entities and one for sparse entities.
  * We also have freelist mechanism where on top of a sparse set, which just stores numbers, is an array of entities.
- * With this we can even check if a valid by comparing its index with its value. If that is true, the entity is valid, otherwise false.
+ * With this we can even check if an entity is valid by looking at the index (entity value) and value at that index. If they match, its valid.
+ *
+ * Views
+ * Now the next problem is that if we want to interate through multiple components in one loop, we need the entities' slots match within each component array.
+ * This means that if a particular component is removed from component array A, all other components have to adjust t
  *
  * Sparse Sets
  * For each component there needs to be a unique sparse set implementation with that component.
@@ -13,149 +17,128 @@
  * Or just compare if the template magic is negligable or not compared to macro.
  */
 
-#define MAX_ENTITIES 16
-
-#define INVALID_ID ecs_entity((ecs_entity_type)-1)
+#define INVALID_ID entity((ecs_entity_type)-1)
 
 using ecs_entity_type = u32;
-enum class ecs_entity : ecs_entity_type {};
+enum class entity : ecs_entity_type {};
 
-#define to_entity(__EntityType) static_cast<ecs_entity>(__EntityType) 
+#define to_entity(__EntityType) static_cast<entity>(__EntityType) 
 #define to_entity_type(__Entity) static_cast<ecs_entity_type>(__Entity)
 
-/*
- * Sparse Set Implementation
- */
+#include "SparseSet.h"
 
-template<typename Component>
-struct sparse_set
+#include <tuple>
+
+template<typename T>
+struct component_pool
 {
-    ecs_entity_type Sparse[MAX_ENTITIES];
-    ecs_entity_type Dense[MAX_ENTITIES];
-    Component Components[MAX_ENTITIES]; // Matches dense array
-    ecs_entity_type DenseCount = 0;
-};
+    T* Data;
+    ecs_entity_type Size;
+    ecs_entity_type Capacity;
 
-template<typename Component>
-internal auto SparseSetCreate(ecs_entity_type Capacity)
-{
-    auto SparseSet = sparse_set<Component>();
+    sparse_set Set;
 
-    // TODO: Proper tombstone/invalid ID?
-    memset(SparseSet.Sparse, -1, sizeof(SparseSet.Sparse));
-    memset(SparseSet.Dense, -1, sizeof(SparseSet.Dense));
-    SparseSet.DenseCount = 0;
-
-    return SparseSet;
-}
-
-template<typename Component>
-internal void SparseSetDestroy(sparse_set<Component>* SparseSet)
-{
-    // TODO: Deallocation
-}
-
-template<typename Component>
-internal bool SparseSetContains(sparse_set<Component>* Set, ecs_entity_type Entity)
-{
-    ecs_entity_type DenseIndex = Set->Sparse[to_entity_type(Entity)];
-
-    // TODO: optimalization
-    return DenseIndex < Set->DenseCount && Set->Dense[DenseIndex] == Entity;
-}
-
-template<typename Component>
-internal Component& SparseSetAdd(sparse_set<Component>* Set, ecs_entity_type Entity)
-{
-    Assert(!SparseSetContains(Set, Entity), "Entity already has this component!");
-
-    Set->Dense[Set->DenseCount] = Entity;
-    Set->Sparse[Entity] = Set->DenseCount;
-
-    // Get the actual transform
-    return Set->Components[Set->DenseCount++];
-}
-
-template<typename Component>
-internal Component& SparseSetGet(sparse_set<Component>* Set, ecs_entity_type Entity)
-{
-    Assert(SparseSetContains(Set, Entity), "Entity already has this component!");
-    return Set->Components[Set->Sparse[Entity]];
-}
-
-template<typename Component>
-internal void SparseSetRemove(sparse_set<Component>* Set, ecs_entity_type Entity)
-{
-    Assert(SparseSetContains(Set, Entity), "Entity does not have this component!");
-    Assert(Set->DenseCount > 0, "Sparse Set underflow!");
-
-    Set->DenseCount--;
-
-    // We need to ensure that dense array stays dense,
-    // so we need the last item to fill in the hole that is made by removing stuff
-
-    ecs_entity_type DenseIndex = Set->Sparse[Entity];
-    ecs_entity_type& Last = Set->Dense[Set->DenseCount];
-
+    void Create(ecs_entity_type Capacity)
     {
-        // Update dense transforms based on the dense index array
-        Set->Components[DenseIndex] = Set->Components[Last];
-
-        // Reset
-        // TODO: this is not necessary but good for debugging
-        Set->Components[Last] = Component();
+        Data = new T[Capacity];
+        Set = SparseSetCreate(Capacity);
     }
 
-    Set->Dense[DenseIndex] = Last;
-    Set->Sparse[Last] = DenseIndex;
-
-    //Last = -1;
-}
-
-template<typename Component>
-internal void SparseSetClear(sparse_set<Component>* Set)
-{
-    Set->DenseCount = 0; // WOW, incredibly cheap
-}
-
-template<typename Component>
-struct view
-{
-    Component* Components;
-    ecs_entity_type Count;
-
-    auto begin() { return Components; }
-    auto end() { return Components + Count; }
+    void Destroy()
+    {
+        SparseSetDestroy(&Set);
+        delete[] Data;
+    }
 };
+
+// Helper to get the index of a type in the tuple
+template<typename T, typename Tuple>
+struct type_index;
+
+template<typename T, typename... Types>
+struct type_index<T, std::tuple<T, Types...>>
+{
+    static constexpr std::size_t value = 0;
+};
+
+template<typename T, typename U, typename... Types>
+struct type_index<T, std::tuple<U, Types...>>
+{
+    static constexpr std::size_t value = 1 + type_index<T, std::tuple<Types...>>::value;
+};
+
+using components_pools = std::tuple<component_pool<transform>, component_pool<renderable>>;
 
 struct entity_registry
 {
-    ecs_entity Entities[MAX_ENTITIES];
+    entity* Entities = nullptr;
     u32 EntitiesCount = 0;
-    sparse_set<transform> TransformSet;
+    u32 EntitiesCapacity = 0;
 
-    ecs_entity FreeList = INVALID_ID;
+    components_pools TupleDensePools;
+
+    entity FreeList = INVALID_ID;
 };
 
-internal entity_registry ECS_EntityRegistryCreate(ecs_entity_type Capacity)
+// ** Iterating over tuple elements **
+template<typename TFunc, std::size_t... Index>
+void ForEachHelper(components_pools& Pools, TFunc&& Func, std::index_sequence<Index...>)
+{
+    (Func(std::get<Index>(Pools)), ...);  // Expands the function call over all tuple elements
+}
+
+// Wrapper function to apply a function to each pool
+template<typename TFunc>
+void ForEachPool(entity_registry* Registry, TFunc&& Func)
+{
+    ForEachHelper(Registry->TupleDensePools, std::forward<TFunc>(Func),
+                  std::make_index_sequence<std::tuple_size<components_pools>::value>{});
+}
+
+// Get the pool for a specific type
+template<typename T>
+component_pool<T>& GetPool(entity_registry* Registry)
+{
+    constexpr std::size_t Index = type_index<component_pool<T>, components_pools>::value;
+    return std::get<Index>(Registry->TupleDensePools);
+}
+
+internal entity_registry EntityRegistryCreate(ecs_entity_type Capacity)
 {
     entity_registry Registry;
-    memset(Registry.Entities, (u32)INVALID_ID, sizeof(Registry.Entities));
+    Registry.Entities = new entity[Capacity];
+    Registry.EntitiesCapacity = Capacity;
+    memset(Registry.Entities, to_entity_type(INVALID_ID), Capacity * sizeof(ecs_entity_type));
+
+    // Since we know all the components that we will use, we can just instantiate them here
+    ForEachPool(&Registry, [Capacity](auto& Pool)
+    {
+        Pool.Create(Capacity);
+    });
+
     return Registry;
 }
 
-internal void ECS_EntityRegistryDestroy(entity_registry* Registry)
+internal void EntityRegistryDestroy(entity_registry* Registry)
 {
+    ForEachPool(Registry, [](auto& Pool)
+    {
+        Pool.Destroy();
+    });
 
+    delete[] Registry->Entities;
+
+    // Reset
+    *Registry = entity_registry();
 }
 
-internal ecs_entity ECS_CreateEntity(entity_registry* Registry)
+internal entity CreateEntity(entity_registry* Registry)
 {
-    Assert(Registry->EntitiesCount < MAX_ENTITIES, "Too many entities!");
+    Assert(Registry->EntitiesCount < Registry->EntitiesCapacity, "Too many entities!");
 
     if (Registry->FreeList == INVALID_ID)
     {
-        ecs_entity Entity = to_entity(Registry->EntitiesCount);
+        entity Entity = to_entity(Registry->EntitiesCount);
         Registry->Entities[to_entity_type(Entity)] = Entity;
         ++Registry->EntitiesCount;
 
@@ -163,26 +146,32 @@ internal ecs_entity ECS_CreateEntity(entity_registry* Registry)
     }
     else
     {
-        ecs_entity Entity = Registry->FreeList;
+        entity Entity = Registry->FreeList;
         Registry->FreeList = Registry->Entities[to_entity_type(Entity)];
         Registry->Entities[to_entity_type(Entity)] = Entity;
         return Entity;
     }
 }
 
-internal bool ECS_ValidEntity(entity_registry* Registry, ecs_entity Entity)
+internal bool IsValidEntity(entity_registry* Registry, entity Entity)
 {
     return to_entity_type(Entity) < Registry->EntitiesCount && Registry->Entities[to_entity_type(Entity)] == Entity;
 }
 
-internal void ECS_DestroyEntity(entity_registry* Registry, ecs_entity Entity)
+internal void DestroyEntity(entity_registry* Registry, entity Entity)
 {
-    Assert(ECS_ValidEntity(Registry, Entity), "Entity is not valid!");
+    Assert(IsValidEntity(Registry, Entity), "Entity is not valid!");
 
-    if (SparseSetContains(&Registry->TransformSet, to_entity_type(Entity)))
+    ForEachPool(Registry, [Entity](auto& Pool)
     {
-        SparseSetRemove(&Registry->TransformSet, to_entity_type(Entity));
-    }
+        if (SparseSetContains(&Pool.Set, to_entity_type(Entity)))
+        {
+            rem Rem = SparseSetRemove(&Pool.Set, to_entity_type(Entity));
+
+            // Update dense transforms based on the dense index array
+            Pool.Data[Rem.DenseIndex] = Pool.Data[Rem.Last];
+        }
+    });
 
     if (Registry->FreeList == INVALID_ID)
     {
@@ -197,75 +186,167 @@ internal void ECS_DestroyEntity(entity_registry* Registry, ecs_entity Entity)
         Registry->Entities[to_entity_type(Entity)] = Registry->FreeList;
         Registry->FreeList = Entity;
     }
+
+    --Registry->EntitiesCount;
 }
 
-internal transform& ECS_AddTransformComponent(entity_registry* Registry, ecs_entity Entity)
+template<typename T>
+internal T& AddComponent(entity_registry* Registry, entity Entity)
 {
-    Assert(!SparseSetContains(&Registry->TransformSet, to_entity_type(Entity)), "Entity already has this component!");
-    return SparseSetAdd(&Registry->TransformSet, to_entity_type(Entity));
+    auto& Pool = GetPool<T>(Registry);
+
+    Assert(!SparseSetContains(&Pool.Set, to_entity_type(Entity)), "Entity already has this component!");
+
+    auto Index = SparseSetAdd(&Pool.Set, to_entity_type(Entity));
+
+    return Pool.Data[Index];
 }
 
-internal void ECS_RemoveTransformComponent(entity_registry* Registry, ecs_entity Entity)
+template<typename T>
+internal void RemoveComponent(entity_registry* Registry, entity Entity)
 {
-    Assert(SparseSetContains(&Registry->TransformSet, to_entity_type(Entity)), "Entity does not have this component!");
+    auto& Pool = GetPool<T>(Registry);
 
-    SparseSetRemove(&Registry->TransformSet, to_entity_type(Entity));
+    Assert(SparseSetContains(&Pool.Set, to_entity_type(Entity)), "Entity does not have this component!");
+
+    SparseSetRemove(&Pool.Set, to_entity_type(Entity));
 }
 
-internal transform& ECS_GetTransformComponent(entity_registry* Registry, ecs_entity Entity)
+template<typename T>
+internal T& GetComponent(entity_registry* Registry, entity Entity)
 {
-    Assert(SparseSetContains(&Registry->TransformSet, to_entity_type(Entity)), "Entity does not have this component!");
+    auto& Pool = GetPool<T>(Registry);
 
-    return SparseSetGet(&Registry->TransformSet, to_entity_type(Entity));
+    Assert(SparseSetContains(&Pool.Set, to_entity_type(Entity)), "Entity does not have this component!");
+
+    auto Index = SparseSetGet(&Pool.Set, to_entity_type(Entity));
+
+    return Pool.Data[Index];
 }
 
-internal view<transform> ECS_ViewTransforms(entity_registry* Registry)
+template<typename T>
+struct view
 {
-    return { Registry->TransformSet.Components, Registry->TransformSet.DenseCount };
+    entity* DenseBegin;
+    entity* DenseEnd;
+    T* DenseComponentPool;
+
+    auto begin() const { return DenseBegin; }
+    auto end() const { return DenseEnd; }
+
+    T& Get(entity Entity)
+    {
+        return DenseComponentPool[to_entity_type(Entity)];
+    }
+};
+
+template<typename T0, typename T1>
+struct mult_view
+{
+    view<T0> View0;
+    view<T1> View1;
+
+    entity* DenseBegin;
+    entity* DenseEnd;
+
+    auto begin() { return DenseBegin; }
+    auto end() { return DenseEnd; }
+
+    auto Get(entity Entity)
+    {
+        auto& Component0 = View0.Get(Entity);
+        auto& Component1 = View1.Get(Entity);
+
+        return std::make_tuple<T0&, T1&>(Component0, Component1);
+    }
+};
+
+template<typename T>
+internal view<T> ViewComponents(entity_registry* Registry)
+{
+    auto& Pool = GetPool<T>(Registry);
+
+    view<T> View;
+
+    // Setup iterators
+    View.DenseBegin = (entity*)Pool.Set.Dense;
+    View.DenseEnd = (entity*)Pool.Set.Dense + Pool.Set.DenseCount;
+
+    // Also grab direct pointer to the pool
+    View.DenseComponentPool = Pool.Data;
+
+    return View;
+}
+
+template<typename T0, typename T1>
+internal mult_view<T0, T1> ViewComponents(entity_registry* Registry)
+{
+    auto View0 = ViewComponents<T0>(Registry);
+    auto View1 = ViewComponents<T1>(Registry);
+
+    mult_view<T0, T1> View;
+
+    // Setup iterators
+    auto View0Size = View0.end() - View0.begin();
+    auto View1Size = View1.end() - View1.begin();
+    if (View0Size < View1Size)
+    {
+        View.DenseBegin = View0.begin();
+        View.DenseEnd = View0.end();
+    }
+    else
+    {
+        View.DenseBegin = View1.begin();
+        View.DenseEnd = View1.end();
+    }
+
+    View.View0 = View0;
+    View.View1 = View1;
+    return View;
 }
 
 internal void ECS_Test()
 {
-    entity_registry Registry;
+    entity_registry Registry = EntityRegistryCreate(16);
 
-    for (size_t i = 0; i < 1; i++)
+    for (i32 i = 0; i < 10; i++)
     {
-        for (i32 i = 0; i < 10; i++)
+        entity Entity = CreateEntity(&Registry);
+
+        auto& T = AddComponent<transform>(&Registry, Entity);
+        T.Translation.x = (f32)i;
+
+        auto& R = AddComponent<renderable>(&Registry, Entity);
+        R.Color = v4((f32)i, 1.0f, 1.0f, 1.0f);
+    }
+
+    for (i32 i = 0; i < 5; i++)
+    {
+        RemoveComponent<transform>(&Registry, entity(i));
+    }
+
+    // View
+    {
+        auto View = ViewComponents<transform>(&Registry);
+        for (auto Entity : View)
         {
-            ecs_entity Entity = ECS_CreateEntity(&Registry);
+            auto& Transform = View.Get(Entity);
 
-            auto& T = ECS_AddTransformComponent(&Registry, Entity);
-            T.Translation.x = (f32)i;
-        }
-
-        auto E = to_entity(0);
-
-        bool Exists = ECS_ValidEntity(&Registry, E);
-        ECS_DestroyEntity(&Registry, E);
-        Exists = ECS_ValidEntity(&Registry, E);
-
-        for (i32 i = 1; i < 5; i++)
-        {
-            ECS_DestroyEntity(&Registry, to_entity(i));
-        }
-
-        for (i32 i = 0; i < 10; i++)
-        {
-            ecs_entity Entity = ECS_CreateEntity(&Registry);
-
-            auto& T = ECS_AddTransformComponent(&Registry, Entity);
-            T.Translation.x = (f32)-i;
+            TraceV3(Transform.Translation);
         }
     }
 
-    auto View = ECS_ViewTransforms(&Registry);
-
-    for (auto& Transform : View)
     {
-        Transform.Translation.x += 1.0f;
-        TraceV3(Transform.Translation);
+        auto View = ViewComponents<transform, renderable>(&Registry);
+        for (auto Entity : View)
+        {
+            auto [Transform, Renderable] = View.Get(Entity);
+
+            Trace("Transform:");
+            TraceV3(Transform.Translation);
+            Trace("Color:");
+            TraceV3(v3(Renderable.Color));
+        }
     }
 
-
-    //ExitProcess(0);
 }

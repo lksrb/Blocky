@@ -364,7 +364,7 @@ LRESULT Win32ProcedureHandler(HWND WindowHandle, UINT Message, WPARAM WParam, LP
     return Result;
 }
 
-internal void Win32ProcessEvents(game_window Window, game_input* Input)
+internal void Win32ProcessEvents(game_input* Input, const game_window& Window)
 {
     bool DoSetCursorLock = false;
     bool DoSetShowCursor = false;
@@ -677,7 +677,7 @@ int main(int argc, char** argv)
         //ScopedTimer timer("Frame");
 
         // Process events
-        Win32ProcessEvents(Window, &Input);
+        Win32ProcessEvents(&Input, Window);
 
         IsMinimized = IsIconic(Window.WindowHandle);
 

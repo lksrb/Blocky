@@ -1,5 +1,4 @@
 #include "Blocky.h"
-#include "ECS.h"
 
 internal game GameCreate(game_renderer* Renderer)
 {
@@ -13,11 +12,11 @@ internal game GameCreate(game_renderer* Renderer)
 
     GameGenerateWorld(&Game);
 
-    Game.AliveEntities = new entity[MaxAliveEntitiesCount];
+    Game.AliveEntities = new old_entity[MaxAliveEntitiesCount];
 
-    texture CowTexture = TextureCreate(Renderer->Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, "Resources/Textures/MC/cow.png");;
+    Game.CowTexture = TextureCreate(Renderer->Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, "Resources/Textures/MC/cow.png");
 
-    // Create player entity
+    // Create cows
     for (size_t i = 0; i < 100; i++)
     {
         auto CowEntity = EntityCreate(&Game);
@@ -27,7 +26,41 @@ internal game GameCreate(game_renderer* Renderer)
         CowEntity->Transform.Rotation = v3(0.0f, 0.0f, 0.0f);
         CowEntity->AABBPhysics.BoxSize = v3(0.8f, 1.8, 0.8f);
         CowEntity->SetFlags(entity_flags::Valid | entity_flags::InteractsWithBlocks);
-        CowEntity->Render.Texture = CowTexture;
+        CowEntity->Render.Texture = Game.CowTexture;
+    }
+
+    Game.Registry = EntityRegistryCreate(5);
+
+    // Create another set of cows
+    {
+        for (size_t i = 0; i < 5; i++)
+        {
+            auto CowEntity = CreateEntity(&Game.Registry);
+
+            auto& Transform = AddComponent<transform>(&Game.Registry, CowEntity);
+            Transform.Translation = v3((f32)i, 17, 2);
+            Transform.Scale = v3(0.7f, 0.7f, 1.0f);
+            Transform.Rotation = v3(0.0f, 0.0f, 0.0f);
+
+            auto& Render = AddComponent<renderable>(&Game.Registry, CowEntity);
+            Render.Texture = Game.CowTexture;
+        }
+
+        DestroyEntity(&Game.Registry, entity(0));
+        DestroyEntity(&Game.Registry, entity(3));
+
+        for (size_t i = 0; i <= 3; i+=3)
+        {
+            auto CowEntity = CreateEntity(&Game.Registry);
+
+            auto& Transform = AddComponent<transform>(&Game.Registry, CowEntity);
+            Transform.Translation = v3((f32)i, 17, 2);
+            Transform.Scale = v3(0.7f, 0.7f, 1.0f);
+            Transform.Rotation = v3(0.0f, 0.0f, 0.0f);
+
+            auto& Render = AddComponent<renderable>(&Game.Registry, CowEntity);
+            Render.Texture = Game.CowTexture;
+        }
     }
 
     return Game;
@@ -133,8 +166,12 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
     // Physics simulation gave us some state of the entity and now we can use it to react to in the update loop
     // Entity update
     {
+        //debug_cycle_counter CC("Entity update");
+
         auto Entities = Game->AliveEntities;
-        for (i32 i = 0; i < Game->AliveEntitiesCount; i++)
+
+        //for (i32 i = 0; i < Game->AliveEntitiesCount; i++)
+        for (i32 i = 0; i < 0; i++)
         {
             auto& Entity = Game->AliveEntities[i];
 
@@ -165,7 +202,8 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
         //debug_scoped_timer Timer("Fast physics simulation");
 
         auto Entities = Game->AliveEntities;
-        for (i32 i = 0; i < Game->AliveEntitiesCount; i++)
+        //for (i32 i = 0; i < Game->AliveEntitiesCount; i++)
+        for (i32 i = 0; i < 0; i++)
         {
             auto& Entity = Entities[i];
 
@@ -301,7 +339,6 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
 
     // Render entities
     {
-        debug_cycle_counter GameUpdateCounter("Render Entities");
         //scoped_timer Timer("Render entities");
 
         texture_coords BodyTextureCoords[6];
@@ -372,83 +409,112 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
             GameRendererSubmitCustomCuboid_FAST(Renderer, Transform, Game->BlockTextures[(u32)block_type::Dirt], TextureCoords, v4(1.0f, 0.0f, 0.0f, 1.0f));
         }
 
-        auto Entities = Game->AliveEntities;
-        for (i32 i = 0; i < Game->AliveEntitiesCount; i++)
+        if (1)
         {
-            auto& Entity = Entities[i];
+            debug_cycle_counter GameUpdateCounter("Render Entities");
 
-            // Skip all of those
-            if (!Entity.HasFlags(entity_flags::Valid | entity_flags::Renderable))
-                continue;
-
-            if (Entity.Type == entity_type::Cow)
+#if 0
+            auto View = ViewComponents<transform>(&Game->Registry);
+            for (auto Entity : View)
             {
+                auto& Transform = View.Get(Entity);
+
                 // Body
-                GameRendererSubmitCustomCuboid_FAST(Renderer, Entity.Transform.Matrix(), Entity.Render.Texture, BodyTextureCoords, v4(1.0f));
+                GameRendererSubmitCustomCuboid_FAST(Renderer, Transform.Matrix(), Game->CowTexture, BodyTextureCoords, v4(1.0f));
+            }
+#else
+            auto& Pool = GetPool<transform>(&Game->Registry);
+            for (size_t i = 0; i < Pool.Set.DenseCount; i++)
+            {
+                auto& Transform = Pool.Data[i];
 
-                if (0)
+                // Body
+                GameRendererSubmitCustomCuboid_FAST(Renderer, Transform.Translation, Transform.Rotation, Transform.Scale, Game->CowTexture, BodyTextureCoords, v4(1.0f));
+            }
+#endif
+        }
+
+        if (0)
+        {
+            debug_cycle_counter GameUpdateCounter("Render Entities");
+            auto Entities = Game->AliveEntities;
+            for (i32 i = 0; i < Game->AliveEntitiesCount; i++)
+            {
+                auto& Entity = Entities[i];
+
+                // Skip all of those
+                if (!Entity.HasFlags(entity_flags::Valid | entity_flags::Renderable))
+                    continue;
+
+                if (Entity.Type == entity_type::Cow)
                 {
-                    // IDEA: Move the head based on its scale to preserve the same position of the head/body
-                    // f32 Y = CowTranslation.y - Scale.y * 0.5f - LegScale.y * 0.5f;
-                    // Head
+                    // Body
+                    GameRendererSubmitCustomCuboid_FAST(Renderer, Entity.Transform.Matrix(), Entity.Render.Texture, BodyTextureCoords, v4(1.0f));
+
+                    if (0)
                     {
-                        local_persist transform CowHeadTransform;
-                        CowHeadTransform.Translation = v3(0, 0.4f, 0.7f);
-                        //CowHeadTransform.Rotation = v3(bkm::Sin(Time) * 0.5f, 0, 0);
-                        CowHeadTransform.Scale = v3(0.5f / 0.7f, 0.5f / 0.7f, 0.4f);
-
-                        GameRendererSubmitCustomCuboid_FAST(Renderer, Entity.Transform.Matrix() * CowHeadTransform.Matrix(), Entity.Render.Texture, HeadTextureCoords, v4(1.0f));
-                    }
-
-                    // Legs
-                    if (1)
-                    {
-                        f32 DeltaX = 0.30f;
-                        f32 DeltaZ = 0.35f;
-                        f32 ScaleX = 0.3f / 0.7f * 0.9f;
-                        f32 ScaleY = 1.0f;
-                        f32 ScaleZ = 0.3f * 0.9f;
-
-                        transform LegTransform[4];
-                        LegTransform[0].Translation = v3(0, -1.0f, 0);
-                        LegTransform[0].Scale = v3(ScaleX, ScaleY, ScaleZ);
-
-                        LegTransform[1].Translation = v3(0, -1.0f, 0);
-                        LegTransform[1].Scale = v3(ScaleX, ScaleY, ScaleZ);
-
-                        LegTransform[2].Translation = v3(0, -1.0f, 0);
-                        LegTransform[2].Scale = v3(ScaleX, ScaleY, ScaleZ);
-
-                        LegTransform[3].Translation = v3(0, -1.0f, 0);
-                        LegTransform[3].Scale = v3(ScaleX, ScaleY, ScaleZ);
-
-                        //f32 Y = CowTranslation.y - Scale.y * 0.5f - LegScale.y * 0.5f;
-
-                        /*  v3 Offsets[4];
-                          Offsets[0] = v3(DeltaX, Y, DeltaZ);
-                          Offsets[1] = v3(-DeltaX, Y, DeltaZ);
-                          Offsets[2] = v3(-DeltaX, Y, -DeltaZ);
-                          Offsets[3] = v3(DeltaX, Y, -DeltaZ);*/
-
-                        f32 LegRotation = bkm::Sin(Game->Time * 10.3f * bkm::Length(Entity.AABBPhysics.Velocity)) * 0.3f;
-
-                        transform KneeTransform[4] = {};
-                        KneeTransform[0].Translation = v3(DeltaX, 0.0f, -DeltaZ);
-                        KneeTransform[0].Rotation = v3(-LegRotation, 0, 0);
-
-                        KneeTransform[1].Translation = v3(-DeltaX, 0.0f, -DeltaZ);
-                        KneeTransform[1].Rotation = v3(LegRotation, 0, 0);
-
-                        KneeTransform[2].Translation = v3(-DeltaX, 0.0f, DeltaZ);
-                        KneeTransform[2].Rotation = v3(LegRotation, 0, 0);
-
-                        KneeTransform[3].Translation = v3(DeltaX, 0.0f, DeltaZ);
-                        KneeTransform[3].Rotation = v3(-LegRotation, 0, 0);
-
-                        // Front Left
-                        for (u32 i = 0; i < 4; i++)
+                        // IDEA: Move the head based on its scale to preserve the same position of the head/body
+                        // f32 Y = CowTranslation.y - Scale.y * 0.5f - LegScale.y * 0.5f;
+                        // Head
                         {
-                            GameRendererSubmitCustomCuboid_FAST(Renderer, Entity.Transform.Matrix() * KneeTransform[i].Matrix() * LegTransform[i].Matrix(), Entity.Render.Texture, LegTextureCoords, v4(1.0f));
+                            local_persist transform CowHeadTransform;
+                            CowHeadTransform.Translation = v3(0, 0.4f, 0.7f);
+                            //CowHeadTransform.Rotation = v3(bkm::Sin(Time) * 0.5f, 0, 0);
+                            CowHeadTransform.Scale = v3(0.5f / 0.7f, 0.5f / 0.7f, 0.4f);
+
+                            GameRendererSubmitCustomCuboid_FAST(Renderer, Entity.Transform.Matrix() * CowHeadTransform.Matrix(), Entity.Render.Texture, HeadTextureCoords, v4(1.0f));
+                        }
+
+                        // Legs
+                        if (1)
+                        {
+                            f32 DeltaX = 0.30f;
+                            f32 DeltaZ = 0.35f;
+                            f32 ScaleX = 0.3f / 0.7f * 0.9f;
+                            f32 ScaleY = 1.0f;
+                            f32 ScaleZ = 0.3f * 0.9f;
+
+                            transform LegTransform[4];
+                            LegTransform[0].Translation = v3(0, -1.0f, 0);
+                            LegTransform[0].Scale = v3(ScaleX, ScaleY, ScaleZ);
+
+                            LegTransform[1].Translation = v3(0, -1.0f, 0);
+                            LegTransform[1].Scale = v3(ScaleX, ScaleY, ScaleZ);
+
+                            LegTransform[2].Translation = v3(0, -1.0f, 0);
+                            LegTransform[2].Scale = v3(ScaleX, ScaleY, ScaleZ);
+
+                            LegTransform[3].Translation = v3(0, -1.0f, 0);
+                            LegTransform[3].Scale = v3(ScaleX, ScaleY, ScaleZ);
+
+                            //f32 Y = CowTranslation.y - Scale.y * 0.5f - LegScale.y * 0.5f;
+
+                            /*  v3 Offsets[4];
+                              Offsets[0] = v3(DeltaX, Y, DeltaZ);
+                              Offsets[1] = v3(-DeltaX, Y, DeltaZ);
+                              Offsets[2] = v3(-DeltaX, Y, -DeltaZ);
+                              Offsets[3] = v3(DeltaX, Y, -DeltaZ);*/
+
+                            f32 LegRotation = bkm::Sin(Game->Time * 10.3f * bkm::Length(Entity.AABBPhysics.Velocity)) * 0.3f;
+
+                            transform KneeTransform[4] = {};
+                            KneeTransform[0].Translation = v3(DeltaX, 0.0f, -DeltaZ);
+                            KneeTransform[0].Rotation = v3(-LegRotation, 0, 0);
+
+                            KneeTransform[1].Translation = v3(-DeltaX, 0.0f, -DeltaZ);
+                            KneeTransform[1].Rotation = v3(LegRotation, 0, 0);
+
+                            KneeTransform[2].Translation = v3(-DeltaX, 0.0f, DeltaZ);
+                            KneeTransform[2].Rotation = v3(LegRotation, 0, 0);
+
+                            KneeTransform[3].Translation = v3(DeltaX, 0.0f, DeltaZ);
+                            KneeTransform[3].Rotation = v3(-LegRotation, 0, 0);
+
+                            // Front Left
+                            for (u32 i = 0; i < 4; i++)
+                            {
+                                GameRendererSubmitCustomCuboid_FAST(Renderer, Entity.Transform.Matrix() * KneeTransform[i].Matrix() * LegTransform[i].Matrix(), Entity.Render.Texture, LegTextureCoords, v4(1.0f));
+                            }
                         }
                     }
                 }

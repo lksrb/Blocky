@@ -98,12 +98,12 @@ ENABLE_BITWISE_OPERATORS(entity_flags, u32);
 
 // Alive entities
 // One big structure that holds everything, not cache friendly but we will see if it matters
-struct entity
+struct old_entity
 {
     entity_type Type = entity_type::None;
     entity_flags Flags = entity_flags::None;
-    entity* Child = nullptr;
-    entity* Parent = nullptr;
+    old_entity* Child = nullptr;
+    old_entity* Parent = nullptr;
 
     transform Transform;
     aabb_physics AABBPhysics;
@@ -113,6 +113,8 @@ struct entity
     inline void RemoveFlags(entity_flags Flags) { this->Flags &= ~Flags; }
     inline bool HasFlags(entity_flags Flags) { return u32(this->Flags & Flags) != 0; }
 };
+
+#include "ECS.h"
 
 struct player
 {
@@ -137,7 +139,7 @@ struct block
 internal const i64 RowCount = 16;
 internal const i64 ColumnCount = 16;
 internal const i64 LayerCount = 256;
-internal const i32 MaxAliveEntitiesCount = 256;
+internal const i32 MaxAliveEntitiesCount = 10000;
 
 struct game
 {
@@ -146,7 +148,7 @@ struct game
 
     player Player;
 
-    entity* AliveEntities = nullptr;
+    old_entity* AliveEntities = nullptr;
     i32 AliveEntitiesCount = 0;
 
     block* Blocks;
@@ -155,7 +157,11 @@ struct game
     texture CrosshairTexture;
     texture BlockTextures[BLOCK_TYPE_COUNT]; 
 
+    texture CowTexture;
+
     f32 Time;
+
+    entity_registry Registry;
 };
 
 internal game GameCreate(game_renderer* Renderer);
@@ -251,16 +257,16 @@ internal texture_coords GetTextureCoords(i32 GridWidth, i32 GridHeight, i32 Bott
     return TextureCoords;
 };
 
-internal entity* EntityCreate(game* Game)
+internal old_entity* EntityCreate(game* Game)
 {
     Assert(Game->AliveEntitiesCount < MaxAliveEntitiesCount, "Game->AliveEntitiesCount < MaxAliveEntitiesCount");
 
-    entity& NewEntity = Game->AliveEntities[Game->AliveEntitiesCount++];
+    old_entity& NewEntity = Game->AliveEntities[Game->AliveEntitiesCount++];
 
     return &NewEntity;
 }
 
-internal void EntityDestroy(entity* Entity)
+internal void EntityDestroy(old_entity* Entity)
 {
     Assert(Entity, "Entity == nullptr");
 }

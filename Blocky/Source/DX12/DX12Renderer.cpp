@@ -90,7 +90,7 @@ internal constexpr inline v4 c_QuadVertexPositions[4]
     { -0.5f,  0.5f, 0.0f, 1.0f }
 };
 
-internal game_renderer GameRendererCreate(game_window Window)
+internal game_renderer GameRendererCreate(const game_window& Window)
 {
     game_renderer Renderer = {};
 
@@ -144,7 +144,7 @@ internal void GameRendererDestroy(game_renderer* Renderer)
     memset(Renderer, 0, sizeof(game_renderer));
 }
 
-internal void GameRendererInitD3D(game_renderer* Renderer, game_window Window)
+internal void GameRendererInitD3D(game_renderer* Renderer, const game_window& Window)
 {
     // Enable debug layer
     if (DX12_ENABLE_DEBUG_LAYER)
@@ -162,6 +162,8 @@ internal void GameRendererInitD3D(game_renderer* Renderer, game_window Window)
     }
 
     // Create device
+
+    // This takes ~300 ms, insane
     DxAssert(D3D12CreateDevice(nullptr, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&Renderer->Device)));
 
     // Create factory
@@ -1331,5 +1333,54 @@ internal void GameRendererSubmitCustomCuboid_FAST(game_renderer* Renderer, const
     }
 
     Renderer->FastCuboidInstanceCount++;
+}
 
+internal void GameRendererSubmitCustomCuboid_FAST(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale, const texture& Texture, texture_coords TextureCoords[6], const v4& Color)
+{
+    Assert(Renderer->FastCuboidInstanceCount < c_MaxCubePerBatch, "Renderer->FastCuboidInstanceCount < c_MaxCuboidsPerBatch");
+    auto& Cuboid = Renderer->FastCuboidInstanceData[Renderer->FastCuboidInstanceCount];
+
+    u32 TextureIndex = 0;
+    for (u32 i = 1; i < Renderer->CurrentTextureStackIndex; i++)
+    {
+        if (Renderer->TextureStack[i].Handle == Texture.Handle)
+        {
+            TextureIndex = i;
+            break;
+        }
+    }
+
+    if (TextureIndex == 0)
+    {
+        Assert(Renderer->CurrentTextureStackIndex < c_MaxTexturesPerDrawCall, "Renderer->TextureStackIndex < c_MaxTexturesPerDrawCall");
+        TextureIndex = Renderer->CurrentTextureStackIndex;
+        Renderer->TextureStack[TextureIndex] = Texture;
+        Renderer->CurrentTextureStackIndex++;
+    }
+
+    Cuboid.Color = Color;
+    Cuboid.TextureIndex = TextureIndex;
+
+    // Copy texture coords
+    for (i32 i = 0; i < 6; i++)
+    {
+        Cuboid.TextureCoords[i] = TextureCoords[i];
+    }
+
+#if ENABLE_SIMD
+    XMMATRIX XmmScale = XMMatrixScalingFromVector(XMVectorSet(Scale.x, Scale.y, Scale.z, 0.0f));
+    XMMATRIX XmmRot = XMMatrixRotationQuaternion(XMQuaternionRotationRollPitchYaw(Rotation.x, Rotation.y, Rotation.z));
+    XMMATRIX XmmTrans = XMMatrixTranslationFromVector(XMVectorSet(Translation.x, Translation.y, Translation.z, 0.0f));
+
+    XMMATRIX XmmTransform = XmmScale * XmmRot * XmmTrans;
+#else
+    Cuboid.Transform =
+        bkm::Translate(m4(1.0f), Translation)
+        * bkm::ToM4(qtn(Rotation))
+        * bkm::Scale(m4(1.0f), Scale);
+#endif
+
+    Cuboid.XmmTransform = XmmTransform;
+
+    Renderer->FastCuboidInstanceCount++;
 }
