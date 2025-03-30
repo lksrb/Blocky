@@ -29,11 +29,11 @@ internal game GameCreate(game_renderer* Renderer)
         CowEntity->Render.Texture = Game.CowTexture;
     }
 
-    Game.Registry = EntityRegistryCreate(5);
+    Game.Registry = EntityRegistryCreate(10000);
 
     // Create another set of cows
     {
-        for (size_t i = 0; i < 5; i++)
+        for (size_t i = 0; i < 10000; i++)
         {
             auto CowEntity = CreateEntity(&Game.Registry);
 

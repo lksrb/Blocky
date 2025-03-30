@@ -3,6 +3,8 @@
 #include "AABB.h"
 #include "RayCast.h"
 
+#include "HashTable.h"
+
 //#include <vector>
 
 struct camera

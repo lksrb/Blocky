@@ -607,7 +607,7 @@ internal void GameRendererInitD3DPipeline(game_renderer* Renderer)
         Renderer->WhiteTexture = TextureCreate(Renderer->Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, Buffer, 1, 1, DXGI_FORMAT_R8G8B8A8_UNORM);
 
         // First element of the texture stack will be the white texture
-        Renderer->TextureStack[0] = Renderer->WhiteTexture;
+        Renderer->TextureStack[0] = Renderer->WhiteTexture.SRVDescriptor;
     }
 
     // Creating the shader resource view descriptor
@@ -742,12 +742,11 @@ internal void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
     {
         auto DstSRV = Renderer->SRVDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
         auto DescriptorSize = Renderer->Device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+
+        // Skip white texture descriptor
         DstSRV.ptr += DescriptorSize;
-        for (u32 i = 1; i < Renderer->CurrentTextureStackIndex; i++)
-        {
-            Renderer->Device->CopyDescriptorsSimple(1, DstSRV, Renderer->TextureStack[i].SRVDescriptor, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-            DstSRV.ptr += DescriptorSize;
-        }
+
+        Renderer->Device->CopyDescriptorsSimple(Renderer->CurrentTextureStackIndex - 1, DstSRV, Renderer->TextureStack[1], D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
     }
 
     // Reset state
@@ -1008,7 +1007,7 @@ internal void GameRendererSubmitCustomCuboid(game_renderer* Renderer, const m4& 
     u32 TextureIndex = 0;
     for (u32 i = 1; i < Renderer->CurrentTextureStackIndex; i++)
     {
-        if (Renderer->TextureStack[i].Handle == Texture.Handle)
+        if (Renderer->TextureStack[i].ptr == Texture.SRVDescriptor.ptr)
         {
             TextureIndex = i;
             break;
@@ -1019,7 +1018,7 @@ internal void GameRendererSubmitCustomCuboid(game_renderer* Renderer, const m4& 
     {
         Assert(Renderer->CurrentTextureStackIndex < c_MaxTexturesPerDrawCall, "Renderer->TextureStackIndex < c_MaxTexturesPerDrawCall");
         TextureIndex = Renderer->CurrentTextureStackIndex;
-        Renderer->TextureStack[TextureIndex] = Texture;
+        Renderer->TextureStack[TextureIndex] = Texture.SRVDescriptor;
         Renderer->CurrentTextureStackIndex++;
     }
 
@@ -1085,7 +1084,7 @@ internal void GameRendererSubmitQuad(game_renderer* Renderer, const v3& Translat
     u32 TextureIndex = 0;
     for (u32 i = 1; i < Renderer->CurrentTextureStackIndex; i++)
     {
-        if (Renderer->TextureStack[i].Handle == Texture.Handle)
+        if (Renderer->TextureStack[i].ptr == Texture.SRVDescriptor.ptr)
         {
             TextureIndex = i;
             break;
@@ -1096,7 +1095,7 @@ internal void GameRendererSubmitQuad(game_renderer* Renderer, const v3& Translat
     {
         Assert(Renderer->CurrentTextureStackIndex < c_MaxTexturesPerDrawCall, "Renderer->TextureStackIndex < c_MaxTexturesPerDrawCall");
         TextureIndex = Renderer->CurrentTextureStackIndex;
-        Renderer->TextureStack[TextureIndex] = Texture;
+        Renderer->TextureStack[TextureIndex] = Texture.SRVDescriptor;
         Renderer->CurrentTextureStackIndex++;
     }
 
@@ -1131,7 +1130,7 @@ internal void GameRendererSubmitQuadCustom(game_renderer* Renderer, v3 VertexPos
     u32 TextureIndex = 0;
     for (u32 i = 1; i < Renderer->CurrentTextureStackIndex; i++)
     {
-        if (Renderer->TextureStack[i].Handle == Texture.Handle)
+        if (Renderer->TextureStack[i].ptr == Texture.SRVDescriptor.ptr)
         {
             TextureIndex = i;
             break;
@@ -1142,7 +1141,7 @@ internal void GameRendererSubmitQuadCustom(game_renderer* Renderer, v3 VertexPos
     {
         Assert(Renderer->CurrentTextureStackIndex < c_MaxTexturesPerDrawCall, "Renderer->TextureStackIndex < c_MaxTexturesPerDrawCall");
         TextureIndex = Renderer->CurrentTextureStackIndex;
-        Renderer->TextureStack[TextureIndex] = Texture;
+        Renderer->TextureStack[TextureIndex] = Texture.SRVDescriptor;
         Renderer->CurrentTextureStackIndex++;
     }
 
@@ -1171,7 +1170,7 @@ internal void GameRendererSubmitCuboid(game_renderer* Renderer, const v3& Transl
     u32 TextureIndex = 0;
     for (u32 i = 1; i < Renderer->CurrentTextureStackIndex; i++)
     {
-        if (Renderer->TextureStack[i].Handle == Texture.Handle)
+        if (Renderer->TextureStack[i].ptr == Texture.SRVDescriptor.ptr)
         {
             TextureIndex = i;
             break;
@@ -1182,7 +1181,7 @@ internal void GameRendererSubmitCuboid(game_renderer* Renderer, const v3& Transl
     {
         Assert(Renderer->CurrentTextureStackIndex < c_MaxTexturesPerDrawCall, "Renderer->TextureStackIndex < c_MaxTexturesPerDrawCall");
         TextureIndex = Renderer->CurrentTextureStackIndex;
-        Renderer->TextureStack[TextureIndex] = Texture;
+        Renderer->TextureStack[TextureIndex] = Texture.SRVDescriptor;
         Renderer->CurrentTextureStackIndex++;
     }
 
@@ -1247,7 +1246,7 @@ internal void GameRendererSubmitCuboidNoRotScale(game_renderer* Renderer, const 
     u32 TextureIndex = 0;
     for (u32 i = 1; i < Renderer->CurrentTextureStackIndex; i++)
     {
-        if (Renderer->TextureStack[i].Handle == Texture.Handle)
+        if (Renderer->TextureStack[i].ptr == Texture.SRVDescriptor.ptr)
         {
             TextureIndex = i;
             break;
@@ -1258,7 +1257,7 @@ internal void GameRendererSubmitCuboidNoRotScale(game_renderer* Renderer, const 
     {
         Assert(Renderer->CurrentTextureStackIndex < c_MaxTexturesPerDrawCall, "Renderer->TextureStackIndex < c_MaxTexturesPerDrawCall");
         TextureIndex = Renderer->CurrentTextureStackIndex;
-        Renderer->TextureStack[TextureIndex] = Texture;
+        Renderer->TextureStack[TextureIndex] = Texture.SRVDescriptor;
         Renderer->CurrentTextureStackIndex++;
     }
 
@@ -1306,7 +1305,7 @@ internal void GameRendererSubmitCustomCuboid_FAST(game_renderer* Renderer, const
     u32 TextureIndex = 0;
     for (u32 i = 1; i < Renderer->CurrentTextureStackIndex; i++)
     {
-        if (Renderer->TextureStack[i].Handle == Texture.Handle)
+        if (Renderer->TextureStack[i].ptr == Texture.SRVDescriptor.ptr)
         {
             TextureIndex = i;
             break;
@@ -1317,7 +1316,7 @@ internal void GameRendererSubmitCustomCuboid_FAST(game_renderer* Renderer, const
     {
         Assert(Renderer->CurrentTextureStackIndex < c_MaxTexturesPerDrawCall, "Renderer->TextureStackIndex < c_MaxTexturesPerDrawCall");
         TextureIndex = Renderer->CurrentTextureStackIndex;
-        Renderer->TextureStack[TextureIndex] = Texture;
+        Renderer->TextureStack[TextureIndex] = Texture.SRVDescriptor;
         Renderer->CurrentTextureStackIndex++;
     }
 
@@ -1340,10 +1339,16 @@ internal void GameRendererSubmitCustomCuboid_FAST(game_renderer* Renderer, const
     Assert(Renderer->FastCuboidInstanceCount < c_MaxCubePerBatch, "Renderer->FastCuboidInstanceCount < c_MaxCuboidsPerBatch");
     auto& Cuboid = Renderer->FastCuboidInstanceData[Renderer->FastCuboidInstanceCount];
 
+    // TODO: Better lookup?
+    // Hashtables are overkill, we can have a table indexed with enums and simply say that:
+    //  - Index 0 is a white texture
+    //  - Index 1 is a sprite-sheet texture for blocks
+    //  - Index 2 is a sprite-sheet texture for alive entities
+    // Something like that so we can avoid this 
     u32 TextureIndex = 0;
     for (u32 i = 1; i < Renderer->CurrentTextureStackIndex; i++)
     {
-        if (Renderer->TextureStack[i].Handle == Texture.Handle)
+        if (Renderer->TextureStack[i].ptr == Texture.SRVDescriptor.ptr)
         {
             TextureIndex = i;
             break;
@@ -1354,7 +1359,7 @@ internal void GameRendererSubmitCustomCuboid_FAST(game_renderer* Renderer, const
     {
         Assert(Renderer->CurrentTextureStackIndex < c_MaxTexturesPerDrawCall, "Renderer->TextureStackIndex < c_MaxTexturesPerDrawCall");
         TextureIndex = Renderer->CurrentTextureStackIndex;
-        Renderer->TextureStack[TextureIndex] = Texture;
+        Renderer->TextureStack[TextureIndex] = Texture.SRVDescriptor;
         Renderer->CurrentTextureStackIndex++;
     }
 
@@ -1362,6 +1367,7 @@ internal void GameRendererSubmitCustomCuboid_FAST(game_renderer* Renderer, const
     Cuboid.TextureIndex = TextureIndex;
 
     // Copy texture coords
+    // TODO: Remove this
     for (i32 i = 0; i < 6; i++)
     {
         Cuboid.TextureCoords[i] = TextureCoords[i];

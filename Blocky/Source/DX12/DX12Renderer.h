@@ -129,7 +129,7 @@ struct game_renderer
     ID3D12DescriptorHeap* SRVDescriptorHeap;
     texture WhiteTexture;
     u32 CurrentTextureStackIndex = 1;
-    texture TextureStack[c_MaxTexturesPerDrawCall];
+    D3D12_CPU_DESCRIPTOR_HANDLE TextureStack[c_MaxTexturesPerDrawCall];
 
     // Quad
     dx12_pipeline QuadPipeline;

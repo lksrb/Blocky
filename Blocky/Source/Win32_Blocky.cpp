@@ -633,6 +633,7 @@ internal game_window CreateGameWindow()
 int main(int argc, char** argv)
 {
     ECS_Test();
+    //HashTable_Test();
 
     Trace("Hello, Blocky!");
 
