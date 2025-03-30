@@ -29,6 +29,8 @@ enum class entity : ecs_entity_type {};
 
 #include <tuple>
 
+struct entity_registry;
+
 template<typename T>
 struct component_pool
 {
@@ -51,6 +53,43 @@ struct component_pool
     }
 };
 
+// Components
+struct transform
+{
+    v3 Translation = v3(0.0f);
+    v3 Rotation = v3(0.0f);
+    v3 Scale = v3(1.0f);
+
+    inline m4 Matrix()
+    {
+        return bkm::Translate(m4(1.0f), Translation)
+            * bkm::ToM4(qtn(Rotation))
+            * bkm::Scale(m4(1.0f), Scale);
+    }
+};
+
+struct aabb_physics
+{
+    v3 Velocity = v3(0.0f);
+    v3 BoxSize; // Not exactly an AABB, just scale since the position of the aabb may vary
+    bool Grounded = false;
+};
+
+struct logic_component
+{
+    using update_func = void(*)(entity_registry* Registry, entity Entity, logic_component& Logic);
+
+    update_func UpdateFunction;
+
+    void* Data;
+};
+
+struct renderable
+{
+    v4 Color = v4(1.0f);
+    texture Texture;
+};
+
 // Helper to get the index of a type in the tuple
 template<typename T, typename Tuple>
 struct type_index;
@@ -67,7 +106,7 @@ struct type_index<T, std::tuple<U, Types...>>
     static constexpr std::size_t value = 1 + type_index<T, std::tuple<Types...>>::value;
 };
 
-using components_pools = std::tuple<component_pool<transform>, component_pool<renderable>, component_pool<aabb_physics>>;
+using components_pools = std::tuple<component_pool<transform>, component_pool<renderable>, component_pool<aabb_physics>, component_pool<logic_component>>;
 
 struct entity_registry
 {
@@ -75,7 +114,7 @@ struct entity_registry
     u32 EntitiesCount = 0;
     u32 EntitiesCapacity = 0;
 
-    components_pools TupleDensePools;
+    components_pools ComponentPools;
 
     entity FreeList = INVALID_ID;
 };
@@ -91,7 +130,7 @@ void ForEachHelper(components_pools& Pools, TFunc&& Func, std::index_sequence<In
 template<typename TFunc>
 void ForEachPool(entity_registry* Registry, TFunc&& Func)
 {
-    ForEachHelper(Registry->TupleDensePools, std::forward<TFunc>(Func),
+    ForEachHelper(Registry->ComponentPools, std::forward<TFunc>(Func),
                   std::make_index_sequence<std::tuple_size<components_pools>::value>{});
 }
 
@@ -100,7 +139,7 @@ template<typename T>
 component_pool<T>& GetPool(entity_registry* Registry)
 {
     constexpr std::size_t Index = type_index<component_pool<T>, components_pools>::value;
-    return std::get<Index>(Registry->TupleDensePools);
+    return std::get<Index>(Registry->ComponentPools);
 }
 
 internal entity_registry EntityRegistryCreate(ecs_entity_type Capacity)
@@ -257,7 +296,7 @@ struct double_view
         auto& Component0 = View0.Get(Entity);
         auto& Component1 = View1.Get(Entity);
 
-        return std::make_tuple<T0&, T1&>(Component0, Component1);
+        return std::forward_as_tuple<T0&, T1&>(Component0, Component1);
     }
 };
 
@@ -280,7 +319,7 @@ struct triple_view
         auto& Component1 = View1.Get(Entity);
         auto& Component2 = View2.Get(Entity);
 
-        return std::make_tuple<T0&, T1&, T2&>(Component0, Component1, Component2);
+        return std::forward_as_tuple<T0&, T1&, T2&>(Component0, Component1, Component2);
     }
 };
 
@@ -331,7 +370,6 @@ internal double_view<T0, T1> ViewComponents(entity_registry* Registry)
 template<typename T0, typename T1, typename T2>
 internal triple_view<T0, T1, T2> ViewComponents(entity_registry* Registry)
 {
-    Assert(false, "Not implemented yet.");
     auto View0 = ViewComponents<T0>(Registry);
     auto View1 = ViewComponents<T1>(Registry);
     auto View2 = ViewComponents<T2>(Registry);
@@ -339,22 +377,39 @@ internal triple_view<T0, T1, T2> ViewComponents(entity_registry* Registry)
     triple_view<T0, T1, T2> View;
 
     // Setup iterators
-    auto View0Size = View0.end() - View0.begin();
-    auto View1Size = View1.end() - View1.begin();
-    auto View2Size = View2.end() - View2.begin();
-    if (View0Size < View1Size)
+    entity* ViewBegins[] =
     {
-        View.DenseBegin = View0.begin();
-        View.DenseEnd = View0.end();
-    }
-    else
+        View0.begin(),
+        View1.begin(),
+        View2.begin(),
+    };
+
+    entity* ViewEnds[] =
     {
-        View.DenseBegin = View1.begin();
-        View.DenseEnd = View1.end();
+        View0.end(),
+        View1.end(),
+        View2.end(),
+    };
+
+    i64 Sizes[] = { View0.end() - View0.begin(), View1.end() - View1.begin(), View2.end() - View2.begin() };
+
+    u32 Index = 0;
+    i64 Candidate = 0;
+    for (auto Size : Sizes)
+    {
+        if (Candidate < Size)
+        {
+            Candidate = Size;
+            Index++;
+        }
     }
+
+    View.DenseBegin = ViewBegins[Index];
+    View.DenseEnd = ViewEnds[Index];
 
     View.View0 = View0;
     View.View1 = View1;
+    View.View2 = View2;
     return View;
 }
 

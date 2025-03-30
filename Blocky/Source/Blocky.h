@@ -2,6 +2,7 @@
 
 #include "AABB.h"
 #include "RayCast.h"
+#include "ECS.h"
 
 //#include <vector>
 
@@ -51,33 +52,6 @@ enum class block_type : u32
 };
 #define BLOCK_TYPE_COUNT (u32)block_type::INVALID
 
-struct transform
-{
-    v3 Translation = v3(0.0f);
-    v3 Rotation = v3(0.0f);
-    v3 Scale = v3(1.0f);
-
-    inline m4 Matrix()
-    {
-        return bkm::Translate(m4(1.0f), Translation)
-            * bkm::ToM4(qtn(Rotation))
-            * bkm::Scale(m4(1.0f), Scale);
-    }
-};
-
-struct aabb_physics
-{
-    bool Grounded = false;
-    v3 Velocity = v3(0.0f);
-    v3 BoxSize; // Not exactly an AABB, just scale since the position of the aabb may vary
-};
-
-struct renderable
-{
-    v4 Color = v4(1.0f);
-    texture Texture;
-};
-
 enum class entity_type : u32
 {
     None = 0,
@@ -95,36 +69,6 @@ enum class entity_flags : u32
 };
 
 ENABLE_BITWISE_OPERATORS(entity_flags, u32);
-
-// Alive entities
-// One big structure that holds everything, not cache friendly but we will see if it matters
-struct old_entity
-{
-    entity_type Type = entity_type::None;
-    entity_flags Flags = entity_flags::None;
-    old_entity* Child = nullptr;
-    old_entity* Parent = nullptr;
-
-    transform Transform;
-    aabb_physics AABBPhysics;
-    renderable Render;
-
-    transform Transform1;
-    transform Transform2;
-    transform Transform3;
-    transform Transform4;
-    transform Transform5;
-    transform Transform6;
-    transform Transform7;
-    transform Transform8;
-    transform Transform9;
-
-    inline void SetFlags(entity_flags Flags) { this->Flags |= Flags; }
-    inline void RemoveFlags(entity_flags Flags) { this->Flags &= ~Flags; }
-    inline bool HasFlags(entity_flags Flags) { return u32(this->Flags & Flags) != 0; }
-};
-
-#include "ECS.h"
 
 struct player
 {
@@ -158,9 +102,6 @@ struct game
 
     player Player;
 
-    old_entity* AliveEntities = nullptr;
-    i32 AliveEntitiesCount = 0;
-
     block* Blocks;
     u32 BlocksCount = 0;
 
@@ -178,6 +119,10 @@ internal game GameCreate(game_renderer* Renderer);
 internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* Input, f32 TimeStep, u32 ClientAreaWidth, u32 ClientAreaHeight);
 internal void GamePlayerUpdate(game* Game, const game_input* Input, game_renderer* Renderer, f32 TimeStep);
 internal void GameGenerateWorld(game* Game);
+
+internal void GameUpdateEntities(game* Game, f32 TimeStep);
+internal void GamePhysicsSimulationUpdateEntities(game* Game, f32 TimeStep);
+internal void GameRenderEntities(game* Game, game_renderer* Renderer, f32 TimeStep);
 
 internal bool FindFirstHit(const ray& Ray, const block* Blocks, u64 BlocksCount, v3* HitPoint, v3* HitNormal, block* HitBlock, u64* HitIndex)
 {
@@ -266,17 +211,3 @@ internal texture_coords GetTextureCoords(i32 GridWidth, i32 GridHeight, i32 Bott
 
     return TextureCoords;
 };
-
-internal old_entity* EntityCreate(game* Game)
-{
-    Assert(Game->AliveEntitiesCount < MaxAliveEntitiesCount, "Game->AliveEntitiesCount < MaxAliveEntitiesCount");
-
-    old_entity& NewEntity = Game->AliveEntities[Game->AliveEntitiesCount++];
-
-    return &NewEntity;
-}
-
-internal void EntityDestroy(old_entity* Entity)
-{
-    Assert(Entity, "Entity == nullptr");
-}
