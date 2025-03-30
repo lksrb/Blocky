@@ -3,8 +3,6 @@
 #include "AABB.h"
 #include "RayCast.h"
 
-#include "HashTable.h"
-
 //#include <vector>
 
 struct camera
@@ -110,6 +108,16 @@ struct old_entity
     transform Transform;
     aabb_physics AABBPhysics;
     renderable Render;
+
+    transform Transform1;
+    transform Transform2;
+    transform Transform3;
+    transform Transform4;
+    transform Transform5;
+    transform Transform6;
+    transform Transform7;
+    transform Transform8;
+    transform Transform9;
 
     inline void SetFlags(entity_flags Flags) { this->Flags |= Flags; }
     inline void RemoveFlags(entity_flags Flags) { this->Flags &= ~Flags; }

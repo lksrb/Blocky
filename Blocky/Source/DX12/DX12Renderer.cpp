@@ -740,13 +740,33 @@ internal void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
 
     // Copy texture's descriptor to our renderer's descriptor
     {
+        //debug_cycle_counter C("Copy");
+        // We cannot use CopyDescriptorsSimple to copy everything at once because it assumes that source descriptors are ordered... and TextureStack's ptrs are not.
+        // For now we keep both even though the newer variant is slower. In Release they seem to be equal. But with not many textures its unfair to judge the newer variant.
+        // TODO: Come back to this and stress test
+#if 1
         auto DstSRV = Renderer->SRVDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
         auto DescriptorSize = Renderer->Device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-
-        // Skip white texture descriptor
         DstSRV.ptr += DescriptorSize;
+        for (u32 i = 1; i < Renderer->CurrentTextureStackIndex; i++)
+        {
+            Renderer->Device->CopyDescriptorsSimple(1, DstSRV, Renderer->TextureStack[i], D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+            DstSRV.ptr += DescriptorSize;
+        }
+#else // Newer
+        u32 NumDescriptors = Renderer->CurrentTextureStackIndex - 1;
+        if (NumDescriptors > 0)
+        {
+            auto DstSRV = Renderer->SRVDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
+            auto DescriptorSize = Renderer->Device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
-        Renderer->Device->CopyDescriptorsSimple(Renderer->CurrentTextureStackIndex - 1, DstSRV, Renderer->TextureStack[1], D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+            // Skip white texture
+            DstSRV.ptr += DescriptorSize;
+
+            Renderer->Device->CopyDescriptors(1, &DstSRV, &NumDescriptors, NumDescriptors, &Renderer->TextureStack[1], nullptr, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV
+            );
+        }
+#endif
     }
 
     // Reset state

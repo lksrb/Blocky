@@ -131,8 +131,8 @@ internal auto SparseSetCreate(ecs_entity_type Capacity)
     SparseSet.Capacity = Capacity;
     SparseSet.DenseCount = 0;
 
-    memset(SparseSet.Sparse, to_entity_type(INVALID_ID), Capacity * sizeof(ecs_entity_type));
-    memset(SparseSet.Dense, to_entity_type(INVALID_ID), Capacity * sizeof(ecs_entity_type));
+    memset(SparseSet.Sparse, ecs_to_entity_type(INVALID_ID), Capacity * sizeof(ecs_entity_type));
+    memset(SparseSet.Dense, ecs_to_entity_type(INVALID_ID), Capacity * sizeof(ecs_entity_type));
 
     return SparseSet;
 }
@@ -148,7 +148,7 @@ internal void SparseSetDestroy(sparse_set* SparseSet)
 
 internal bool SparseSetContains(sparse_set* Set, ecs_entity_type Entity)
 {
-    ecs_entity_type DenseIndex = Set->Sparse[to_entity_type(Entity)];
+    ecs_entity_type DenseIndex = Set->Sparse[ecs_to_entity_type(Entity)];
 
     // TODO: optimalization
     return DenseIndex < Set->DenseCount && Set->Dense[DenseIndex] == Entity;

@@ -22,8 +22,8 @@
 using ecs_entity_type = u32;
 enum class entity : ecs_entity_type {};
 
-#define to_entity(__EntityType) static_cast<entity>(__EntityType) 
-#define to_entity_type(__Entity) static_cast<ecs_entity_type>(__Entity)
+#define ecs_to_entity(__EntityType) static_cast<entity>(__EntityType) 
+#define ecs_to_entity_type(__Entity) static_cast<ecs_entity_type>(__Entity)
 
 #include "SparseSet.h"
 
@@ -67,7 +67,7 @@ struct type_index<T, std::tuple<U, Types...>>
     static constexpr std::size_t value = 1 + type_index<T, std::tuple<Types...>>::value;
 };
 
-using components_pools = std::tuple<component_pool<transform>, component_pool<renderable>>;
+using components_pools = std::tuple<component_pool<transform>, component_pool<renderable>, component_pool<aabb_physics>>;
 
 struct entity_registry
 {
@@ -108,7 +108,7 @@ internal entity_registry EntityRegistryCreate(ecs_entity_type Capacity)
     entity_registry Registry;
     Registry.Entities = new entity[Capacity];
     Registry.EntitiesCapacity = Capacity;
-    memset(Registry.Entities, to_entity_type(INVALID_ID), Capacity * sizeof(ecs_entity_type));
+    memset(Registry.Entities, ecs_to_entity_type(INVALID_ID), Capacity * sizeof(ecs_entity_type));
 
     // Since we know all the components that we will use, we can just instantiate them here
     ForEachPool(&Registry, [Capacity](auto& Pool)
@@ -138,8 +138,8 @@ internal entity CreateEntity(entity_registry* Registry)
 
     if (Registry->FreeList == INVALID_ID)
     {
-        entity Entity = to_entity(Registry->EntitiesCount);
-        Registry->Entities[to_entity_type(Entity)] = Entity;
+        entity Entity = ecs_to_entity(Registry->EntitiesCount);
+        Registry->Entities[ecs_to_entity_type(Entity)] = Entity;
         ++Registry->EntitiesCount;
 
         return Entity;
@@ -147,15 +147,15 @@ internal entity CreateEntity(entity_registry* Registry)
     else
     {
         entity Entity = Registry->FreeList;
-        Registry->FreeList = Registry->Entities[to_entity_type(Entity)];
-        Registry->Entities[to_entity_type(Entity)] = Entity;
+        Registry->FreeList = Registry->Entities[ecs_to_entity_type(Entity)];
+        Registry->Entities[ecs_to_entity_type(Entity)] = Entity;
         return Entity;
     }
 }
 
 internal bool IsValidEntity(entity_registry* Registry, entity Entity)
 {
-    return to_entity_type(Entity) < Registry->EntitiesCount && Registry->Entities[to_entity_type(Entity)] == Entity;
+    return ecs_to_entity_type(Entity) < Registry->EntitiesCount && Registry->Entities[ecs_to_entity_type(Entity)] == Entity;
 }
 
 internal void DestroyEntity(entity_registry* Registry, entity Entity)
@@ -164,9 +164,9 @@ internal void DestroyEntity(entity_registry* Registry, entity Entity)
 
     ForEachPool(Registry, [Entity](auto& Pool)
     {
-        if (SparseSetContains(&Pool.Set, to_entity_type(Entity)))
+        if (SparseSetContains(&Pool.Set, ecs_to_entity_type(Entity)))
         {
-            rem Rem = SparseSetRemove(&Pool.Set, to_entity_type(Entity));
+            rem Rem = SparseSetRemove(&Pool.Set, ecs_to_entity_type(Entity));
 
             // Update dense transforms based on the dense index array
             Pool.Data[Rem.DenseIndex] = Pool.Data[Rem.Last];
@@ -176,14 +176,14 @@ internal void DestroyEntity(entity_registry* Registry, entity Entity)
     if (Registry->FreeList == INVALID_ID)
     {
         // Set free list entity to an invalid value to signalize that the its the last in the chain
-        Registry->Entities[to_entity_type(Entity)] = INVALID_ID;
+        Registry->Entities[ecs_to_entity_type(Entity)] = INVALID_ID;
 
         // Set free list to entity index
         Registry->FreeList = Entity;
     }
     else
     {
-        Registry->Entities[to_entity_type(Entity)] = Registry->FreeList;
+        Registry->Entities[ecs_to_entity_type(Entity)] = Registry->FreeList;
         Registry->FreeList = Entity;
     }
 
@@ -195,9 +195,9 @@ internal T& AddComponent(entity_registry* Registry, entity Entity)
 {
     auto& Pool = GetPool<T>(Registry);
 
-    Assert(!SparseSetContains(&Pool.Set, to_entity_type(Entity)), "Entity already has this component!");
+    Assert(!SparseSetContains(&Pool.Set, ecs_to_entity_type(Entity)), "Entity already has this component!");
 
-    auto Index = SparseSetAdd(&Pool.Set, to_entity_type(Entity));
+    auto Index = SparseSetAdd(&Pool.Set, ecs_to_entity_type(Entity));
 
     return Pool.Data[Index];
 }
@@ -207,9 +207,9 @@ internal void RemoveComponent(entity_registry* Registry, entity Entity)
 {
     auto& Pool = GetPool<T>(Registry);
 
-    Assert(SparseSetContains(&Pool.Set, to_entity_type(Entity)), "Entity does not have this component!");
+    Assert(SparseSetContains(&Pool.Set, ecs_to_entity_type(Entity)), "Entity does not have this component!");
 
-    SparseSetRemove(&Pool.Set, to_entity_type(Entity));
+    SparseSetRemove(&Pool.Set, ecs_to_entity_type(Entity));
 }
 
 template<typename T>
@@ -217,9 +217,9 @@ internal T& GetComponent(entity_registry* Registry, entity Entity)
 {
     auto& Pool = GetPool<T>(Registry);
 
-    Assert(SparseSetContains(&Pool.Set, to_entity_type(Entity)), "Entity does not have this component!");
+    Assert(SparseSetContains(&Pool.Set, ecs_to_entity_type(Entity)), "Entity does not have this component!");
 
-    auto Index = SparseSetGet(&Pool.Set, to_entity_type(Entity));
+    auto Index = SparseSetGet(&Pool.Set, ecs_to_entity_type(Entity));
 
     return Pool.Data[Index];
 }
@@ -236,12 +236,12 @@ struct view
 
     T& Get(entity Entity)
     {
-        return DenseComponentPool[to_entity_type(Entity)];
+        return DenseComponentPool[ecs_to_entity_type(Entity)];
     }
 };
 
 template<typename T0, typename T1>
-struct mult_view
+struct double_view
 {
     view<T0> View0;
     view<T1> View1;
@@ -258,6 +258,29 @@ struct mult_view
         auto& Component1 = View1.Get(Entity);
 
         return std::make_tuple<T0&, T1&>(Component0, Component1);
+    }
+};
+
+template<typename T0, typename T1, typename T2>
+struct triple_view
+{
+    view<T0> View0;
+    view<T1> View1;
+    view<T2> View2;
+
+    entity* DenseBegin;
+    entity* DenseEnd;
+
+    auto begin() { return DenseBegin; }
+    auto end() { return DenseEnd; }
+
+    auto Get(entity Entity)
+    {
+        auto& Component0 = View0.Get(Entity);
+        auto& Component1 = View1.Get(Entity);
+        auto& Component2 = View2.Get(Entity);
+
+        return std::make_tuple<T0&, T1&, T2&>(Component0, Component1, Component2);
     }
 };
 
@@ -279,16 +302,46 @@ internal view<T> ViewComponents(entity_registry* Registry)
 }
 
 template<typename T0, typename T1>
-internal mult_view<T0, T1> ViewComponents(entity_registry* Registry)
+internal double_view<T0, T1> ViewComponents(entity_registry* Registry)
 {
     auto View0 = ViewComponents<T0>(Registry);
     auto View1 = ViewComponents<T1>(Registry);
 
-    mult_view<T0, T1> View;
+    double_view<T0, T1> View;
 
     // Setup iterators
     auto View0Size = View0.end() - View0.begin();
     auto View1Size = View1.end() - View1.begin();
+    if (View0Size < View1Size)
+    {
+        View.DenseBegin = View0.begin();
+        View.DenseEnd = View0.end();
+    }
+    else
+    {
+        View.DenseBegin = View1.begin();
+        View.DenseEnd = View1.end();
+    }
+
+    View.View0 = View0;
+    View.View1 = View1;
+    return View;
+}
+
+template<typename T0, typename T1, typename T2>
+internal triple_view<T0, T1, T2> ViewComponents(entity_registry* Registry)
+{
+    Assert(false, "Not implemented yet.");
+    auto View0 = ViewComponents<T0>(Registry);
+    auto View1 = ViewComponents<T1>(Registry);
+    auto View2 = ViewComponents<T2>(Registry);
+
+    triple_view<T0, T1, T2> View;
+
+    // Setup iterators
+    auto View0Size = View0.end() - View0.begin();
+    auto View1Size = View1.end() - View1.begin();
+    auto View2Size = View2.end() - View2.begin();
     if (View0Size < View1Size)
     {
         View.DenseBegin = View0.begin();
