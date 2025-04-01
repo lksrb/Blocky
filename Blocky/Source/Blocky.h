@@ -93,7 +93,7 @@ struct block
 internal const i64 RowCount = 16;
 internal const i64 ColumnCount = 16;
 internal const i64 LayerCount = 256;
-internal const i32 MaxAliveEntitiesCount = 10000;
+internal const i32 MaxAliveEntitiesCount = 16;
 
 struct game
 {

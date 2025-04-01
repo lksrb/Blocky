@@ -1,5 +1,7 @@
 #include "Blocky.h"
 
+#include "Cow.h"
+
 internal game GameCreate(game_renderer* Renderer)
 {
     game Game = {};
@@ -17,45 +19,27 @@ internal game GameCreate(game_renderer* Renderer)
     Game.Registry = EntityRegistryCreate(100);
 
     // Create another set of cows
+    for (size_t i = 0; i < 100; i++)
     {
-        for (size_t i = 0; i < 1; i++)
-        {
-            auto CowEntity = CreateEntity(&Game.Registry);
+        auto CowEntity = CreateEntity(&Game.Registry);
 
-            auto& Transform = AddComponent<transform>(&Game.Registry, CowEntity);
-            Transform.Translation = v3((f32)i, 17, 2);
-            Transform.Scale = v3(0.7f, 0.7f, 1.0f);
-            Transform.Rotation = v3(0.0f, 0.0f, 0.0f);
+        auto& Transform = AddComponent<transform>(&Game.Registry, CowEntity);
+        Transform.Translation = v3((f32)i, 17, 2);
+        Transform.Scale = v3(0.7f, 0.7f, 1.0f);
+        Transform.Rotation = v3(0.0f, 0.0f, 0.0f);
 
-            auto& Render = AddComponent<renderable>(&Game.Registry, CowEntity);
-            Render.Texture = Game.CowTexture;
+        auto& Render = AddComponent<renderable>(&Game.Registry, CowEntity);
+        Render.Texture = Game.CowTexture;
 
-            auto& AABB = AddComponent<aabb_physics>(&Game.Registry, CowEntity);
-            AABB.BoxSize = v3(0.8f, 1.8, 0.8f);
-            AABB.Velocity = v3(0.0f);
-            AABB.Grounded = false;
+        auto& AABB = AddComponent<aabb_physics>(&Game.Registry, CowEntity);
+        AABB.BoxSize = v3(0.8f, 1.8, 0.8f);
+        AABB.Velocity = v3(0.0f);
+        AABB.Grounded = false;
 
-            auto& Logic = AddComponent<logic_component>(&Game.Registry, CowEntity);
-            Logic.UpdateFunction = [](entity_registry* Registry, entity Entity, logic_component& Logic)
-            {
-                auto& Transform = GetComponent<transform>(Registry, Entity);
-                auto& AABBPhysics = GetComponent<aabb_physics>(Registry, Entity);
-
-                f32 Speed = 1.0f;
-                v3 Direction(1.0f, 0.0f, 0.0f);
-
-                // TODO: Cow AI
-
-                // This way we can actually set velocity while respecting the physics simulation
-                AABBPhysics.Velocity.x = Speed * Direction.x;
-                AABBPhysics.Velocity.z = Speed * Direction.y;
-
-                if (bkm::NonZero(v2(AABBPhysics.Velocity.x, AABBPhysics.Velocity.z)))
-                {
-                    Transform.Rotation.y = bkm::Atan2(AABBPhysics.Velocity.x, AABBPhysics.Velocity.z);
-                }
-            };
-        }
+        auto& Logic = AddComponent<logic_component>(&Game.Registry, CowEntity);
+        Logic.CreateFunction = CowCreate;
+        Logic.DestroyFunction = CowDestroy;
+        Logic.UpdateFunction = CowUpdate;
     }
 
     return Game;
@@ -610,12 +594,17 @@ internal void GamePlayerUpdate(game* Game, const game_input* Input, game_rendere
 
 internal void GameUpdateEntities(game* Game, f32 TimeStep)
 {
+    // TODO: Of course fetching function pointer is a lot slower than calling an actual function on a struct
+    // The difference is between 5-6x when I spawn 10000 entities with optimalizations, thats quite huge and is worth considering.
+    // However I dont think its necessary right now when the COW just goes and jumps off a cliff. There are more important things.
+    //debug_cycle_counter Counter("GameUpdateEntities");
+
     auto View = ViewComponents<logic_component>(&Game->Registry);
 
     for (auto Entity : View)
     {
         auto& Logic = View.Get(Entity);
-        Logic.UpdateFunction(&Game->Registry, Entity, Logic);
+        Logic.UpdateFunction(&Game->Registry, Entity, &Logic, TimeStep);
     }
 }
 

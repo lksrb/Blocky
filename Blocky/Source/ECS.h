@@ -77,11 +77,16 @@ struct aabb_physics
 
 struct logic_component
 {
-    using update_func = void(*)(entity_registry* Registry, entity Entity, logic_component& Logic);
+    using create_function = void(*)(entity_registry* Registry, entity Entity, logic_component* Logic);
+    using destroy_function = void(*)(entity_registry* Registry, entity Entity, logic_component* Logic);
+    using update_function = void(*)(entity_registry* Registry, entity Entity, logic_component* Logic, f32 TimeStep);
 
-    update_func UpdateFunction;
+    // These cannot be null
+    create_function CreateFunction; // Used for setup of an entity
+    destroy_function DestroyFunction; // Called upon destruction of an entity
+    update_function UpdateFunction; // Called each frame 
 
-    void* Data;
+    void* Storage;
 };
 
 struct renderable
