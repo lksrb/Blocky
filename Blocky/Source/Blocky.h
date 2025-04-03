@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Random.h"
 #include "AABB.h"
 #include "RayCast.h"
 #include "ECS.h"

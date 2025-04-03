@@ -632,7 +632,7 @@ internal game_window CreateGameWindow()
 
 int main(int argc, char** argv)
 {
-    ECS_Test();
+    //ECS_Test();
 
     Trace("Hello, Blocky!");
 
@@ -647,6 +647,11 @@ int main(int argc, char** argv)
     game_window Window = CreateGameWindow();
     g_ClientWidth = Window.ClientAreaWidth;
     g_ClientHeight = Window.ClientAreaHeight;
+
+    // Get current system time and use its value to initialize seed for out random
+    FILETIME FileTime;
+    GetSystemTimePreciseAsFileTime(&FileTime);
+    RandomSetSeed(FileTime.dwLowDateTime);
 
     // Initialize renderer
     game_renderer GameRenderer = GameRendererCreate(Window);

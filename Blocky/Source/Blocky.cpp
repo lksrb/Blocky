@@ -42,6 +42,14 @@ internal game GameCreate(game_renderer* Renderer)
         Logic.UpdateFunction = CowUpdate;
     }
 
+    // On Create event
+    auto View = ViewComponents<logic_component>(&Game.Registry);
+    for (auto Entity : View)
+    {
+        auto& Logic = View.Get(Entity);
+        Logic.CreateFunction(&Game.Registry, Entity, &Logic);
+    }
+
     return Game;
 }
 
@@ -177,7 +185,6 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
 
     // Set view projection to render player's view
     GameRendererSetViewProjectionCuboid(Renderer, Game->Camera.GetViewProjection());
-
     // Render blocks
     if (1)
     {
@@ -604,7 +611,7 @@ internal void GameUpdateEntities(game* Game, f32 TimeStep)
     for (auto Entity : View)
     {
         auto& Logic = View.Get(Entity);
-        Logic.UpdateFunction(&Game->Registry, Entity, &Logic, TimeStep);
+        Logic.UpdateFunction(Game, &Game->Registry, Entity, &Logic, TimeStep);
     }
 }
 
@@ -631,8 +638,7 @@ internal void GamePhysicsSimulationUpdateEntities(game* Game, f32 TimeStep)
 
         aabb EntityAABB = AABBFromV3(NextPos, AABBPhysics.BoxSize);
 
-        // Stepping on a block
-        // Is kinda wonky
+        // Figuring out if somehit is it
         i32 C = (i32)bkm::Floor(NextPos.x + 0.5f);
         i32 R = (i32)bkm::Floor(NextPos.z + 0.5f);
         i32 L = (i32)bkm::Floor(NextPos.y + 0.5f);

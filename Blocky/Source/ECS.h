@@ -29,7 +29,9 @@ enum class entity : ecs_entity_type {};
 
 #include <tuple>
 
+// Forward declarations
 struct entity_registry;
+struct game;
 
 template<typename T>
 struct component_pool
@@ -77,9 +79,10 @@ struct aabb_physics
 
 struct logic_component
 {
+    // TODO: Do we need pointer to the game structure in the create/destroy function?
     using create_function = void(*)(entity_registry* Registry, entity Entity, logic_component* Logic);
     using destroy_function = void(*)(entity_registry* Registry, entity Entity, logic_component* Logic);
-    using update_function = void(*)(entity_registry* Registry, entity Entity, logic_component* Logic, f32 TimeStep);
+    using update_function = void(*)(game* Game, entity_registry* Registry, entity Entity, logic_component* Logic, f32 TimeStep);
 
     // These cannot be null
     create_function CreateFunction; // Used for setup of an entity
