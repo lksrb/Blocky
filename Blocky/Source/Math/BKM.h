@@ -133,15 +133,9 @@ namespace bkm {
 #endif
     }
 
-    f32 DeltaAngle(f32 current, f32 target)
+    inline f32 DeltaAngle(f32 current, f32 target) noexcept
     {
-        // TODO: Implement fmodf from scratch
-        f32 diff = fmodf((target - current + PI), 2 * PI);
-        if (diff < 0.0f)
-        {
-            diff += 2 * PI;
-        }
-        return diff - 2 * PI;
+        return PI - Abs(Abs(target - current) - PI);
     }
 
     inline f32 Tan(f32 x) noexcept

@@ -21,6 +21,7 @@ struct action
 {
     action_type Type;
     f32 Duration;
+    bool Finished = false; // Upon finishing, start the timer
 };
 
 internal const char* GetAliveEntityStateString(alive_entity_state State)
@@ -88,7 +89,7 @@ internal void CowCreate(entity_registry* Registry, entity Entity, logic_componen
     // Set initial state
     CowChangeState(Cow, alive_entity_state::Idle);
 
-    Cow->CurrentAction = { action_type::None, 1.0f };
+    Cow->CurrentAction = { action_type::None, 3.0f };
 
     // Initialize random series for random behaviour
     Cow->RandomSeries = RandomSeriesCreate();
@@ -101,6 +102,8 @@ internal void CowDestroy(entity_registry* Registry, entity Entity, logic_compone
 
 internal void CowUpdate(game* Game, entity_registry* Registry, entity Entity, logic_component* Logic, f32 TimeStep)
 {
+    using namespace bkm;
+
     cow* Cow = static_cast<cow*>(Logic->Storage);
     auto& Transform = GetComponent<transform>(Registry, Entity);
     auto& AABBPhysics = GetComponent<aabb_physics>(Registry, Entity);
@@ -116,19 +119,19 @@ internal void CowUpdate(game* Game, entity_registry* Registry, entity Entity, lo
             }
             case action_type::RotateRandomly:
             {
-                f32 TargetAngle = bkm::Atan2(Cow->Direction.x, Cow->Direction.y);
-                f32 AngleDiff = bkm::DeltaAngle(Transform.Rotation.y, TargetAngle);
+                // TODO: Should this really be encoded into vec2? We could use singular f32 to represent the angle...
+                f32 TargetAngle = bkm::Atan2(Cow->Direction.y, Cow->Direction.x);
+                f32 AngleDiff = DeltaAngle(Transform.Rotation.y, TargetAngle);
+                f32 RotationStep = TimeStep * 5.0f;
 
-                if (bkm::Equals(AngleDiff, TimeStep * 5.0f))
+                if (Abs(AngleDiff) < RotationStep)
                 {
                     Transform.Rotation.y = TargetAngle;
                 }
                 else
                 {
-                    Transform.Rotation.y += bkm::Sign(AngleDiff) * TimeStep * 5.0f;
+                    Transform.Rotation.y += Sign(TargetAngle - Transform.Rotation.y) * RotationStep;
                 }
-
-                //Transform.Rotation.y = bkm::Lerp(Transform.Rotation.y, bkm::Atan2(Cow->Direction.x, Cow->Direction.y), TimeStep * 5.0f);
             }
         }
 
@@ -136,8 +139,7 @@ internal void CowUpdate(game* Game, entity_registry* Registry, entity Entity, lo
         {
             Cow->ActionTimer = 0.0f;
 
-            // Next random action and a random time
-            Cow->CurrentAction = { action_type::RotateRandomly, 1.0f };
+            Cow->CurrentAction = { action_type::RotateRandomly, 5.0f };
 
             switch (Cow->CurrentAction.Type)
             {
@@ -145,6 +147,8 @@ internal void CowUpdate(game* Game, entity_registry* Registry, entity Entity, lo
                 {
                     // Choose a random direcion to face body to
                     Cow->Direction = RandomDirection(&Cow->RandomSeries);
+
+                    //Cow->Direction = v2(0.0f, -1.0);
                     break;
                 }
                 default:
@@ -160,6 +164,7 @@ internal void CowUpdate(game* Game, entity_registry* Registry, entity Entity, lo
 
     }
 
+    // !!!
     return;
 
     // State update
