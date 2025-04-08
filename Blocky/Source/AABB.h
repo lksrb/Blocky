@@ -22,7 +22,7 @@ struct aabb_collision_result
     aabb_collision_side Side;
 };
 
-internal inline aabb AABBFromV3(const v3& Position, const v3& Scale) noexcept
+internal aabb AABBFromV3(const v3& Position, const v3& Scale) noexcept
 {
     aabb Result;
     v3 HalfScale = bkm::Abs(Scale) * 0.5f;
@@ -31,22 +31,22 @@ internal inline aabb AABBFromV3(const v3& Position, const v3& Scale) noexcept
     return Result;
 }
 
-internal inline bool AABBCheckCollisionX(const aabb& Box0, const aabb& Box1, f32 Delta = bkm::EPSILON) noexcept
+internal bool AABBCheckCollisionX(const aabb& Box0, const aabb& Box1, f32 Delta = bkm::EPSILON) noexcept
 {
     return (Box0.Min.x <= Box1.Max.x + Delta && Box0.Max.x + Delta >= Box1.Min.x);
 }
 
-internal inline bool AABBCheckCollisionY(const aabb& Box0, const aabb& Box1, f32 Delta = bkm::EPSILON) noexcept
+internal bool AABBCheckCollisionY(const aabb& Box0, const aabb& Box1, f32 Delta = bkm::EPSILON) noexcept
 {
     return (Box0.Min.y <= Box1.Max.y + Delta && Box0.Max.y + Delta >= Box1.Min.y);
 }
 
-internal inline bool AABBCheckCollisionZ(const aabb& Box0, const aabb& Box1, f32 Delta = bkm::EPSILON) noexcept
+internal bool AABBCheckCollisionZ(const aabb& Box0, const aabb& Box1, f32 Delta = bkm::EPSILON) noexcept
 {
     return (Box0.Min.z <= Box1.Max.z + Delta && Box0.Max.z + Delta >= Box1.Min.z);
 }
 
-internal inline bool AABBCheckCollision(const aabb& Box0, const aabb& Box1, f32 Delta = bkm::EPSILON) noexcept
+internal bool AABBCheckCollision(const aabb& Box0, const aabb& Box1, f32 Delta = bkm::EPSILON) noexcept
 {
     return AABBCheckCollisionX(Box0, Box1, Delta) && AABBCheckCollisionY(Box0, Box1, Delta) && AABBCheckCollisionZ(Box0, Box1, Delta);
 }

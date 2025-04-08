@@ -8,7 +8,7 @@ struct random_series
 };
 
 // Global seed
-internal inline u32 g_RandomSeed = 0;
+internal u32 g_RandomSeed = 0;
 
 internal void RandomSetSeed(u32 Seed)
 {
@@ -34,16 +34,32 @@ internal u32 RandomU32(u32 Min = 0, u32 Max = UINT32_MAX)
     return Min + g_RandomSeed % (Max + 1 - Min);
 }
 
-inline random_series RandomSeriesCreate()
+internal random_series RandomSeriesCreate()
 {
     random_series Series;
     Series.Seed = RandomPCGHash(g_RandomSeed);
     return Series;
 }
 
-inline f32 RandomNormal(random_series* Series)
+internal f32 RandomFloat01(random_series* Series)
 {
     Series->Seed = RandomPCGHash(Series->Seed);
+    constexpr f32 Scale = f32(1.0f / UINT32_MAX);
+    return f32(Series->Seed) * Scale;
+}
 
+internal v2 RandomNormal(random_series* Series)
+{
+    v2 Result;
+    Result.x = 2.0f * RandomFloat01(Series) - 1.0f; // [-1, 1]
+    Result.y = 2.0f * RandomFloat01(Series) - 1.0f; // [-1, 1]
+    return Result;
+}
 
+internal v2 RandomDirection(random_series* Series)
+{
+    v2 Result = RandomNormal(Series);
+    Result.x = Result.x > 0.0f ? 1.0f : -1.0f;
+    Result.y = Result.y > 0.0f ? 1.0f : -1.0f;
+    return Result;
 }

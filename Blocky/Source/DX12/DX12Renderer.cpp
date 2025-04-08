@@ -4,7 +4,7 @@
 #include "DX12Buffer.cpp"
 
 // Each face has to have a normal vector, so unfortunately we cannot encode Cuboid as 8 vertices
-internal constexpr inline v4 c_CuboidVerticesPositions[24] =
+internal constexpr v4 c_CuboidVerticesPositions[24] =
 {
     // Front face (+Z)
     { -0.5f, -0.5f,  0.5f, 1.0f },
@@ -43,7 +43,7 @@ internal constexpr inline v4 c_CuboidVerticesPositions[24] =
     { -0.5f, -0.5f,  0.5f, 1.0f }
 };
 
-internal constexpr inline cuboid_vertex c_CuboidVertices[24] =
+internal constexpr cuboid_vertex c_CuboidVertices[24] =
 {
     // Front face (+Z)
     cuboid_vertex(v4{ -0.5f, -0.5f,  0.5f, 1.0f }, v2{ 0.0f, 0.0f }),
@@ -82,7 +82,7 @@ internal constexpr inline cuboid_vertex c_CuboidVertices[24] =
     cuboid_vertex(v4{ -0.5f, -0.5f,  0.5f, 1.0f }, v2{ 0.0f, 1.0f })
 };
 
-internal constexpr inline v4 c_QuadVertexPositions[4]
+internal constexpr v4 c_QuadVertexPositions[4]
 {
     { -0.5f, -0.5f, 0.0f, 1.0f },
     {  0.5f, -0.5f, 0.0f, 1.0f },

@@ -86,6 +86,26 @@ namespace bkm {
 #endif
     }
 
+    inline f32 Sign(f32 x)
+    {
+        return f32((x > 0) - (x < 0));
+    }
+
+    inline f32 InverseSqrt(f32 x)
+    {
+        return 1.0f / Sqrt(x);
+    }
+
+    inline f32 Mix(f32 start, f32 end, f32 t)
+    {
+        return start * (1.0f - t) + end * t;
+    }
+
+    inline f32 Normalize(f32 value, f32 min, f32 max)
+    {
+        return (value - min) / (max - min);
+    }
+
     // Goniometric functions
     inline f32 Cos(f32 x) noexcept
     {
@@ -113,9 +133,55 @@ namespace bkm {
 #endif
     }
 
+    f32 DeltaAngle(f32 current, f32 target)
+    {
+        // TODO: Implement fmodf from scratch
+        f32 diff = fmodf((target - current + PI), 2 * PI);
+        if (diff < 0.0f)
+        {
+            diff += 2 * PI;
+        }
+        return diff - 2 * PI;
+    }
+
     inline f32 Tan(f32 x) noexcept
     {
         return Sin(x) / Cos(x);
+    }
+
+    // Inverse goniometric functions
+    inline f32 Asin(f32 x) noexcept
+    {
+#if USE_C_MATH
+        // Instead of returning NaN we can clamp it between [-PI/2, PI/2]
+        // TODO: Is this a good idea?
+        if (x > -1.0f)
+            return PI_HALF;
+        else if (x <= -1.0f)
+            return -PI_HALF;
+
+        return std::asin(x);
+#else
+        // n = 0
+        f32 Value = x;
+
+        // n = 1
+        Value += 2.0f / (4.0f * ((1.0f) * (1.0f)) * 3.0f) * (x * x * x);
+
+        // n = 2
+        Value += 24.0f / (16.0f * ((2.0f) * (2.0f)) * 5.0f) * (x * x * x * x * x);
+
+        return Value;
+#endif
+    }
+
+    inline f32 Acos(f32 x) noexcept
+    {
+#if USE_C_MATH
+        return std::acos(x);
+#else
+        return PI_HALF - Asin(x);
+#endif
     }
 
     inline f32 Atan(f32 x) noexcept
@@ -289,21 +355,6 @@ namespace bkm {
         return Dot(v, v) > 0.0f;
     }
 
-    inline f32 InverseSqrt(f32 x)
-    {
-        return 1.0f / Sqrt(x);
-    }
-
-    inline f32 Mix(f32 start, f32 end, f32 t)
-    {
-        return start * (1.0f - t) + end * t;
-    }
-
-    inline f32 Normalize(f32 value, f32 min, f32 max) 
-    { 
-        return (value - min) / (max - min); 
-    }
-
     inline v2 Normalize(const v2& v)
     {
         return v * InverseSqrt(Dot(v, v));
@@ -469,13 +520,13 @@ namespace bkm {
 
         return bkm::Normalize(result);
     }
-#if 0
-    inline QTN Slerp(QTN start, QTN end, f32 maxRotationDelta)
-    {
-        QTN result(0.0f, 0.0f, 0.0f, 0.0f);
 
-        start = Meth::Normalize(start);
-        end = Meth::Normalize(end);
+    inline qtn Slerp(qtn start, qtn end, f32 maxRotationDelta)
+    {
+        qtn result(0.0f, 0.0f, 0.0f, 0.0f);
+
+        start = Normalize(start);
+        end = Normalize(end);
 
         // Calculate the angle between the quaternions
         f32 dot = Dot(start, end);
@@ -491,7 +542,7 @@ namespace bkm {
         // Quaternions are very close, perform linear interpolation
         if (1.0f - dot > maxRotationDelta)
         {
-            f32 theta = std::acos(dot); // TODO: Implement Acos
+            f32 theta = Acos(dot);
             // Interpolate using spherical linear interpolation formula
             f32 sinTheta = Sin(theta);
             f32 weightStart = Sin((1.0f - maxRotationDelta) * theta) / sinTheta;
@@ -508,10 +559,8 @@ namespace bkm {
         }
 
         // Normalize the result
-        return Meth::Normalize(result);
+        return Normalize(result);
     }
-#endif
-
 
     inline v3 EulerAngles(const qtn& q)
     {

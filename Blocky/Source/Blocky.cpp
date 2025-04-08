@@ -19,7 +19,7 @@ internal game GameCreate(game_renderer* Renderer)
     Game.Registry = EntityRegistryCreate(100);
 
     // Create another set of cows
-    for (size_t i = 0; i < 100; i++)
+    for (i32 i = 10; i < 11; i++)
     {
         auto CowEntity = CreateEntity(&Game.Registry);
 
@@ -145,7 +145,7 @@ internal void GameGenerateWorld(game* Game)
 
 internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* Input, f32 TimeStep, u32 ClientAreaWidth, u32 ClientAreaHeight)
 {
-    debug_cycle_counter GameUpdateCounter("GameUpdateCounter");
+    //debug_cycle_counter GameUpdateCounter("GameUpdateCounter");
 
     // Player update
     // NOTE: I dont think we need everything to be an entity, just most dynamic stuff
@@ -817,7 +817,7 @@ internal void GameRenderEntities(game* Game, game_renderer* Renderer, f32 TimeSt
             // Body
             GameRendererSubmitCustomCuboid_FAST(Renderer, Transform.Translation, Transform.Rotation, Transform.Scale, Render.Texture, BodyTextureCoords, v4(1.0f));
 
-            if (0)
+            if (1)
             {
                 // IDEA: Move the head based on its scale to preserve the same position of the head/body
                 // f32 Y = CowTranslation.y - Scale.y * 0.5f - LegScale.y * 0.5f;
