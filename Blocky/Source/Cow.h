@@ -13,7 +13,7 @@ enum class action_type : u32
 {
     None = 0,
     LookAtPlayer,
-    WalkToNextLocation,
+    WalkToRandomLocation,
     RotateRandomly
 };
 
@@ -89,7 +89,7 @@ internal void CowCreate(entity_registry* Registry, entity Entity, logic_componen
     // Set initial state
     CowChangeState(Cow, alive_entity_state::Idle);
 
-    Cow->CurrentAction = { action_type::None, 3.0f };
+    Cow->CurrentAction = { action_type::None, 3.0f, true };
 
     // Initialize random series for random behaviour
     Cow->RandomSeries = RandomSeriesCreate();
@@ -127,39 +127,57 @@ internal void CowUpdate(game* Game, entity_registry* Registry, entity Entity, lo
                 if (Abs(AngleDiff) < RotationStep)
                 {
                     Transform.Rotation.y = TargetAngle;
+                    Cow->CurrentAction.Finished = true;
+
                 }
                 else
                 {
                     Transform.Rotation.y += Sign(TargetAngle - Transform.Rotation.y) * RotationStep;
                 }
             }
-        }
 
-        if (Cow->ActionTimer > Cow->CurrentAction.Duration)
-        {
-            Cow->ActionTimer = 0.0f;
-
-            Cow->CurrentAction = { action_type::RotateRandomly, 5.0f };
-
-            switch (Cow->CurrentAction.Type)
+            case action_type::WalkToRandomLocation:
             {
-                case action_type::RotateRandomly:
-                {
-                    // Choose a random direcion to face body to
-                    Cow->Direction = RandomDirection(&Cow->RandomSeries);
-
-                    //Cow->Direction = v2(0.0f, -1.0);
-                    break;
-                }
-                default:
-                    break;
+                break;
             }
-
-
         }
-        else
+
+        // After an action is finished, start counting
+        if (Cow->CurrentAction.Finished)
         {
-            Cow->ActionTimer += TimeStep;
+            if (Cow->ActionTimer > Cow->CurrentAction.Duration)
+            {
+                Cow->ActionTimer = 0.0f;
+
+                Cow->CurrentAction = { action_type::RotateRandomly, 1.0f, false };
+
+                switch (Cow->CurrentAction.Type)
+                {
+                    case action_type::RotateRandomly:
+                    {
+                        // Choose a random direcion to face body to
+                        Cow->Direction = RandomNormal(&Cow->RandomSeries);
+
+                        Cow->CurrentAction.Duration = 1.0f + RandomFloat01(&Cow->RandomSeries);
+
+                        Trace("%.3f, %.3f", Cow->Direction.x, Cow->Direction.y);
+
+                        //Cow->Direction = v2(0.0f, -1.0);
+                        break;
+                    }
+                    case action_type::WalkToRandomLocation:
+                    {
+
+                        break;
+                    }
+                    default:
+                        break;
+                }
+            }
+            else
+            {
+                Cow->ActionTimer += TimeStep;
+            }
         }
 
     }
