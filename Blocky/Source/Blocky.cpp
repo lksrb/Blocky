@@ -23,15 +23,15 @@ internal game GameCreate(game_renderer* Renderer)
     {
         auto CowEntity = CreateEntity(&Game.Registry);
 
-        auto& Transform = AddComponent<transform>(&Game.Registry, CowEntity);
+        auto& Transform = AddComponent<transform_component>(&Game.Registry, CowEntity);
         Transform.Translation = v3((f32)i, 17, 2);
         Transform.Scale = v3(0.7f, 0.7f, 1.0f);
         Transform.Rotation = v3(0.0f, 0.0f, 0.0f);
 
-        auto& Render = AddComponent<renderable>(&Game.Registry, CowEntity);
+        auto& Render = AddComponent<render_component>(&Game.Registry, CowEntity);
         Render.Texture = Game.CowTexture;
 
-        auto& AABB = AddComponent<aabb_physics>(&Game.Registry, CowEntity);
+        auto& AABB = AddComponent<aabb_physics_component>(&Game.Registry, CowEntity);
         AABB.BoxSize = v3(0.8f, 1.8, 0.8f);
         AABB.Velocity = v3(0.0f);
         AABB.Grounded = false;
@@ -185,6 +185,7 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
 
     // Set view projection to render player's view
     GameRendererSetViewProjectionCuboid(Renderer, Game->Camera.GetViewProjection());
+
     // Render blocks
     if (1)
     {
@@ -351,10 +352,7 @@ internal void GamePlayerUpdate(game* Game, const game_input* Input, game_rendere
         aabb PlayerAABB = AABBFromV3(NextPos, v3(0.5f, 1.8f, 0.5f));
 
         // Stepping on a block
-        // Is kinda wonky
-        i32 C = (i32)bkm::Floor(NextPos.x + 0.5f);
-        i32 R = (i32)bkm::Floor(NextPos.z + 0.5f);
-        i32 L = (i32)bkm::Floor(NextPos.y + 0.5f);
+        auto Pos = GetWorldToBlockPos(NextPos);
 
         for (i32 l = -1; l <= 1; l += 2)
         {
@@ -362,7 +360,7 @@ internal void GamePlayerUpdate(game* Game, const game_input* Input, game_rendere
             {
                 for (i32 r = -1; r <= 1; r++)
                 {
-                    auto Block = BlockGetSafe(Game, C + c, R + r, L + l);
+                    auto Block = BlockGetSafe(Game, Pos.C + c, Pos.R + r, Pos.L + l);
 
                     if (Block && Block->Placed())
                     {
@@ -392,9 +390,7 @@ internal void GamePlayerUpdate(game* Game, const game_input* Input, game_rendere
 
         PlayerAABB = AABBFromV3(NextPos, v3(0.5f, 1.8f, 0.5f));
 
-        C = (i32)bkm::Floor(NextPos.x + 0.5f);
-        R = (i32)bkm::Floor(NextPos.z + 0.5f);
-        L = (i32)bkm::Floor(NextPos.y + 0.5f);
+        Pos = GetWorldToBlockPos(NextPos);
 
         for (i32 c = -1; c <= 1; c += 2)
         {
@@ -402,7 +398,7 @@ internal void GamePlayerUpdate(game* Game, const game_input* Input, game_rendere
             {
                 for (i32 l = -1; l <= 1; l++)
                 {
-                    auto Block = BlockGetSafe(Game, C + c, R + r, L + l);
+                    auto Block = BlockGetSafe(Game, Pos.C + c, Pos.R + r, Pos.L + l);
 
                     if (Block && Block->Placed())
                     {
@@ -425,9 +421,7 @@ internal void GamePlayerUpdate(game* Game, const game_input* Input, game_rendere
 
         PlayerAABB = AABBFromV3(NextPos, v3(0.5f, 1.8f, 0.5f));
 
-        C = (i32)bkm::Floor(NextPos.x + 0.5f);
-        R = (i32)bkm::Floor(NextPos.z + 0.5f);
-        L = (i32)bkm::Floor(NextPos.y + 0.5f);
+        Pos = GetWorldToBlockPos(NextPos);
 
         for (i32 r = -1; r <= 1; r += 2)
         {
@@ -435,7 +429,7 @@ internal void GamePlayerUpdate(game* Game, const game_input* Input, game_rendere
             {
                 for (i32 l = -1; l <= 1; l++)
                 {
-                    auto Block = BlockGetSafe(Game, C + c, R + r, L + l);
+                    auto Block = BlockGetSafe(Game, Pos.C + c, Pos.R + r, Pos.L + l);
 
                     if (Block && Block->Placed())
                     {
@@ -461,15 +455,13 @@ internal void GamePlayerUpdate(game* Game, const game_input* Input, game_rendere
         Player.Position += Direction * Speed * TimeStep;
 
         // Update coords
-        i32 C = (i32)bkm::Floor(Player.Position.x + 0.5f);
-        i32 R = (i32)bkm::Floor(Player.Position.z + 0.5f);
-        i32 L = (i32)bkm::Floor(Player.Position.y + 0.5f);
+        auto Pos = GetWorldToBlockPos(Player.Position);
 #if 0
         for (i32 i = -1; i <= 1; i++)
         {
             for (i32 j = -1; j <= 1; j++)
             {
-                auto Block = BlockGetSafe(Game, C + i, R + 1, L + j);
+                auto Block = BlockGetSafe(Game, Pos.C + i, Pos.R + 1, Pos.L + j);
 
                 if (Block)
                 {
@@ -617,7 +609,7 @@ internal void GameUpdateEntities(game* Game, f32 TimeStep)
 
 internal void GamePhysicsSimulationUpdateEntities(game* Game, f32 TimeStep)
 {
-    auto View = ViewComponents<transform, aabb_physics>(&Game->Registry);
+    auto View = ViewComponents<transform_component, aabb_physics_component>(&Game->Registry);
 
     for (auto Entity : View)
     {
@@ -639,9 +631,7 @@ internal void GamePhysicsSimulationUpdateEntities(game* Game, f32 TimeStep)
         aabb EntityAABB = AABBFromV3(NextPos, AABBPhysics.BoxSize);
 
         // Figuring out if somehit is it
-        i32 C = (i32)bkm::Floor(NextPos.x + 0.5f);
-        i32 R = (i32)bkm::Floor(NextPos.z + 0.5f);
-        i32 L = (i32)bkm::Floor(NextPos.y + 0.5f);
+        block_pos Pos = GetWorldToBlockPos(NextPos);
 
         for (i32 l = -1; l <= 1; l += 2)
         {
@@ -649,7 +639,7 @@ internal void GamePhysicsSimulationUpdateEntities(game* Game, f32 TimeStep)
             {
                 for (i32 r = -1; r <= 1; r++)
                 {
-                    auto Block = BlockGetSafe(Game, C + c, R + r, L + l);
+                    auto Block = BlockGetSafe(Game, Pos.C + c, Pos.R + r, Pos.L + l);
 
                     if (Block && Block->Placed())
                     {
@@ -682,9 +672,7 @@ internal void GamePhysicsSimulationUpdateEntities(game* Game, f32 TimeStep)
 
         EntityAABB = AABBFromV3(NextPos, AABBPhysics.BoxSize);
 
-        C = (i32)bkm::Floor(NextPos.x + 0.5f);
-        R = (i32)bkm::Floor(NextPos.z + 0.5f);
-        L = (i32)bkm::Floor(NextPos.y + 0.5f);
+        Pos = GetWorldToBlockPos(NextPos);
 
         for (i32 c = -1; c <= 1; c += 2)
         {
@@ -692,7 +680,7 @@ internal void GamePhysicsSimulationUpdateEntities(game* Game, f32 TimeStep)
             {
                 for (i32 l = -1; l <= 1; l++)
                 {
-                    auto Block = BlockGetSafe(Game, C + c, R + r, L + l);
+                    auto Block = BlockGetSafe(Game, Pos.C + c, Pos.R + r, Pos.L + l);
 
                     if (Block && Block->Placed())
                     {
@@ -715,9 +703,7 @@ internal void GamePhysicsSimulationUpdateEntities(game* Game, f32 TimeStep)
 
         EntityAABB = AABBFromV3(NextPos, AABBPhysics.BoxSize);
 
-        C = (i32)bkm::Floor(NextPos.x + 0.5f);
-        R = (i32)bkm::Floor(NextPos.z + 0.5f);
-        L = (i32)bkm::Floor(NextPos.y + 0.5f);
+        Pos = GetWorldToBlockPos(NextPos);
 
         for (i32 r = -1; r <= 1; r += 2)
         {
@@ -725,7 +711,7 @@ internal void GamePhysicsSimulationUpdateEntities(game* Game, f32 TimeStep)
             {
                 for (i32 l = -1; l <= 1; l++)
                 {
-                    auto Block = BlockGetSafe(Game, C + c, R + r, L + l);
+                    auto Block = BlockGetSafe(Game, Pos.C + c, Pos.R + r, Pos.L + l);
 
                     if (Block && Block->Placed())
                     {
@@ -809,21 +795,31 @@ internal void GameRenderEntities(game* Game, game_renderer* Renderer, f32 TimeSt
     {
         //debug_cycle_counter GameUpdateCounter("Render Entities");
 
-        auto View = ViewComponents<transform, renderable, aabb_physics>(&Game->Registry);
+        auto View = ViewComponents<transform_component, render_component, aabb_physics_component>(&Game->Registry);
         for (auto Entity : View)
         {
             auto [Transform, Render, AABBPhysics] = View.Get(Entity);
 
             // Body
             GameRendererSubmitCustomCuboid_FAST(Renderer, Transform.Translation, Transform.Rotation, Transform.Scale, Render.Texture, BodyTextureCoords, v4(1.0f));
-
+            // So now, there is a difficult problem ahead of us
+            // As you know, we render each part of cow's body as individual cuboid. Its nice and simple.
+            // However, when we think about the future, where this function is for general entities made out of cuboid, 
+            // We need some sort of relation ship component so that an entity can have limbs etc.
+            // This is of course a simple problem to solve but performance may suffer?
+            // 
+            // Options:
+            // A) We make proper models and each individual limb is a submesh of a particular mesh. And we now have the flexibility of making a proper animations inside blender
+            // 
+            // B) We render each limb as a separate entity and use parent/child to get the right behaviour and modify animation inside the update loop
+            // 
             if (1)
             {
                 // IDEA: Move the head based on its scale to preserve the same position of the head/body
                 // f32 Y = CowTranslation.y - Scale.y * 0.5f - LegScale.y * 0.5f;
                 // Head
                 {
-                    local_persist transform CowHeadTransform;
+                    local_persist transform_component CowHeadTransform;
                     CowHeadTransform.Translation = v3(0, 0.4f, 0.7f);
                     //CowHeadTransform.Rotation = v3(bkm::Sin(Time) * 0.5f, 0, 0);
                     CowHeadTransform.Scale = v3(0.5f / 0.7f, 0.5f / 0.7f, 0.4f);
@@ -840,7 +836,7 @@ internal void GameRenderEntities(game* Game, game_renderer* Renderer, f32 TimeSt
                     f32 ScaleY = 1.0f;
                     f32 ScaleZ = 0.3f * 0.9f;
 
-                    transform LegTransform[4];
+                    transform_component LegTransform[4];
                     LegTransform[0].Translation = v3(0, -1.0f, 0);
                     LegTransform[0].Scale = v3(ScaleX, ScaleY, ScaleZ);
 
@@ -861,9 +857,10 @@ internal void GameRenderEntities(game* Game, game_renderer* Renderer, f32 TimeSt
                       Offsets[2] = v3(-DeltaX, Y, -DeltaZ);
                       Offsets[3] = v3(DeltaX, Y, -DeltaZ);*/
 
+                    // Animation system 
                     f32 LegRotation = bkm::Sin(Game->Time * 10.3f * bkm::Length(AABBPhysics.Velocity)) * 0.3f;
 
-                    transform KneeTransform[4] = {};
+                    transform_component KneeTransform[4] = {};
                     KneeTransform[0].Translation = v3(DeltaX, 0.0f, -DeltaZ);
                     KneeTransform[0].Rotation = v3(-LegRotation, 0, 0);
 

@@ -8,7 +8,7 @@ struct random_series
 };
 
 // Global seed
-internal u32 g_RandomSeed = 0;
+inline u32 g_RandomSeed = 0;
 
 internal void RandomSetSeed(u32 Seed)
 {
@@ -34,6 +34,22 @@ internal u32 RandomU32(u32 Min = 0, u32 Max = UINT32_MAX)
     return Min + g_RandomSeed % (Max + 1 - Min);
 }
 
+// Test this
+internal u64 RandomU64()
+{
+    u64 Value = 0;
+
+    g_RandomSeed = RandomPCGHash(g_RandomSeed);
+
+    Value |= g_RandomSeed;
+
+    g_RandomSeed = RandomPCGHash(g_RandomSeed);
+
+    Value |= (u64)g_RandomSeed << 32;
+
+    return Value;
+}
+
 internal random_series RandomSeriesCreate()
 {
     random_series Series;
@@ -50,6 +66,7 @@ internal f32 RandomFloat01(random_series* Series)
 
 internal v2 RandomNormal(random_series* Series)
 {
+    // NOTE: Not uniform anymore since y axis depends on x axis
     v2 Result;
     Result.x = 2.0f * RandomFloat01(Series) - 1.0f; // [-1, 1]
     Result.y = 2.0f * RandomFloat01(Series) - 1.0f; // [-1, 1]
@@ -62,4 +79,18 @@ internal v2 RandomDirection(random_series* Series)
     Result.x = Result.x > 0.0f ? 1.0f : -1.0f;
     Result.y = Result.y > 0.0f ? 1.0f : -1.0f;
     return Result;
+}
+
+// UUID
+// TODO: This is a temporary location until we figure out where this belongs
+struct uuid
+{
+    u64 Value;
+};
+
+internal uuid UUIDCreate()
+{
+    uuid UUID;
+    UUID.Value = RandomU64(); // Now this might be silly but we will test, if it works
+    return UUID;
 }

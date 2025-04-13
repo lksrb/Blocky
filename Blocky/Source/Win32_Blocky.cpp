@@ -648,7 +648,7 @@ int main(int argc, char** argv)
     g_ClientWidth = Window.ClientAreaWidth;
     g_ClientHeight = Window.ClientAreaHeight;
 
-    // Get current system time and use its value to initialize seed for out random
+    // Get current system time and use its value to initialize seed for our random
     FILETIME FileTime;
     GetSystemTimePreciseAsFileTime(&FileTime);
     RandomSetSeed(FileTime.dwLowDateTime);

@@ -56,7 +56,7 @@ struct component_pool
 };
 
 // Components
-struct transform
+struct transform_component
 {
     v3 Translation = v3(0.0f);
     v3 Rotation = v3(0.0f);
@@ -70,7 +70,7 @@ struct transform
     }
 };
 
-struct aabb_physics
+struct aabb_physics_component
 {
     v3 Velocity = v3(0.0f);
     v3 BoxSize; // Not exactly an AABB, just scale since the position of the aabb may vary
@@ -92,10 +92,16 @@ struct logic_component
     void* Storage;
 };
 
-struct renderable
+struct render_component
 {
     v4 Color = v4(1.0f);
     texture Texture;
+};
+
+struct relationship_component
+{
+    uuid Children[6];
+    uuid Parent;
 };
 
 // Helper to get the index of a type in the tuple
@@ -114,7 +120,7 @@ struct type_index<T, std::tuple<U, Types...>>
     static constexpr std::size_t value = 1 + type_index<T, std::tuple<Types...>>::value;
 };
 
-using components_pools = std::tuple<component_pool<transform>, component_pool<renderable>, component_pool<aabb_physics>, component_pool<logic_component>>;
+using components_pools = std::tuple<component_pool<transform_component>, component_pool<render_component>, component_pool<aabb_physics_component>, component_pool<logic_component>, component_pool<relationship_component>>;
 
 struct entity_registry
 {
@@ -429,21 +435,21 @@ internal void ECS_Test()
     {
         entity Entity = CreateEntity(&Registry);
 
-        auto& T = AddComponent<transform>(&Registry, Entity);
+        auto& T = AddComponent<transform_component>(&Registry, Entity);
         T.Translation.x = (f32)i;
 
-        auto& R = AddComponent<renderable>(&Registry, Entity);
+        auto& R = AddComponent<render_component>(&Registry, Entity);
         R.Color = v4((f32)i, 1.0f, 1.0f, 1.0f);
     }
 
     for (i32 i = 0; i < 5; i++)
     {
-        RemoveComponent<transform>(&Registry, entity(i));
+        RemoveComponent<transform_component>(&Registry, entity(i));
     }
 
     // View
     {
-        auto View = ViewComponents<transform>(&Registry);
+        auto View = ViewComponents<transform_component>(&Registry);
         for (auto Entity : View)
         {
             auto& Transform = View.Get(Entity);
@@ -453,7 +459,7 @@ internal void ECS_Test()
     }
 
     {
-        auto View = ViewComponents<transform, renderable>(&Registry);
+        auto View = ViewComponents<transform_component, render_component>(&Registry);
         for (auto Entity : View)
         {
             auto [Transform, Renderable] = View.Get(Entity);

@@ -113,7 +113,7 @@ struct game
     u32 BlocksCount = 0;
 
     texture CrosshairTexture;
-    texture BlockTextures[BLOCK_TYPE_COUNT]; 
+    texture BlockTextures[BLOCK_TYPE_COUNT];
 
     texture CowTexture;
 
@@ -218,3 +218,18 @@ internal texture_coords GetTextureCoords(i32 GridWidth, i32 GridHeight, i32 Bott
 
     return TextureCoords;
 };
+
+struct block_pos
+{
+    i32 C, R, L;
+};
+
+internal block_pos GetWorldToBlockPos(const v3& WorldPos)
+{
+    // Figuring out if somehit is it
+    i32 C = (i32)bkm::Floor(WorldPos.x + 0.5f);
+    i32 R = (i32)bkm::Floor(WorldPos.z + 0.5f);
+    i32 L = (i32)bkm::Floor(WorldPos.y + 0.5f);
+
+    return { C,R,L };
+}

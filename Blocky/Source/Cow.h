@@ -14,7 +14,7 @@ enum class action_type : u32
     None = 0,
     LookAtPlayer,
     WalkToRandomLocation,
-    RotateRandomly
+    RotateRandomly,
 };
 
 struct action
@@ -105,8 +105,8 @@ internal void CowUpdate(game* Game, entity_registry* Registry, entity Entity, lo
     using namespace bkm;
 
     cow* Cow = static_cast<cow*>(Logic->Storage);
-    auto& Transform = GetComponent<transform>(Registry, Entity);
-    auto& AABBPhysics = GetComponent<aabb_physics>(Registry, Entity);
+    auto& Transform = GetComponent<transform_component>(Registry, Entity);
+    auto& AABBPhysics = GetComponent<aabb_physics_component>(Registry, Entity);
 
     // Actions
     if (1)
@@ -115,12 +115,21 @@ internal void CowUpdate(game* Game, entity_registry* Registry, entity Entity, lo
         {
             case action_type::None:
             {
+                block_pos Pos = GetWorldToBlockPos(Transform.Translation);
+
+                auto GroundBlock = BlockGetSafe(Game, Pos.C, Pos.R, Pos.L - 1);
+
+                if (GroundBlock)
+                {
+                    GroundBlock->Color = v4(1.0f, 0.0f, 0.0f, 1.0f);
+                }
+
                 break;
             }
             case action_type::RotateRandomly:
             {
                 // TODO: Should this really be encoded into vec2? We could use singular f32 to represent the angle...
-                f32 TargetAngle = bkm::Atan2(Cow->Direction.y, Cow->Direction.x);
+                f32 TargetAngle = Atan2(Cow->Direction.y, Cow->Direction.x);
                 f32 AngleDiff = DeltaAngle(Transform.Rotation.y, TargetAngle);
                 f32 RotationStep = TimeStep * 5.0f;
 
@@ -136,8 +145,12 @@ internal void CowUpdate(game* Game, entity_registry* Registry, entity Entity, lo
                 }
             }
 
-            case action_type::WalkToRandomLocation:
+            case action_type::LookAtPlayer:
             {
+                v3 PlayerDirDiff = Game->Player.Position - Transform.Translation;
+
+                Transform.Rotation.y = Atan2(PlayerDirDiff.x, PlayerDirDiff.z);
+
                 break;
             }
         }
@@ -149,8 +162,10 @@ internal void CowUpdate(game* Game, entity_registry* Registry, entity Entity, lo
             {
                 Cow->ActionTimer = 0.0f;
 
-                Cow->CurrentAction = { action_type::RotateRandomly, 1.0f, false };
+                //Cow->CurrentAction = { action_type::RotateRandomly, 1.0f, false };
+                Cow->CurrentAction = { action_type::LookAtPlayer, 1.0f, false };
 
+                // Once moment
                 switch (Cow->CurrentAction.Type)
                 {
                     case action_type::RotateRandomly:
@@ -165,9 +180,9 @@ internal void CowUpdate(game* Game, entity_registry* Registry, entity Entity, lo
                         //Cow->Direction = v2(0.0f, -1.0);
                         break;
                     }
-                    case action_type::WalkToRandomLocation:
+                    case action_type::LookAtPlayer:
                     {
-
+                        
                         break;
                     }
                     default:
