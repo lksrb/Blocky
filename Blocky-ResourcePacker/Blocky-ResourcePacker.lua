@@ -17,7 +17,9 @@ project "Blocky-ResourcePacker"
 	includedirs {
 		"Source",
 		"%{IncludeDir.stb}",
-		"%{IncludeDir.VulkanSDK}"
+		"%{IncludeDir.VulkanSDK}",
+		"%{IncludeDir.Assimp}",
+		"%{IncludeDir.Blocky_Common}"
 	}
 
     links {
@@ -49,6 +51,7 @@ project "Blocky-ResourcePacker"
 			"%{Library.ShaderC_Debug}",
 			"%{Library.SPIRV_Cross_Debug}",
 			"%{Library.SPIRV_Cross_GLSL_Debug}",
+			"%{Library.Assimp_Debug}"
 		}
 
 		-- Copy DDLs next to  executable
@@ -56,7 +59,8 @@ project "Blocky-ResourcePacker"
 			"if not exist %{cfg.targetdir}/shaderc_sharedd.dll ( {COPYFILE} %{LibraryDir.VulkanSDK_DLL}/shaderc_sharedd.dll %{cfg.targetdir} )",
 			"if not exist %{cfg.targetdir}/spirv-cross-c-shared.dll ( {COPYFILE} %{LibraryDir.VulkanSDK_DLL}/spirv-cross-c-sharedd.dll %{cfg.targetdir} )",
 			"if not exist %{cfg.targetdir}/SPIRV-Tools-sharedd.dll ( {COPYFILE} %{LibraryDir.VulkanSDK_DLL}/SPIRV-Tools-sharedd.dll %{cfg.targetdir} )",
-			"start /D %{wks.location} %{cfg.targetdir}/%{prj.name}"
+			'{COPY} "%{Binaries.Assimp_Debug}" "%{cfg.targetdir}"',
+			--"start /D %{wks.location} %{cfg.targetdir}/%{prj.name}"
 		}
 
 	filter "configurations:Release"
@@ -71,6 +75,7 @@ project "Blocky-ResourcePacker"
 			"%{Library.ShaderC_Release}",
 			"%{Library.SPIRV_Cross_Release}",
 			"%{Library.SPIRV_Cross_GLSL_Release}",
+			"%{Library.Assimp_Release}"
 		}
 
 		-- Copy DDLs next to executable
@@ -78,5 +83,6 @@ project "Blocky-ResourcePacker"
 			"if not exist %{cfg.targetdir}/shaderc_shared.dll ( {COPYFILE} %{LibraryDir.VulkanSDK_DLL}/shaderc_shared.dll %{cfg.targetdir} )",
 			"if not exist %{cfg.targetdir}/spirv-cross-c-shared.dll ( {COPYFILE} %{LibraryDir.VulkanSDK_DLL}/spirv-cross-c-shared.dll %{cfg.targetdir} )",
 			"if not exist %{cfg.targetdir}/SPIRV-Tools-shared.dll ( {COPYFILE} %{LibraryDir.VulkanSDK_DLL}/SPIRV-Tools-shared.dll %{cfg.targetdir} )",
-			"start /D %{wks.location} %{cfg.targetdir}/%{prj.name}"
+			'{COPY} "%{Binaries.Assimp_Release}" "%{cfg.targetdir}"',
+			--"start /D %{wks.location} %{cfg.targetdir}/%{prj.name}"
 		}

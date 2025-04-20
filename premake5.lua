@@ -42,4 +42,7 @@ include "Blocky/Blocky.lua"
 
 -- Tools
 group "Tools"
---include "Blocky-ResourcePacker/Blocky-ResourcePacker.lua"
+include "Blocky-ResourcePacker/Blocky-ResourcePacker.lua"
+
+group "Common"
+include "Blocky-Common/Blocky-Common.lua"

@@ -17,7 +17,8 @@ project "Blocky"
 
 	includedirs {
 		"Source",
-		"%{IncludeDir.VulkanSDK}"
+		"%{IncludeDir.VulkanSDK}",
+		"%{IncludeDir.Blocky_Common}"
 	}
 
 	links {
@@ -59,6 +60,10 @@ project "Blocky"
 		symbols "on"
 		buildoptions { 
 			"/Zc:nrvo-" -- Stops compiler from optimizing return values
+		}
+
+		prebuildcommands {
+	--		"start /D %{wks.location} %{cfg.targetdir}/%{prj.name}"
 		}
 
 	filter "configurations:Release"

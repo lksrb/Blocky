@@ -98,6 +98,18 @@ struct render_component
     texture Texture;
 };
 
+struct mesh_render_component
+{
+    mesh* Mesh;
+
+    // TODO: Materials
+    struct material
+    {
+
+    };
+    material* Material;
+};
+
 struct relationship_component
 {
     uuid Children[6];

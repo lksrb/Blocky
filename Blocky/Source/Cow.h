@@ -1,5 +1,30 @@
 #pragma once
 
+#include <vector>
+
+struct mesh_vertex
+{
+    v3 Position;
+    v3 Normal;
+    v2 TextureCoords;
+};
+
+struct submesh
+{
+    u32 BaseVertex = 0;
+    u32 BaseIndex = 0;
+    u32 VertexCount = 0;
+    u32 IndexCount = 0;
+    m4 Transform{ 1.0f };
+};
+
+struct mesh
+{
+    std::vector<mesh_vertex> Vertices;
+    std::vector<u32> Indices;
+    std::vector<submesh> Submeshes;
+};
+
 enum class alive_entity_state : u32
 {
     None = 0,

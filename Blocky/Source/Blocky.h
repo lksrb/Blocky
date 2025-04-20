@@ -5,14 +5,6 @@
 #include "RayCast.h"
 #include "ECS.h"
 
-//#include <vector>
-
-inline u32 SafeTruncateU64(u64 Value)
-{
-    Assert(Value <= UINT32_MAX, "Casting u64 that is bigger than u32!");
-    return static_cast<u32>(Value);
-}
-
 struct camera
 {
     m4 Projection{ 1.0f };
@@ -74,7 +66,6 @@ enum class entity_flags : u32
     InteractsWithBlocks = 1 << 1,
     Renderable = 1 << 2,
 };
-
 ENABLE_BITWISE_OPERATORS(entity_flags, u32);
 
 struct player
