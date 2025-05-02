@@ -27,6 +27,7 @@ workspace "Blocky"
 		"Resources/FastCuboid.hlsl",
 		"Blocky/Blocky.lua",
 		"Blocky-ResourcePacker/Blocky-ResourcePacker.lua",
+		"Resources/ComputeCuboid.hlsl",
 	}
 
 	flags {

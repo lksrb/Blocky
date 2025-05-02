@@ -29,6 +29,24 @@ struct texture_coords
     }
 };
 
+struct texture_block_coords
+{
+    texture_coords TextureCoords[6];
+
+    explicit texture_block_coords()
+    {
+        for (u32 i = 0; i < 6; i++)
+        {
+            TextureCoords[i] = texture_coords();
+        }
+    }
+};
+
+struct block_coords
+{
+    texture_coords TextureCoords[6];
+};
+
 struct quad_vertex
 {
     v3 Position;
@@ -63,9 +81,17 @@ struct fast_cuboid_transform_vertex_data
         XMMATRIX XmmTransform;
     };
 
-    texture_coords TextureCoords[6];
+    block_coords TextureCoords;
+
     v4 Color;
     u32 TextureIndex;
+};
+
+struct dx12_compute_target
+{
+    ID3D12Resource* Handle;
+    u32 Width;
+    u32 Height;
 };
 
 // Basically a push constant
@@ -74,6 +100,14 @@ struct fast_cuboid_transform_vertex_data
 struct dx12_root_signature_constant_buffer
 {
     m4 ViewProjection;
+};
+
+struct dx12_root_signature_constant_buffer_rt
+{
+    m4 InverseView;
+    m4 InverseProjection;
+    v4 CameraPosition;
+    u32 FrameIndex;
 };
 
 // API-agnostic type definition
@@ -97,6 +131,10 @@ struct game_renderer
     ID3D12CommandAllocator* CopyCommandAllocators[FIF];
     ID3D12CommandQueue* CopyCommandQueue;
     ID3D12GraphicsCommandList2* CopyCommandList;
+
+    ID3D12CommandAllocator* ComputeCommandAllocators[FIF];
+    ID3D12CommandQueue* ComputeCommandQueue;
+    ID3D12GraphicsCommandList2* ComputeCommandList;
 
     IDXGISwapChain4* SwapChain;
     ID3D12Resource* BackBuffers[FIF];
@@ -163,6 +201,19 @@ struct game_renderer
     dx12_vertex_buffer FastCuboidTransformVertexBuffers[FIF] = {};
 
     dx12_vertex_buffer FastCuboidVertexBufferPositions;
+     
+    // RayTrace
+    bool EnableRayTrace = true;
+    dx12_pipeline RTAccumulatePipeline;
+    //dx12_pipeline RTMainPipeline;
+    ID3D12DescriptorHeap* ComputeDescriptorHeap;
+    ID3D12DescriptorHeap* ComputeDescriptorHeapCPUVisible;
+    ID3D12RootSignature* ComputeRootSignature;
+
+    dx12_compute_target AccumulationBuffers[FIF];
+    // Create identical render targets that will be copied to swapchains back buffers
+    dx12_compute_target ComputeTargets[FIF];
+    dx12_root_signature_constant_buffer_rt RayTracingSignatureBuffer;
 };
 
 // Init / Destroy functions
@@ -171,8 +222,11 @@ internal void GameRendererDestroy(game_renderer* Renderer);
 
 internal void GameRendererInitD3D(game_renderer* Renderer, const game_window& Window);
 internal void GameRendererInitD3DPipeline(game_renderer* Renderer);
+internal void GameRendererInitD3DRayTracingPipeline(game_renderer* Renderer, const game_window& Window);
+
 internal void GameRendererResizeSwapChain(game_renderer* Renderer, u32 RequestWidth, u32 RequestHeight);
 internal void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height);
+internal void GameRendererRenderRT(game_renderer* Renderer, u32 Width, u32 Height);
 internal u64 GameRendererSignal(ID3D12CommandQueue* CommandQueue, ID3D12Fence* Fence, u64* FenceValue);
 internal void GameRendererWaitForFenceValue(ID3D12Fence* Fence, u64 FenceValue, HANDLE FenceEvent, u32 Duration = UINT32_MAX);
 internal void GameRendererFlush(game_renderer* Renderer);
@@ -199,3 +253,13 @@ internal void GameRendererSubmitCustomCuboid(game_renderer* Renderer, const v3& 
 internal void GameRendererSubmitCustomCuboid_FAST(game_renderer* Renderer, const m4& Transform, const texture& Texture, texture_coords TextureCoords[6], const v4& Color);
 
 internal void GameRendererSubmitCustomCuboid_FAST(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale, const texture& Texture, texture_coords TextureCoords[6], const v4& Color);
+
+struct mesh_v2;
+internal void GameRendererSubmitMesh(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale, mesh_v2* Mesh);
+
+// ===============================================================================================================
+//                                                   RENDERER API - RayTracing                                              
+// ===============================================================================================================
+
+internal void GameRendererSetInverseViewAndProjection(game_renderer* Renderer, const m4& InverseView, const m4& InverseProjection, const v4& CameraPosition);
+internal void GameRendererSubmitRTSphere(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale);

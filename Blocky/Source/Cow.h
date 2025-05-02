@@ -1,30 +1,5 @@
 #pragma once
 
-#include <vector>
-
-struct mesh_vertex
-{
-    v3 Position;
-    v3 Normal;
-    v2 TextureCoords;
-};
-
-struct submesh
-{
-    u32 BaseVertex = 0;
-    u32 BaseIndex = 0;
-    u32 VertexCount = 0;
-    u32 IndexCount = 0;
-    m4 Transform{ 1.0f };
-};
-
-struct mesh
-{
-    std::vector<mesh_vertex> Vertices;
-    std::vector<u32> Indices;
-    std::vector<submesh> Submeshes;
-};
-
 enum class alive_entity_state : u32
 {
     None = 0,
@@ -118,6 +93,51 @@ internal void CowCreate(entity_registry* Registry, entity Entity, logic_componen
 
     // Initialize random series for random behaviour
     Cow->RandomSeries = RandomSeriesCreate();
+
+    auto& MeshRender = AddComponent<mesh_render_component>(Registry, Entity);
+    auto Mesh = MeshRender.Mesh = new mesh;
+
+    return;
+    // Read mesh
+    {
+        buffer Buffer = ReadBinary("Resources/Mesh/Cow.blmesh");
+        u8* Pointer = (u8*)Buffer.Data;
+
+        // Get tag
+        char Tag[4];
+        memcpy(Tag, Pointer, 4);
+        Pointer += 4;
+
+        // Get vertices
+        u32 Size = 0;
+        memcpy(&Size, Pointer, 4);
+        Pointer += 4;
+        Mesh->Vertices = { (mesh_vertex*)Pointer, Size };
+        Pointer += Size;
+
+        // Get Indices
+        Size = 0;
+        memcpy(&Size, Pointer, 4);
+        Pointer += 4;
+        Mesh->Indices = { (u32*)Pointer, Size };
+        Pointer += Size;
+
+        // Get Submeshes
+        Size = 0;
+        memcpy(&Size, Pointer, 4);
+        Pointer += 4;
+        Mesh->Submeshes = { (submesh*)Pointer, Size };
+        Pointer += Size;
+
+        // Get Texture
+        u32 Width;
+        u32 Height;
+        memcpy(&Width, Pointer, 4);
+        Pointer += 4;
+        memcpy(&Height, Pointer, 4);
+        Pointer += 4;
+        //Mesh->Texture = { Width, Height, Pointer };
+    }
 }
 
 internal void CowDestroy(entity_registry* Registry, entity Entity, logic_component* Logic)
@@ -174,7 +194,7 @@ internal void CowUpdate(game* Game, entity_registry* Registry, entity Entity, lo
             {
                 v3 PlayerDirDiff = Game->Player.Position - Transform.Translation;
 
-                Transform.Rotation.y = Atan2(PlayerDirDiff.x, PlayerDirDiff.z);
+//                Transform.Rotation.y = Atan2(PlayerDirDiff.x, PlayerDirDiff.z);
 
                 break;
             }

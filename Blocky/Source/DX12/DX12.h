@@ -18,6 +18,7 @@ using namespace DirectX;
 
 // TODO: Better approach?
 inline ID3D12InfoQueue* g_DebugInfoQueue; // Created by GameRenderer
+internal void DX12DumpInfoQueue(ID3D12InfoQueue* InfoQueue);
 #define DumpInfoQueue() DX12DumpInfoQueue(g_DebugInfoQueue)
 #define DxAssert(x) do { HRESULT __Result = x; if (FAILED(__Result)) { DumpInfoQueue(); Assert(false, #x); } } while(0)
 #define FIF 2
@@ -53,8 +54,8 @@ template<typename F>
 internal void DX12SubmitToQueueImmidiate(ID3D12Device* Device, ID3D12CommandAllocator* CommandAllocator, ID3D12GraphicsCommandList* CommandList, ID3D12CommandQueue* CommandQueue, F&& Func)
 {
     // Reset
-    CommandAllocator->Reset();
-    CommandList->Reset(CommandAllocator, nullptr);
+    DxAssert(CommandAllocator->Reset());
+    DxAssert(CommandList->Reset(CommandAllocator, nullptr));
 
     // Record stuff
     Func(CommandList);
@@ -73,9 +74,9 @@ internal void DX12SubmitToQueueImmidiate(ID3D12Device* Device, ID3D12CommandAllo
         ID3D12Fence* Fence;
 
         // Create a simple fence for synchronization
-        Device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&Fence));
+        DxAssert(Device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&Fence)));
 
-        CommandQueue->Signal(Fence, ++FenceValue);
+        DxAssert(CommandQueue->Signal(Fence, ++FenceValue));
 
         // Step 3: Wait until the GPU reaches the fence
         if (SUCCEEDED(Fence->SetEventOnCompletion(FenceValue, FenceEvent)))

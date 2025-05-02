@@ -186,6 +186,9 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
     // Set view projection to render player's view
     GameRendererSetViewProjectionCuboid(Renderer, Game->Camera.GetViewProjection());
 
+    // RTRTRT
+    GameRendererSetInverseViewAndProjection(Renderer, bkm::Inverse(Game->Camera.View), bkm::Inverse(Game->Camera.Projection), v4(Game->Player.Position + Game->CameraOffset, 0.0));
+
     // Render blocks
     if (1)
     {
@@ -222,6 +225,8 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
     }
 }
 
+extern bool CameraMoved = false;
+
 internal void GamePlayerUpdate(game* Game, const game_input* Input, game_renderer* Renderer, f32 TimeStep)
 {
     auto& Player = Game->Player;
@@ -236,6 +241,8 @@ internal void GamePlayerUpdate(game* Game, const game_input* Input, game_rendere
 
     bool JustPressed = false;
     bool JumpKeyPressed = false;
+
+    CameraMoved = false;
 
     if (Input->IsKeyPressed(key::T))
     {
@@ -262,6 +269,11 @@ internal void GamePlayerUpdate(game* Game, const game_input* Input, game_rendere
         // Update rotation based on mouse input
         Player.Rotation.y -= (f32)MouseDelta.x * MouseSensitivity * TimeStep; // Yaw
         Player.Rotation.x -= (f32)MouseDelta.y * MouseSensitivity * TimeStep; // Pitch
+
+        if (MouseDelta.x != 0 && MouseDelta.y != 0)
+        {
+            CameraMoved = true;
+        }
     }
 
     // Clamp pitch to avoid gimbal lock
@@ -284,26 +296,31 @@ internal void GamePlayerUpdate(game* Game, const game_input* Input, game_rendere
         if (Input->IsKeyDown(key::W))
         {
             Direction += v3(Forward.x, 0.0f, Forward.z);
+            CameraMoved = true;
         }
 
         if (Input->IsKeyDown(key::S))
         {
             Direction -= v3(Forward.x, 0.0f, Forward.z);
+            CameraMoved = true;
         }
 
         if (Input->IsKeyDown(key::A))
         {
             Direction -= Right;
+            CameraMoved = true;
         }
 
         if (Input->IsKeyDown(key::D))
         {
             Direction += Right;
+            CameraMoved = true;
         }
 
         if (Input->IsKeyPressed(key::BackSpace) || Input->IsKeyDown(key::Space))
         {
             JumpKeyPressed = true;
+            CameraMoved = true;
         }
 
         if (Input->IsKeyPressed(key::G))
@@ -316,10 +333,12 @@ internal void GamePlayerUpdate(game* Game, const game_input* Input, game_rendere
             if (Input->IsKeyDown(key::Q) || Input->IsKeyDown(key::BackSpace) || Input->IsKeyDown(key::Space))
             {
                 Direction += v3(0.0f, 1.0f, 0.0f);
+                CameraMoved = true;
             }
             else if (Input->IsKeyDown(key::E) || Input->IsKeyDown(key::Control) || Input->IsKeyDown(key::Shift))
             {
                 Direction -= v3(0.0f, 1.0f, 0.0f);
+                CameraMoved = true;
             }
         }
 
@@ -789,6 +808,30 @@ internal void GameRenderEntities(game* Game, game_renderer* Renderer, f32 TimeSt
         LegTextureCoords[3] = Right;
         LegTextureCoords[4] = Top;
         LegTextureCoords[5] = Bottom;
+    }
+
+    if (0)
+    {
+        auto View = ViewComponents<transform_component, render_component>(&Game->Registry);
+        for (auto Entity : View)
+        {
+            auto [Transform, Render] = View.Get(Entity);
+
+            local_persist mesh_v2* Mesh;
+
+            // Create a cow mesh
+            if (!Mesh)
+            {
+                Mesh = new mesh_v2;
+                auto& CowBody = Mesh->Submeshes.emplace_back();
+
+                transform_component LocalTransform;
+                LocalTransform.Rotation = v3(0.0f, 1.0f, 0.0f);
+                CowBody.LocalTransform = LocalTransform.Matrix();
+            }
+
+            GameRendererSubmitMesh(Renderer, Transform.Translation, Transform.Rotation, Transform.Scale, Mesh);
+        }
     }
 
     if (1)

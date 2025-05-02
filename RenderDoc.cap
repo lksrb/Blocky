@@ -7,7 +7,7 @@
         ],
         "executable": "C:\\dev\\cpp\\Blocky\\bin\\Debug-windows-x86_64\\Blocky\\Blocky.exe",
         "inject": false,
-        "numQueuedFrames": 0,
+        "numQueuedFrames": 10,
         "options": {
             "allowFullscreen": true,
             "allowVSync": true,

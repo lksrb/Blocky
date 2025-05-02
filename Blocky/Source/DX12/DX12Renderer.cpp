@@ -82,6 +82,51 @@ internal constexpr cuboid_vertex c_CuboidVertices[24] =
     cuboid_vertex(v4{ -0.5f, -0.5f,  0.5f, 1.0f }, v2{ 0.0f, 1.0f })
 };
 
+struct cuboid_vertex_full
+{
+    v4 Position;
+    v3 Normal;
+};
+
+internal constexpr cuboid_vertex_full c_CuboidVerticesFull[24] =
+{
+    // Front face (+Z)
+    cuboid_vertex_full(v4{ -0.5f, -0.5f,  0.5f, 1.0f }, v3{ 0.0f, 0.0f, 1.0f }),
+    cuboid_vertex_full(v4{  0.5f, -0.5f,  0.5f, 1.0f }, v3{ 0.0f, 0.0f, 1.0f }),
+    cuboid_vertex_full(v4{  0.5f,  0.5f,  0.5f, 1.0f }, v3{ 0.0f, 0.0f, 1.0f }),
+    cuboid_vertex_full(v4{ -0.5f,  0.5f,  0.5f, 1.0f }, v3{ 0.0f, 0.0f, 1.0f }),
+
+    // Back face (-Z)                                                 
+    cuboid_vertex_full(v4{  0.5f, -0.5f, -0.5f, 1.0f }, v3{ 0.0f, 0.0f, -1.0f }),
+    cuboid_vertex_full(v4{ -0.5f, -0.5f, -0.5f, 1.0f }, v3{ 0.0f, 0.0f, -1.0f }),
+    cuboid_vertex_full(v4{ -0.5f,  0.5f, -0.5f, 1.0f }, v3{ 0.0f, 0.0f, -1.0f }),
+    cuboid_vertex_full(v4{  0.5f,  0.5f, -0.5f, 1.0f }, v3{ 0.0f, 0.0f, -1.0f }),
+
+    // Left face (-X)                                                 
+    cuboid_vertex_full(v4{ -0.5f, -0.5f, -0.5f, 1.0f }, v3{ -1.0f, 0.0f, 0.0f }),
+    cuboid_vertex_full(v4{ -0.5f, -0.5f,  0.5f, 1.0f }, v3{ -1.0f, 0.0f, 0.0f }),
+    cuboid_vertex_full(v4{ -0.5f,  0.5f,  0.5f, 1.0f }, v3{ -1.0f, 0.0f, 0.0f }),
+    cuboid_vertex_full(v4{ -0.5f,  0.5f, -0.5f, 1.0f }, v3{ -1.0f, 0.0f, 0.0f }),
+
+    // Right face (+X)                                                
+    cuboid_vertex_full(v4{  0.5f, -0.5f,  0.5f, 1.0f }, v3{ 1.0f, 0.0f, 0.0f }),
+    cuboid_vertex_full(v4{  0.5f, -0.5f, -0.5f, 1.0f }, v3{ 1.0f, 0.0f, 0.0f }),
+    cuboid_vertex_full(v4{  0.5f,  0.5f, -0.5f, 1.0f }, v3{ 1.0f, 0.0f, 0.0f }),
+    cuboid_vertex_full(v4{  0.5f,  0.5f,  0.5f, 1.0f }, v3{ 1.0f, 0.0f, 0.0f }),
+
+    // Top face (+Y)                                                  
+    cuboid_vertex_full(v4{ -0.5f,  0.5f,  0.5f, 1.0f }, v3{ 0.0f, 1.0f, 0.0f }),
+    cuboid_vertex_full(v4{  0.5f,  0.5f,  0.5f, 1.0f }, v3{ 0.0f, 1.0f, 0.0f }),
+    cuboid_vertex_full(v4{  0.5f,  0.5f, -0.5f, 1.0f }, v3{ 0.0f, 1.0f, 0.0f }),
+    cuboid_vertex_full(v4{ -0.5f,  0.5f, -0.5f, 1.0f }, v3{ 0.0f, 1.0f, 0.0f }),
+
+    // Bottom face (-Y)                                               
+    cuboid_vertex_full(v4{ -0.5f, -0.5f, -0.5f, 1.0f }, v3{ 0.0f, -1.0f, 0.0f }),
+    cuboid_vertex_full(v4{  0.5f, -0.5f, -0.5f, 1.0f }, v3{ 0.0f, -1.0f, 0.0f }),
+    cuboid_vertex_full(v4{  0.5f, -0.5f,  0.5f, 1.0f }, v3{ 0.0f, -1.0f, 0.0f }),
+    cuboid_vertex_full(v4{ -0.5f, -0.5f,  0.5f, 1.0f }, v3{ 0.0f, -1.0f, 0.0f })
+};
+
 internal constexpr v4 c_QuadVertexPositions[4]
 {
     { -0.5f, -0.5f, 0.0f, 1.0f },
@@ -96,6 +141,11 @@ internal game_renderer GameRendererCreate(const game_window& Window)
 
     GameRendererInitD3D(&Renderer, Window);
     GameRendererInitD3DPipeline(&Renderer);
+
+    if (Renderer.EnableRayTrace)
+    {
+        GameRendererInitD3DRayTracingPipeline(&Renderer, Window);
+    }
 
     return Renderer;
 }
@@ -225,7 +275,7 @@ internal void GameRendererInitD3D(game_renderer* Renderer, const game_window& Wi
         Desc.NodeMask = 0;
         DxAssert(Renderer->Device->CreateCommandQueue(&Desc, IID_PPV_ARGS(&Renderer->DirectCommandQueue)));
 
-        // Create a direct command list
+        // Create direct command list
         {
             DxAssert(Renderer->Device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, Renderer->DirectCommandAllocators[Renderer->CurrentBackBufferIndex], nullptr, IID_PPV_ARGS(&Renderer->DirectCommandList)));
 
@@ -273,7 +323,7 @@ internal void GameRendererInitD3D(game_renderer* Renderer, const game_window& Wi
         Desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
         Desc.Stereo = false;
         Desc.SampleDesc = { 1, 0 }; // Anti-aliasing needs to be done manually in D3D12
-        Desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT | DXGI_USAGE_BACK_BUFFER;
+        Desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
         Desc.BufferCount = FIF;
         Desc.Scaling = DXGI_SCALING_STRETCH;
         Desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
@@ -286,8 +336,9 @@ internal void GameRendererInitD3D(game_renderer* Renderer, const game_window& Wi
         FullScreenDesc.Windowed = true;
 
         IDXGISwapChain1* SwapChain1;
-        DxAssert(Renderer->Factory->CreateSwapChainForHwnd(Renderer->DirectCommandQueue, Window.WindowHandle, &Desc, &FullScreenDesc, nullptr, &SwapChain1));
+        HRESULT Result = (Renderer->Factory->CreateSwapChainForHwnd(Renderer->DirectCommandQueue, Window.WindowHandle, &Desc, &FullScreenDesc, nullptr, &SwapChain1));
 
+        DumpInfoQueue();
         // Disable the Alt+Enter fullscreen toggle feature. Switching to fullscreen
         // will be handled manually.
         DxAssert(Renderer->Factory->MakeWindowAssociation(Window.WindowHandle, DXGI_MWA_NO_ALT_ENTER));
@@ -318,6 +369,7 @@ internal void GameRendererInitD3D(game_renderer* Renderer, const game_window& Wi
         for (u32 i = 0; i < FIF; ++i)
         {
             DxAssert(Renderer->SwapChain->GetBuffer(i, IID_PPV_ARGS(&Renderer->BackBuffers[i])));
+            Renderer->BackBuffers[i]->SetName(L"SwapchainRenderTargetTexture");
             Renderer->Device->CreateRenderTargetView(Renderer->BackBuffers[i], nullptr, RtvHandle);
 
             Renderer->RTVHandles[i] = RtvHandle;
@@ -395,9 +447,9 @@ internal void GameRendererInitD3DPipeline(game_renderer* Renderer)
         // Sampler
         D3D12_STATIC_SAMPLER_DESC Sampler = {};
         Sampler.Filter = D3D12_FILTER_MIN_MAG_MIP_POINT;
-        Sampler.AddressU = D3D12_TEXTURE_ADDRESS_MODE_MIRROR;
-        Sampler.AddressV = D3D12_TEXTURE_ADDRESS_MODE_MIRROR;
-        Sampler.AddressW = D3D12_TEXTURE_ADDRESS_MODE_MIRROR;
+        Sampler.AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+        Sampler.AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+        Sampler.AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
         Sampler.MipLODBias = 0;
         Sampler.MaxAnisotropy = 1;
         Sampler.ComparisonFunc = D3D12_COMPARISON_FUNC_ALWAYS;
@@ -453,7 +505,7 @@ internal void GameRendererInitD3DPipeline(game_renderer* Renderer)
             { "TEXINDEX", 0, DXGI_FORMAT_R32_UINT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
         };
 
-        Renderer->QuadPipeline = DX12PipelineCreate(Device, Renderer->RootSignature, InputElementDescs, CountOf(InputElementDescs), L"Resources/Quad.hlsl");
+        Renderer->QuadPipeline = DX12GraphicsPipelineCreate(Device, Renderer->RootSignature, InputElementDescs, CountOf(InputElementDescs), L"Resources/Quad.hlsl");
 
         for (u32 i = 0; i < FIF; i++)
         {
@@ -505,7 +557,7 @@ internal void GameRendererInitD3DPipeline(game_renderer* Renderer)
             { "TEXINDEX", 0, DXGI_FORMAT_R32_UINT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
         };
 
-        Renderer->CuboidPipeline = DX12PipelineCreate(Device, Renderer->RootSignature, InputElementDescs, CountOf(InputElementDescs), L"Resources/Cuboid.hlsl");
+        Renderer->CuboidPipeline = DX12GraphicsPipelineCreate(Device, Renderer->RootSignature, InputElementDescs, CountOf(InputElementDescs), L"Resources/Cuboid.hlsl");
 
         Renderer->CuboidPositionsVertexBuffer = DX12VertexBufferCreate(Device, sizeof(c_CuboidVertices));
 
@@ -583,7 +635,7 @@ internal void GameRendererInitD3DPipeline(game_renderer* Renderer)
             { "TEXINDEX", 0, DXGI_FORMAT_R32_UINT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
         };
 
-        Renderer->FastCuboidPipeline = DX12PipelineCreate(Device, Renderer->RootSignature, InputElementDescs, CountOf(InputElementDescs), L"Resources/FastCuboid.hlsl");
+        Renderer->FastCuboidPipeline = DX12GraphicsPipelineCreate(Device, Renderer->RootSignature, InputElementDescs, CountOf(InputElementDescs), L"Resources/FastCuboid.hlsl");
 
         for (u32 i = 0; i < FIF; i++)
         {
@@ -610,7 +662,7 @@ internal void GameRendererInitD3DPipeline(game_renderer* Renderer)
         Renderer->TextureStack[0] = Renderer->WhiteTexture.SRVDescriptor;
     }
 
-    // Creating the shader resource view descriptor
+    // Create descriptor heap that holds texture and uav descriptors
     {
         D3D12_DESCRIPTOR_HEAP_DESC Desc = {};
         Desc.NumDescriptors = c_MaxTexturesPerDrawCall;
@@ -738,205 +790,214 @@ internal void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
     auto DSV = Renderer->DSVHandles[CurrentBackBufferIndex];
     auto& FrameFenceValue = Renderer->FrameFenceValues[CurrentBackBufferIndex];
 
-    // Copy texture's descriptor to our renderer's descriptor
-    {
-        //debug_cycle_counter C("Copy");
-        // We cannot use CopyDescriptorsSimple to copy everything at once because it assumes that source descriptors are ordered... and TextureStack's ptrs are not.
-        // For now we keep both even though the newer variant is slower. In Release they seem to be equal. But with not many textures its unfair to judge the newer variant.
-        // TODO: Come back to this and stress test
-#if 1
-        auto DstSRV = Renderer->SRVDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
-        auto DescriptorSize = Renderer->Device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-        DstSRV.ptr += DescriptorSize;
-        for (u32 i = 1; i < Renderer->CurrentTextureStackIndex; i++)
-        {
-            Renderer->Device->CopyDescriptorsSimple(1, DstSRV, Renderer->TextureStack[i], D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-            DstSRV.ptr += DescriptorSize;
-        }
-#else // Newer
-        u32 NumDescriptors = Renderer->CurrentTextureStackIndex - 1;
-        if (NumDescriptors > 0)
-        {
-            auto DstSRV = Renderer->SRVDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
-            auto DescriptorSize = Renderer->Device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-
-            // Skip white texture
-            DstSRV.ptr += DescriptorSize;
-
-            Renderer->Device->CopyDescriptors(1, &DstSRV, &NumDescriptors, NumDescriptors, &Renderer->TextureStack[1], nullptr, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV
-            );
-        }
-#endif
-    }
-
     // Reset state
     DirectCommandAllocator->Reset();
-    CommandList->Reset(DirectCommandAllocator, Renderer->QuadPipeline.Handle);
 
-    // Frame that was presented needs to be set to render target again
-    auto Barrier = DX12Transition(BackBuffer, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
-    CommandList->ResourceBarrier(1, &Barrier);
-
-    // Copy vertex data to gpu buffer
+    if (!Renderer->EnableRayTrace)
     {
-        DX12VertexBufferSendData(&Renderer->QuadVertexBuffers[CurrentBackBufferIndex], Renderer->DirectCommandList, Renderer->QuadVertexDataBase, sizeof(quad_vertex) * Renderer->QuadIndexCount);
+        // Copy texture's descriptor to our renderer's descriptor
+        {
+            //debug_cycle_counter C("Copy");
+            // We cannot use CopyDescriptorsSimple to copy everything at once because it assumes that source descriptors are ordered... and TextureStack's ptrs are not.
+            // For now we keep both even though the newer variant is slower. In Release they seem to be equal. But with not many textures its unfair to judge the newer variant.
+            // TODO: Come back to this and stress test
+#if 1
+            auto DstSRV = Renderer->SRVDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
+            auto DescriptorSize = Renderer->Device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+            DstSRV.ptr += DescriptorSize;
+            for (u32 i = 1; i < Renderer->CurrentTextureStackIndex; i++)
+            {
+                Renderer->Device->CopyDescriptorsSimple(1, DstSRV, Renderer->TextureStack[i], D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+                DstSRV.ptr += DescriptorSize;
+            }
+#else // Newer
+            u32 NumDescriptors = Renderer->CurrentTextureStackIndex - 1;
+            if (NumDescriptors > 0)
+            {
+                auto DstSRV = Renderer->SRVDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
+                auto DescriptorSize = Renderer->Device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
-        DX12VertexBufferSendData(&Renderer->CuboidTransformVertexBuffers[CurrentBackBufferIndex], Renderer->DirectCommandList, Renderer->CuboidInstanceData, Renderer->CuboidInstanceCount * sizeof(cuboid_transform_vertex_data));
+                // Skip white texture
+                DstSRV.ptr += DescriptorSize;
 
-        DX12VertexBufferSendData(&Renderer->FastCuboidTransformVertexBuffers[CurrentBackBufferIndex], Renderer->DirectCommandList, Renderer->FastCuboidInstanceData, Renderer->FastCuboidInstanceCount * sizeof(fast_cuboid_transform_vertex_data));
+                Renderer->Device->CopyDescriptors(1, &DstSRV, &NumDescriptors, NumDescriptors, &Renderer->TextureStack[1], nullptr, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV
+                );
+            }
+#endif
+        }
 
-        DX12VertexBufferSendData(&Renderer->CustomCuboidVertexBuffers[CurrentBackBufferIndex], Renderer->DirectCommandList, Renderer->CustomCuboidVertexDataBase, sizeof(quad_vertex) * Renderer->CustomCuboidIndexCount);
-    }
 
-    // Set and clear render target view
-    v4 ClearColor = { 0.2f, 0.3f, 0.8f, 1.0f };
-    CommandList->ClearRenderTargetView(RTV, &ClearColor.x, 0, nullptr);
-    CommandList->ClearDepthStencilView(DSV, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
-    CommandList->OMSetRenderTargets(1, &RTV, false, &DSV);
+        CommandList->Reset(DirectCommandAllocator, Renderer->QuadPipeline.Handle);
 
-    D3D12_VIEWPORT Viewport;
-    Viewport.TopLeftX = 0;
-    Viewport.TopLeftY = 0;
-    Viewport.Width = (FLOAT)Width;
-    Viewport.Height = (FLOAT)Height;
-    Viewport.MinDepth = D3D12_MIN_DEPTH;
-    Viewport.MaxDepth = D3D12_MAX_DEPTH;
-    CommandList->RSSetViewports(1, &Viewport);
+        // Frame that was presented needs to be set to render target again
+        auto Barrier = DX12Transition(BackBuffer, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
+        CommandList->ResourceBarrier(1, &Barrier);
 
-    D3D12_RECT ScissorRect;
-    ScissorRect.left = 0;
-    ScissorRect.top = 0;
-    ScissorRect.right = Width;
-    ScissorRect.bottom = Height;
-    CommandList->RSSetScissorRects(1, &ScissorRect);
+        // Copy vertex data to gpu buffer
+        {
+            DX12VertexBufferSendData(&Renderer->QuadVertexBuffers[CurrentBackBufferIndex], Renderer->DirectCommandList, Renderer->QuadVertexDataBase, sizeof(quad_vertex) * Renderer->QuadIndexCount);
 
-    // Set root constants
-    // Number of 32 bit values - 16 floats in 4x4 matrix
-    CommandList->SetGraphicsRootSignature(Renderer->RootSignature);
-    CommandList->SetDescriptorHeaps(1, (ID3D12DescriptorHeap* const*)&Renderer->SRVDescriptorHeap);
-    CommandList->SetGraphicsRootDescriptorTable(1, Renderer->SRVDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
-    CommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+            DX12VertexBufferSendData(&Renderer->CuboidTransformVertexBuffers[CurrentBackBufferIndex], Renderer->DirectCommandList, Renderer->CuboidInstanceData, Renderer->CuboidInstanceCount * sizeof(cuboid_transform_vertex_data));
 
-    // Render instanced cuboids
-    if (Renderer->CuboidInstanceCount > 0)
-    {
-        CommandList->SetPipelineState(Renderer->CuboidPipeline.Handle);
+            DX12VertexBufferSendData(&Renderer->FastCuboidTransformVertexBuffers[CurrentBackBufferIndex], Renderer->DirectCommandList, Renderer->FastCuboidInstanceData, Renderer->FastCuboidInstanceCount * sizeof(fast_cuboid_transform_vertex_data));
 
-        CommandList->SetGraphicsRoot32BitConstants(0, 16, &Renderer->CuboidRootSignatureBuffer, 0);
+            DX12VertexBufferSendData(&Renderer->CustomCuboidVertexBuffers[CurrentBackBufferIndex], Renderer->DirectCommandList, Renderer->CustomCuboidVertexDataBase, sizeof(quad_vertex) * Renderer->CustomCuboidIndexCount);
+        }
 
-        // Bind vertex positions
-        local_persist D3D12_VERTEX_BUFFER_VIEW CuboidVertexBufferView;
-        CuboidVertexBufferView.BufferLocation = Renderer->CuboidPositionsVertexBuffer.Buffer.Handle->GetGPUVirtualAddress();
-        CuboidVertexBufferView.SizeInBytes = (u32)Renderer->CuboidPositionsVertexBuffer.Buffer.Size;
-        CuboidVertexBufferView.StrideInBytes = sizeof(cuboid_vertex);
+        // Set and clear render target view
+        v4 ClearColor = { 0.2f, 0.3f, 0.8f, 1.0f };
+        CommandList->ClearRenderTargetView(RTV, &ClearColor.x, 0, nullptr);
+        CommandList->ClearDepthStencilView(DSV, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
+        CommandList->OMSetRenderTargets(1, &RTV, false, &DSV);
 
-        // Bind transforms
-        local_persist D3D12_VERTEX_BUFFER_VIEW TransformVertexBufferView;
-        TransformVertexBufferView.BufferLocation = Renderer->CuboidTransformVertexBuffers[CurrentBackBufferIndex].Buffer.Handle->GetGPUVirtualAddress();
-        TransformVertexBufferView.SizeInBytes = Renderer->CuboidInstanceCount * sizeof(cuboid_transform_vertex_data);
-        TransformVertexBufferView.StrideInBytes = sizeof(cuboid_transform_vertex_data);
+        D3D12_VIEWPORT Viewport;
+        Viewport.TopLeftX = 0;
+        Viewport.TopLeftY = 0;
+        Viewport.Width = (FLOAT)Width;
+        Viewport.Height = (FLOAT)Height;
+        Viewport.MinDepth = D3D12_MIN_DEPTH;
+        Viewport.MaxDepth = D3D12_MAX_DEPTH;
+        CommandList->RSSetViewports(1, &Viewport);
 
-        D3D12_VERTEX_BUFFER_VIEW VertexBufferViews[] = { CuboidVertexBufferView, TransformVertexBufferView };
-        CommandList->IASetVertexBuffers(0, 2, VertexBufferViews);
+        D3D12_RECT ScissorRect;
+        ScissorRect.left = 0;
+        ScissorRect.top = 0;
+        ScissorRect.right = Width;
+        ScissorRect.bottom = Height;
+        CommandList->RSSetScissorRects(1, &ScissorRect);
 
-        // Bind index buffer
-        local_persist D3D12_INDEX_BUFFER_VIEW IndexBufferView;
-        IndexBufferView.BufferLocation = Renderer->QuadIndexBuffer.Buffer.Handle->GetGPUVirtualAddress();
-        IndexBufferView.SizeInBytes = 36 * sizeof(u32);
-        IndexBufferView.Format = DXGI_FORMAT_R32_UINT;
-        CommandList->IASetIndexBuffer(&IndexBufferView);
+        // Set root constants
+        // Number of 32 bit values - 16 floats in 4x4 matrix
+        CommandList->SetGraphicsRootSignature(Renderer->RootSignature);
+        CommandList->SetDescriptorHeaps(1, (ID3D12DescriptorHeap* const*)&Renderer->SRVDescriptorHeap);
+        CommandList->SetGraphicsRootDescriptorTable(1, Renderer->SRVDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
+        CommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-        // Issue draw call
-        CommandList->DrawIndexedInstanced(36, Renderer->CuboidInstanceCount, 0, 0, 0);
-    }
+        // Render instanced cuboids
+        if (Renderer->CuboidInstanceCount > 0)
+        {
+            CommandList->SetPipelineState(Renderer->CuboidPipeline.Handle);
 
-    // Render fast instanced cuboids
-    if (Renderer->FastCuboidInstanceCount > 0)
-    {
-        CommandList->SetPipelineState(Renderer->FastCuboidPipeline.Handle);
+            CommandList->SetGraphicsRoot32BitConstants(0, 16, &Renderer->CuboidRootSignatureBuffer, 0);
 
-        CommandList->SetGraphicsRoot32BitConstants(0, 16, &Renderer->CuboidRootSignatureBuffer, 0);
+            // Bind vertex positions
+            local_persist D3D12_VERTEX_BUFFER_VIEW CuboidVertexBufferView;
+            CuboidVertexBufferView.BufferLocation = Renderer->CuboidPositionsVertexBuffer.Buffer.Handle->GetGPUVirtualAddress();
+            CuboidVertexBufferView.SizeInBytes = (u32)Renderer->CuboidPositionsVertexBuffer.Buffer.Size;
+            CuboidVertexBufferView.StrideInBytes = sizeof(cuboid_vertex);
 
-        // Bind vertex positions
-        local_persist D3D12_VERTEX_BUFFER_VIEW FastCuboidVertexBufferView;
-        FastCuboidVertexBufferView.BufferLocation = Renderer->FastCuboidVertexBufferPositions.Buffer.Handle->GetGPUVirtualAddress();
-        FastCuboidVertexBufferView.SizeInBytes = (u32)Renderer->FastCuboidVertexBufferPositions.Buffer.Size;
-        FastCuboidVertexBufferView.StrideInBytes = sizeof(v4);
+            // Bind transforms
+            local_persist D3D12_VERTEX_BUFFER_VIEW TransformVertexBufferView;
+            TransformVertexBufferView.BufferLocation = Renderer->CuboidTransformVertexBuffers[CurrentBackBufferIndex].Buffer.Handle->GetGPUVirtualAddress();
+            TransformVertexBufferView.SizeInBytes = Renderer->CuboidInstanceCount * sizeof(cuboid_transform_vertex_data);
+            TransformVertexBufferView.StrideInBytes = sizeof(cuboid_transform_vertex_data);
 
-        // Bind transforms
-        local_persist D3D12_VERTEX_BUFFER_VIEW TransformVertexBufferView;
-        TransformVertexBufferView.BufferLocation = Renderer->FastCuboidTransformVertexBuffers[CurrentBackBufferIndex].Buffer.Handle->GetGPUVirtualAddress();
-        TransformVertexBufferView.SizeInBytes = Renderer->FastCuboidInstanceCount * sizeof(fast_cuboid_transform_vertex_data);
-        TransformVertexBufferView.StrideInBytes = sizeof(fast_cuboid_transform_vertex_data);
+            D3D12_VERTEX_BUFFER_VIEW VertexBufferViews[] = { CuboidVertexBufferView, TransformVertexBufferView };
+            CommandList->IASetVertexBuffers(0, 2, VertexBufferViews);
 
-        D3D12_VERTEX_BUFFER_VIEW VertexBufferViews[] = { FastCuboidVertexBufferView, TransformVertexBufferView };
-        CommandList->IASetVertexBuffers(0, 2, VertexBufferViews);
+            // Bind index buffer
+            local_persist D3D12_INDEX_BUFFER_VIEW IndexBufferView;
+            IndexBufferView.BufferLocation = Renderer->QuadIndexBuffer.Buffer.Handle->GetGPUVirtualAddress();
+            IndexBufferView.SizeInBytes = 36 * sizeof(u32);
+            IndexBufferView.Format = DXGI_FORMAT_R32_UINT;
+            CommandList->IASetIndexBuffer(&IndexBufferView);
 
-        // Bind index buffer
-        local_persist D3D12_INDEX_BUFFER_VIEW IndexBufferView;
-        IndexBufferView.BufferLocation = Renderer->QuadIndexBuffer.Buffer.Handle->GetGPUVirtualAddress();
-        IndexBufferView.SizeInBytes = 36 * sizeof(u32);
-        IndexBufferView.Format = DXGI_FORMAT_R32_UINT;
-        CommandList->IASetIndexBuffer(&IndexBufferView);
+            // Issue draw call
+            CommandList->DrawIndexedInstanced(36, Renderer->CuboidInstanceCount, 0, 0, 0);
+        }
 
-        // Issue draw call
-        CommandList->DrawIndexedInstanced(36, Renderer->FastCuboidInstanceCount, 0, 0, 0);
-    }
+        // Render fast instanced cuboids
+        if (Renderer->FastCuboidInstanceCount > 0)
+        {
+            CommandList->SetPipelineState(Renderer->FastCuboidPipeline.Handle);
 
-    // Render custom cuboids
-    if (Renderer->CustomCuboidIndexCount > 0)
-    {
-        CommandList->SetPipelineState(Renderer->QuadPipeline.Handle);
+            CommandList->SetGraphicsRoot32BitConstants(0, 16, &Renderer->CuboidRootSignatureBuffer, 0);
 
-        // Bind vertex buffer
-        local_persist D3D12_VERTEX_BUFFER_VIEW CustomCuboidVertexBufferView;
-        CustomCuboidVertexBufferView.BufferLocation = Renderer->CustomCuboidVertexBuffers[CurrentBackBufferIndex].Buffer.Handle->GetGPUVirtualAddress();
-        CustomCuboidVertexBufferView.StrideInBytes = sizeof(quad_vertex);
-        CustomCuboidVertexBufferView.SizeInBytes = Renderer->CustomCuboidIndexCount * sizeof(quad_vertex);
-        CommandList->IASetVertexBuffers(0, 1, &CustomCuboidVertexBufferView);
+            // Bind vertex positions
+            local_persist D3D12_VERTEX_BUFFER_VIEW FastCuboidVertexBufferView;
+            FastCuboidVertexBufferView.BufferLocation = Renderer->FastCuboidVertexBufferPositions.Buffer.Handle->GetGPUVirtualAddress();
+            FastCuboidVertexBufferView.SizeInBytes = (u32)Renderer->FastCuboidVertexBufferPositions.Buffer.Size;
+            FastCuboidVertexBufferView.StrideInBytes = sizeof(v4);
 
-        // Bind index buffer
-        local_persist D3D12_INDEX_BUFFER_VIEW CustomCuboidIndexBufferView;
-        CustomCuboidIndexBufferView.BufferLocation = Renderer->QuadIndexBuffer.Buffer.Handle->GetGPUVirtualAddress();
-        CustomCuboidIndexBufferView.Format = DXGI_FORMAT_R32_UINT;
-        CustomCuboidIndexBufferView.SizeInBytes = Renderer->CustomCuboidIndexCount * sizeof(u32);
-        CommandList->IASetIndexBuffer(&CustomCuboidIndexBufferView);
+            // Bind transforms
+            local_persist D3D12_VERTEX_BUFFER_VIEW TransformVertexBufferView;
+            TransformVertexBufferView.BufferLocation = Renderer->FastCuboidTransformVertexBuffers[CurrentBackBufferIndex].Buffer.Handle->GetGPUVirtualAddress();
+            TransformVertexBufferView.SizeInBytes = Renderer->FastCuboidInstanceCount * sizeof(fast_cuboid_transform_vertex_data);
+            TransformVertexBufferView.StrideInBytes = sizeof(fast_cuboid_transform_vertex_data);
 
-        CommandList->SetGraphicsRoot32BitConstants(0, 16, &Renderer->CuboidRootSignatureBuffer.ViewProjection, 0);
+            D3D12_VERTEX_BUFFER_VIEW VertexBufferViews[] = { FastCuboidVertexBufferView, TransformVertexBufferView };
+            CommandList->IASetVertexBuffers(0, 2, VertexBufferViews);
 
-        // Issue draw call
-        CommandList->DrawIndexedInstanced(Renderer->CustomCuboidIndexCount, 1, 0, 0, 0);
-    }
+            // Bind index buffer
+            local_persist D3D12_INDEX_BUFFER_VIEW IndexBufferView;
+            IndexBufferView.BufferLocation = Renderer->QuadIndexBuffer.Buffer.Handle->GetGPUVirtualAddress();
+            IndexBufferView.SizeInBytes = 36 * sizeof(u32);
+            IndexBufferView.Format = DXGI_FORMAT_R32_UINT;
+            CommandList->IASetIndexBuffer(&IndexBufferView);
 
-    // Render quads
-    if (1)
-    {
-        if (Renderer->QuadIndexCount > 0)
+            // Issue draw call
+            CommandList->DrawIndexedInstanced(36, Renderer->FastCuboidInstanceCount, 0, 0, 0);
+        }
+
+        // Render custom cuboids
+        if (Renderer->CustomCuboidIndexCount > 0)
         {
             CommandList->SetPipelineState(Renderer->QuadPipeline.Handle);
 
-            // Do not share depth
-            CommandList->ClearDepthStencilView(DSV, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
-
             // Bind vertex buffer
-            local_persist D3D12_VERTEX_BUFFER_VIEW QuadVertexBufferView;
-            QuadVertexBufferView.BufferLocation = Renderer->QuadVertexBuffers[CurrentBackBufferIndex].Buffer.Handle->GetGPUVirtualAddress();
-            QuadVertexBufferView.StrideInBytes = sizeof(quad_vertex);
-            QuadVertexBufferView.SizeInBytes = Renderer->QuadIndexCount * sizeof(quad_vertex);
-            CommandList->IASetVertexBuffers(0, 1, &QuadVertexBufferView);
+            local_persist D3D12_VERTEX_BUFFER_VIEW CustomCuboidVertexBufferView;
+            CustomCuboidVertexBufferView.BufferLocation = Renderer->CustomCuboidVertexBuffers[CurrentBackBufferIndex].Buffer.Handle->GetGPUVirtualAddress();
+            CustomCuboidVertexBufferView.StrideInBytes = sizeof(quad_vertex);
+            CustomCuboidVertexBufferView.SizeInBytes = Renderer->CustomCuboidIndexCount * sizeof(quad_vertex);
+            CommandList->IASetVertexBuffers(0, 1, &CustomCuboidVertexBufferView);
 
             // Bind index buffer
-            local_persist D3D12_INDEX_BUFFER_VIEW QuadIndexBufferView;
-            QuadIndexBufferView.BufferLocation = Renderer->QuadIndexBuffer.Buffer.Handle->GetGPUVirtualAddress();
-            QuadIndexBufferView.Format = DXGI_FORMAT_R32_UINT;
-            QuadIndexBufferView.SizeInBytes = Renderer->QuadIndexCount * sizeof(u32);
-            CommandList->IASetIndexBuffer(&QuadIndexBufferView);
+            local_persist D3D12_INDEX_BUFFER_VIEW CustomCuboidIndexBufferView;
+            CustomCuboidIndexBufferView.BufferLocation = Renderer->QuadIndexBuffer.Buffer.Handle->GetGPUVirtualAddress();
+            CustomCuboidIndexBufferView.Format = DXGI_FORMAT_R32_UINT;
+            CustomCuboidIndexBufferView.SizeInBytes = Renderer->CustomCuboidIndexCount * sizeof(u32);
+            CommandList->IASetIndexBuffer(&CustomCuboidIndexBufferView);
 
-            CommandList->SetGraphicsRoot32BitConstants(0, 16, &Renderer->QuadRootSignatureBuffer.ViewProjection, 0);
+            CommandList->SetGraphicsRoot32BitConstants(0, 16, &Renderer->CuboidRootSignatureBuffer.ViewProjection, 0);
 
             // Issue draw call
-            CommandList->DrawIndexedInstanced(Renderer->QuadIndexCount, 1, 0, 0, 0);
+            CommandList->DrawIndexedInstanced(Renderer->CustomCuboidIndexCount, 1, 0, 0, 0);
         }
+
+        // Render quads
+        if (1)
+        {
+            if (Renderer->QuadIndexCount > 0)
+            {
+                CommandList->SetPipelineState(Renderer->QuadPipeline.Handle);
+
+                // Do not share depth
+                CommandList->ClearDepthStencilView(DSV, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
+
+                // Bind vertex buffer
+                local_persist D3D12_VERTEX_BUFFER_VIEW QuadVertexBufferView;
+                QuadVertexBufferView.BufferLocation = Renderer->QuadVertexBuffers[CurrentBackBufferIndex].Buffer.Handle->GetGPUVirtualAddress();
+                QuadVertexBufferView.StrideInBytes = sizeof(quad_vertex);
+                QuadVertexBufferView.SizeInBytes = Renderer->QuadIndexCount * sizeof(quad_vertex);
+                CommandList->IASetVertexBuffers(0, 1, &QuadVertexBufferView);
+
+                // Bind index buffer
+                local_persist D3D12_INDEX_BUFFER_VIEW QuadIndexBufferView;
+                QuadIndexBufferView.BufferLocation = Renderer->QuadIndexBuffer.Buffer.Handle->GetGPUVirtualAddress();
+                QuadIndexBufferView.Format = DXGI_FORMAT_R32_UINT;
+                QuadIndexBufferView.SizeInBytes = Renderer->QuadIndexCount * sizeof(u32);
+                CommandList->IASetIndexBuffer(&QuadIndexBufferView);
+
+                CommandList->SetGraphicsRoot32BitConstants(0, 16, &Renderer->QuadRootSignatureBuffer.ViewProjection, 0);
+
+                // Issue draw call
+                CommandList->DrawIndexedInstanced(Renderer->QuadIndexCount, 1, 0, 0, 0);
+            }
+        }
+    }
+    else // Ray tracing pipeline
+    {
+        GameRendererRenderRT(Renderer, Width, Height);
     }
 
     // Present transition
@@ -1348,7 +1409,7 @@ internal void GameRendererSubmitCustomCuboid_FAST(game_renderer* Renderer, const
     // Copy texture coords
     for (i32 i = 0; i < 6; i++)
     {
-        Cuboid.TextureCoords[i] = TextureCoords[i];
+        Cuboid.TextureCoords.TextureCoords[i] = TextureCoords[i];
     }
 
     Renderer->FastCuboidInstanceCount++;
@@ -1390,7 +1451,7 @@ internal void GameRendererSubmitCustomCuboid_FAST(game_renderer* Renderer, const
     // TODO: Remove this
     for (i32 i = 0; i < 6; i++)
     {
-        Cuboid.TextureCoords[i] = TextureCoords[i];
+        Cuboid.TextureCoords.TextureCoords[i] = TextureCoords[i];
     }
 
 #if ENABLE_SIMD
@@ -1405,8 +1466,385 @@ internal void GameRendererSubmitCustomCuboid_FAST(game_renderer* Renderer, const
         * bkm::ToM4(qtn(Rotation))
         * bkm::Scale(m4(1.0f), Scale);
 #endif
-
-    Cuboid.XmmTransform = XmmTransform;
+    Cuboid.XmmTransform = /*XMMatrixTranspose*/(XmmTransform); // Avoid doing it on the GPU multiple times
 
     Renderer->FastCuboidInstanceCount++;
+}
+
+
+//#if ENABLE_SIMD
+//internal XMMATRIX GameRendererGetTransform(const v3& Translation, const v3& Rotation, const v3& Scale)
+//{
+//    XMMATRIX XmmScale = XMMatrixScalingFromVector(XMVectorSet(Scale.x, Scale.y, Scale.z, 0.0f));
+//    XMMATRIX XmmRot = XMMatrixRotationQuaternion(XMQuaternionRotationRollPitchYaw(Rotation.x, Rotation.y, Rotation.z));
+//    XMMATRIX XmmTrans = XMMatrixTranslationFromVector(XMVectorSet(Translation.x, Translation.y, Translation.z, 0.0f));
+//    return XMMatrixTranspose(XmmScale * XmmRot * XmmTrans);
+//}
+//
+//#else
+//internal m4 GameRendererGetTransform(const v3& Translation, const v3& Rotation, const v3& Scale)
+//{
+//    return bkm::Translate(m4(1.0f), Translation)
+//        * bkm::ToM4(qtn(Rotation))
+//        * bkm::Scale(m4(1.0f), Scale);
+//}
+//#endif
+
+internal m4 GameRendererGetTransform(const v3& Translation, const v3& Rotation, const v3& Scale)
+{
+    return bkm::Translate(m4(1.0f), Translation)
+        * bkm::ToM4(qtn(Rotation))
+        * bkm::Scale(m4(1.0f), Scale);
+}
+
+internal void GameRendererSubmitMesh(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale, mesh_v2* Mesh)
+{
+    // Parent transform of the entity
+    m4 ParentTransform = GameRendererGetTransform(Translation, Rotation, Scale);
+
+    for (auto& Submesh : Mesh->Submeshes)
+    {
+        Assert(Renderer->FastCuboidInstanceCount < c_MaxCubePerBatch, "Renderer->FastCuboidInstanceCount < c_MaxCuboidsPerBatch");
+        auto& Cuboid = Renderer->FastCuboidInstanceData[Renderer->FastCuboidInstanceCount];
+
+        // TODO: Better lookup?
+        // Hashtables are overkill, we can have a table indexed with enums and simply say that:
+        //  - Index 0 is a white texture
+        //  - Index 1 is a sprite-sheet texture for blocks
+        //  - Index 2 is a sprite-sheet texture for alive entities
+        // Something like that so we can avoid this 
+        u32 TextureIndex = 0;
+#if 0
+        for (u32 i = 1; i < Renderer->CurrentTextureStackIndex; i++)
+        {
+            if (Renderer->TextureStack[i].ptr == Texture.SRVDescriptor.ptr)
+            {
+                TextureIndex = i;
+                break;
+            }
+        }
+
+        if (TextureIndex == 0)
+        {
+            Assert(Renderer->CurrentTextureStackIndex < c_MaxTexturesPerDrawCall, "Renderer->TextureStackIndex < c_MaxTexturesPerDrawCall");
+            TextureIndex = Renderer->CurrentTextureStackIndex;
+            Renderer->TextureStack[TextureIndex] = Texture.SRVDescriptor;
+            Renderer->CurrentTextureStackIndex++;
+        }
+#endif
+
+        Cuboid.Color = v4(1.0f);
+        Cuboid.TextureIndex = TextureIndex;
+        Cuboid.TextureCoords = Submesh.TextureCoords;
+        Cuboid.Transform = ParentTransform * Submesh.LocalTransform;
+
+        Renderer->FastCuboidInstanceCount++;
+    }
+}
+
+// ===============================================================================================================
+//                                                   RENDERER API - RayTracing                                              
+// ===============================================================================================================
+
+internal void GameRendererInitD3DRayTracingPipeline(game_renderer* Renderer, const game_window& Window)
+{
+    auto Device = Renderer->Device;
+
+    // Create compute command queue
+    if (0)
+    {
+        // Create direct command allocator
+        for (u32 i = 0; i < FIF; i++)
+        {
+            DxAssert(Device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_COMPUTE, IID_PPV_ARGS(&Renderer->ComputeCommandAllocators[i])));
+        }
+
+        D3D12_COMMAND_QUEUE_DESC Desc = {};
+        Desc.Type = D3D12_COMMAND_LIST_TYPE_COMPUTE; // Most general - For draw, compute and copy commands
+        Desc.Priority = D3D12_COMMAND_QUEUE_PRIORITY_HIGH; // TODO: NORMAL?
+        Desc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
+        DxAssert(Device->CreateCommandQueue(&Desc, IID_PPV_ARGS(&Renderer->ComputeCommandQueue)));
+
+        // Create compute command list
+        {
+            DxAssert(Renderer->Device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_COMPUTE, Renderer->ComputeCommandAllocators[Renderer->CurrentBackBufferIndex], nullptr, IID_PPV_ARGS(&Renderer->ComputeCommandList)));
+
+            // Command lists are created in the recording state, but there is nothing
+            // to record yet. The main loop expects it to be closed, so close it now.
+            DxAssert(Renderer->ComputeCommandList->Close());
+        }
+
+    }
+
+    for (u32 i = 0; i < FIF; i++)
+    {
+        auto& Texture = Renderer->ComputeTargets[i];
+
+        // Describe and create a Texture2D.
+        D3D12_RESOURCE_DESC TextureDesc = {};
+        TextureDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+        TextureDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        TextureDesc.Width = Window.ClientAreaWidth;
+        TextureDesc.Height = Window.ClientAreaHeight;
+        TextureDesc.DepthOrArraySize = 1;
+        TextureDesc.SampleDesc.Count = 1;
+        TextureDesc.MipLevels = 1;
+        TextureDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+        TextureDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+
+        D3D12_HEAP_PROPERTIES HeapProperties = {};
+        HeapProperties.Type = D3D12_HEAP_TYPE_DEFAULT;
+        HeapProperties.CreationNodeMask = 1;
+        HeapProperties.VisibleNodeMask = 1;
+        HeapProperties.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+        HeapProperties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+
+        DxAssert(Device->CreateCommittedResource(
+            &HeapProperties,
+            D3D12_HEAP_FLAG_NONE,
+            &TextureDesc,
+            D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+            nullptr,
+            IID_PPV_ARGS(&Texture.Handle)));
+
+        Texture.Width = (u32)TextureDesc.Width;
+        Texture.Height = TextureDesc.Height;
+        Texture.Handle->SetName(L"ComputeTexture");
+    }
+
+    for (u32 i = 0; i < FIF; i++)
+    {
+        auto& Buffer = Renderer->AccumulationBuffers[i];
+
+        // Describe and create a Texture2D.
+        D3D12_RESOURCE_DESC Desc = {};
+        Desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+        Desc.Format = DXGI_FORMAT_UNKNOWN;
+        Desc.Width = Window.ClientAreaWidth * Window.ClientAreaHeight * sizeof(v4);
+        Desc.Height = 1;
+        Desc.DepthOrArraySize = 1;
+        Desc.SampleDesc.Count = 1;
+        Desc.MipLevels = 1;
+        Desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+        Desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+
+        D3D12_HEAP_PROPERTIES HeapProperties = {};
+        HeapProperties.Type = D3D12_HEAP_TYPE_DEFAULT;
+        HeapProperties.CreationNodeMask = 1;
+        HeapProperties.VisibleNodeMask = 1;
+        HeapProperties.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+        HeapProperties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+
+        DxAssert(Device->CreateCommittedResource(
+            &HeapProperties,
+            D3D12_HEAP_FLAG_NONE,
+            &Desc,
+            D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+            nullptr,
+            IID_PPV_ARGS(&Buffer.Handle)));
+
+        Buffer.Width = (u32)Desc.Width;
+        Buffer.Height = Desc.Height;
+        Buffer.Handle->SetName(L"AccumulationBuffer");
+    }
+
+    // Descriptor for compute targets
+    {
+        // Create descriptor heap that holds texture and uav descriptors
+        {
+            D3D12_DESCRIPTOR_HEAP_DESC Desc = {};
+            Desc.NumDescriptors = FIF * 2;
+            Desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+            Desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE; // Must be visible to shaders
+            Desc.NodeMask = 0;
+            DxAssert(Renderer->Device->CreateDescriptorHeap(&Desc, IID_PPV_ARGS(&Renderer->ComputeDescriptorHeap)));
+        }
+
+        // Create descriptor heap that holds texture and uav descriptors - not visible heap
+        {
+            D3D12_DESCRIPTOR_HEAP_DESC Desc = {};
+            Desc.NumDescriptors = FIF;
+            Desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+            Desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+            Desc.NodeMask = 0;
+            DxAssert(Renderer->Device->CreateDescriptorHeap(&Desc, IID_PPV_ARGS(&Renderer->ComputeDescriptorHeapCPUVisible)));
+        }
+
+        auto ComputeUAV = Renderer->ComputeDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
+        auto ComputeUAVCPU = Renderer->ComputeDescriptorHeapCPUVisible->GetCPUDescriptorHandleForHeapStart();
+        auto Increment = Device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+        for (u32 i = 0; i < FIF; i++)
+        {
+            {
+                D3D12_UNORDERED_ACCESS_VIEW_DESC Desc = {};
+                Desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+                Desc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+                Device->CreateUnorderedAccessView(Renderer->ComputeTargets[i].Handle, nullptr, &Desc, ComputeUAV);
+                ComputeUAV.ptr += Increment;
+            }
+
+            {
+                D3D12_UNORDERED_ACCESS_VIEW_DESC Desc = {};
+                Desc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
+                Desc.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
+                Desc.Buffer.FirstElement = 0;
+                Desc.Buffer.NumElements = Window.ClientAreaWidth * Window.ClientAreaHeight;
+                Device->CreateUnorderedAccessView(Renderer->AccumulationBuffers[i].Handle, nullptr, &Desc, ComputeUAV);
+                Device->CreateUnorderedAccessView(Renderer->AccumulationBuffers[i].Handle, nullptr, &Desc, ComputeUAVCPU);
+
+                ComputeUAV.ptr += Increment;
+                ComputeUAVCPU.ptr += Increment;
+            }
+        }
+    }
+
+    // Root Signature
+    {
+        D3D12_DESCRIPTOR_RANGE UAVRanges[2] = {};
+        UAVRanges[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
+        UAVRanges[0].NumDescriptors = 1;
+        UAVRanges[0].BaseShaderRegister = 0; // u0
+        UAVRanges[0].RegisterSpace = 0;
+        UAVRanges[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+        UAVRanges[1].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
+        UAVRanges[1].NumDescriptors = 1;
+        UAVRanges[1].BaseShaderRegister = 1; // u1
+        UAVRanges[1].RegisterSpace = 0;
+        UAVRanges[1].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+        D3D12_ROOT_PARAMETER Parameters[2] = {};
+        Parameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
+        Parameters[0].Constants.Num32BitValues = sizeof(Renderer->RayTracingSignatureBuffer) / 4;
+        Parameters[0].Constants.ShaderRegister = 0;  // Matches b0 in HLSL
+        Parameters[0].Constants.RegisterSpace = 0;
+        Parameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+
+        Parameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+        Parameters[1].DescriptorTable.NumDescriptorRanges = CountOf(UAVRanges);
+        Parameters[1].DescriptorTable.pDescriptorRanges = UAVRanges;
+        Parameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+
+        D3D12_ROOT_SIGNATURE_DESC Desc = {};
+        Desc.NumParameters = CountOf(Parameters);
+        Desc.pParameters = Parameters;
+        Desc.NumStaticSamplers = 0;
+        Desc.pStaticSamplers = nullptr;
+        Desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE;
+
+        // Root signature
+        ID3DBlob* Error;
+        ID3DBlob* Signature;
+        DxAssert(D3D12SerializeRootSignature(&Desc, D3D_ROOT_SIGNATURE_VERSION_1, &Signature, &Error));
+        DxAssert(Device->CreateRootSignature(0, Signature->GetBufferPointer(), Signature->GetBufferSize(), IID_PPV_ARGS(&Renderer->ComputeRootSignature)));
+    }
+
+    Renderer->RTAccumulatePipeline = DX12ComputePipelineCreate(Renderer->Device, Renderer->ComputeRootSignature, L"Resources/ComputeCuboid.hlsl", L"Accumulate");
+
+    //Renderer->RTMainPipeline = DX12ComputePipelineCreate(Renderer->Device, Renderer->ComputeRootSignature, L"Resources/ComputeCuboid.hlsl", L"Main");
+}
+
+internal void GameRendererRenderRT(game_renderer* Renderer, u32 Width, u32 Height)
+{
+    // Get current frame stuff
+    auto CommandList = Renderer->DirectCommandList;
+    auto CurrentBackBufferIndex = Renderer->CurrentBackBufferIndex;
+    auto DirectCommandAllocator = Renderer->DirectCommandAllocators[CurrentBackBufferIndex];
+
+    auto CurrentBackbuffer = Renderer->BackBuffers[CurrentBackBufferIndex];
+    auto CurrentAccumulationBuffer = Renderer->AccumulationBuffers[CurrentBackBufferIndex];
+    auto UAVIncrement = Renderer->Device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+    auto GPUUAV = Renderer->ComputeDescriptorHeap->GetGPUDescriptorHandleForHeapStart();
+    auto CPUUAV = Renderer->ComputeDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
+    GPUUAV.ptr += CurrentBackBufferIndex * 2 * UAVIncrement;
+    CPUUAV.ptr += CurrentBackBufferIndex * 2 * UAVIncrement;
+
+    const auto& CurrentComputeTarget = Renderer->ComputeTargets[CurrentBackBufferIndex];
+
+    extern bool CameraMoved;
+
+    bool Accumulate = false;
+    local_persist u32 s_FrameIndex = 1;
+
+    if (CameraMoved)
+    {
+        //s_FrameIndex = 1;
+    }
+
+    CommandList->Reset(DirectCommandAllocator, Renderer->RTAccumulatePipeline.Handle);
+
+    u32 Threads = 4;
+    UINT groupX = (Width + Threads - 1) / Threads;
+    UINT groupY = (Height + Threads - 1) / Threads;
+
+    // First we accumulate stuff
+    {
+        CommandList->SetComputeRootSignature(Renderer->ComputeRootSignature);
+        CommandList->SetDescriptorHeaps(1, (ID3D12DescriptorHeap* const*)&Renderer->ComputeDescriptorHeap);
+
+        if (s_FrameIndex == 1)
+        {
+            FLOAT ClearValues[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+            D3D12_GPU_DESCRIPTOR_HANDLE AccumulationBufferGPUHandle = Renderer->ComputeDescriptorHeap->GetGPUDescriptorHandleForHeapStart();
+            AccumulationBufferGPUHandle.ptr += UAVIncrement; // Next one is the accumulation buffer
+
+            D3D12_CPU_DESCRIPTOR_HANDLE AccumulationBufferCPUHandle = Renderer->ComputeDescriptorHeapCPUVisible->GetCPUDescriptorHandleForHeapStart();
+            AccumulationBufferCPUHandle.ptr += UAVIncrement * CurrentBackBufferIndex; // Next one is the accumulation buffer
+
+            CommandList->ClearUnorderedAccessViewFloat(AccumulationBufferGPUHandle, AccumulationBufferCPUHandle, CurrentAccumulationBuffer.Handle, ClearValues, 0, nullptr);
+        }
+
+        Renderer->RayTracingSignatureBuffer.FrameIndex = s_FrameIndex;
+
+        CommandList->SetComputeRoot32BitConstants(0, sizeof(Renderer->RayTracingSignatureBuffer) / 4, &Renderer->RayTracingSignatureBuffer, 0);
+
+        // Increment based on the frame index
+        
+        CommandList->SetComputeRootDescriptorTable(1, GPUUAV);
+
+        CommandList->Dispatch(groupX, groupY, 1);
+    }
+
+    // From UAV to COPY SOURCE
+    {
+        auto Barrier = DX12Transition(CurrentComputeTarget.Handle, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
+        CommandList->ResourceBarrier(1, &Barrier);
+    }
+
+    // Set it to copy dest
+    {
+        auto Barrier = DX12Transition(CurrentBackbuffer, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_COPY_DEST);
+        CommandList->ResourceBarrier(1, &Barrier);
+    }
+
+    // Do the actual copy
+    CommandList->CopyResource(CurrentBackbuffer, CurrentComputeTarget.Handle);
+
+    // Back to render target again
+    {
+        auto Barrier = DX12Transition(CurrentBackbuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_RENDER_TARGET);
+        CommandList->ResourceBarrier(1, &Barrier);
+    }
+
+    // THIS apparently is not necessary
+    // From COPY SOURCE to UAV
+    {
+        auto Barrier = DX12Transition(CurrentComputeTarget.Handle, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        CommandList->ResourceBarrier(1, &Barrier);
+    }
+
+    if (Accumulate)
+    {
+
+    }
+}
+
+internal void GameRendererSetInverseViewAndProjection(game_renderer* Renderer, const m4& InverseView, const m4& InverseProjection, const v4& CameraPosition)
+{
+    Renderer->RayTracingSignatureBuffer = { InverseView, InverseProjection, CameraPosition };
+}
+
+internal void GameRendererSubmitRTSphere(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale)
+{
+
 }

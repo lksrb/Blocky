@@ -112,6 +112,7 @@ struct mesh_render_component
 
 struct relationship_component
 {
+    // TODO
     uuid Children[6];
     uuid Parent;
 };
@@ -132,7 +133,7 @@ struct type_index<T, std::tuple<U, Types...>>
     static constexpr std::size_t value = 1 + type_index<T, std::tuple<Types...>>::value;
 };
 
-using components_pools = std::tuple<component_pool<transform_component>, component_pool<render_component>, component_pool<aabb_physics_component>, component_pool<logic_component>, component_pool<relationship_component>>;
+using components_pools = std::tuple<component_pool<transform_component>, component_pool<render_component>, component_pool<aabb_physics_component>, component_pool<logic_component>, component_pool<relationship_component>, component_pool<mesh_render_component>>;
 
 struct entity_registry
 {

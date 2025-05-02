@@ -6,7 +6,7 @@ struct dx12_pipeline
 };
 
 // TODO: Make more generic 
-internal dx12_pipeline DX12PipelineCreate(ID3D12Device* Device, ID3D12RootSignature* RootSignature, D3D12_INPUT_ELEMENT_DESC Inputs[], u32 InputsCount, const wchar_t* ShaderPath)
+internal dx12_pipeline DX12GraphicsPipelineCreate(ID3D12Device* Device, ID3D12RootSignature* RootSignature, D3D12_INPUT_ELEMENT_DESC Inputs[], u32 InputsCount, const wchar_t* ShaderPath)
 {
     dx12_pipeline Pipeline = {};
 
@@ -165,6 +165,74 @@ internal dx12_pipeline DX12PipelineCreate(ID3D12Device* Device, ID3D12RootSignat
     PipelineDesc.SampleDesc.Count = 1;
     DxAssert(Device->CreateGraphicsPipelineState(&PipelineDesc, IID_PPV_ARGS(&Pipeline.Handle)));
 
+    return Pipeline;
+}
+
+internal dx12_pipeline DX12ComputePipelineCreate(ID3D12Device* Device, ID3D12RootSignature* RootSignature, const wchar_t* ShaderPath, const wchar_t* ShaderEntryPoint)
+{
+    dx12_pipeline Pipeline = {};
+
+    IDxcBlob* ComputeShader = nullptr;
+
+    // Initialize DXC
+    IDxcCompiler3* Compiler;
+    IDxcLibrary* Library;
+    DxAssert(DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&Compiler)));
+    DxAssert(DxcCreateInstance(CLSID_DxcLibrary, IID_PPV_ARGS(&Library)));
+
+    IDxcBlobEncoding* SourceShader;
+    DxAssert(Library->CreateBlobFromFile(ShaderPath, nullptr, &SourceShader));
+
+    // VERTEX
+    {
+#if defined(BK_DEBUG)
+        LPCWSTR Arguments[] = {
+            L"-T", L"cs_6_0",  // Shader profile
+            L"-E", ShaderEntryPoint,  // Entry point
+            L"-Zi",            // Debug info
+            L"-Qembed_debug",  // Embed debug info
+        };
+#else
+        LPCWSTR Arguments[] = {
+            L"-T", L"cs_6_0",  // Shader profile
+            L"-E", ShaderEntryPoint, // Entry point
+            //L"-Zi",            // Debug info
+            //L"-Qembed_debug",  // Embed debug info
+        };
+#endif
+
+        DxcBuffer Buffer = {};
+
+        BOOL Known;
+        SourceShader->GetEncoding(&Known, &Buffer.Encoding);
+        Buffer.Ptr = SourceShader->GetBufferPointer();
+        Buffer.Size = SourceShader->GetBufferSize();
+
+        IDxcResult* Result;
+        DxAssert(Compiler->Compile(&Buffer, Arguments, CountOf(Arguments), nullptr, IID_PPV_ARGS(&Result)));
+
+        HRESULT ErrorCode;
+        Result->GetStatus(&ErrorCode);
+
+        if (FAILED(ErrorCode))
+        {
+            IDxcBlobEncoding* ErrorMessage = nullptr;
+
+            Result->GetErrorBuffer(&ErrorMessage);
+
+            Err("%s", (const char*)ErrorMessage->GetBufferPointer());
+            Assert(false, "");
+        }
+        else
+        {
+            Result->GetResult(&ComputeShader);
+        }
+    }
+
+    D3D12_COMPUTE_PIPELINE_STATE_DESC PipelineDesc = {};
+    PipelineDesc.pRootSignature = RootSignature;
+    PipelineDesc.CS = { ComputeShader->GetBufferPointer(), ComputeShader->GetBufferSize() };
+    DxAssert(Device->CreateComputePipelineState(&PipelineDesc, IID_PPV_ARGS(&Pipeline.Handle)));
     return Pipeline;
 }
 

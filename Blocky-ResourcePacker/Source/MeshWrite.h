@@ -18,6 +18,13 @@ struct submesh
     //std::string DebugName;
 };
 
+using block_coords = v2[24];
+
+struct submesh_v2
+{
+    m4 Transform;
+    block_coords TextureCoords;
+};
 struct loaded_texture
 {
     u32 Width;
@@ -32,6 +39,11 @@ struct loaded_mesh
     std::vector<u32> Indices;
     loaded_texture Texture;
 };
+
+//struct loaded_mesh
+//{
+//    std::vector<submesh_v2> Submeshes;
+//};
 
 static u32 s_AssimpImporterFlags =
 aiProcess_Triangulate // Ensures that everything is a triangle

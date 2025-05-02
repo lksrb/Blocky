@@ -3,6 +3,7 @@
 #include "Random.h"
 #include "AABB.h"
 #include "RayCast.h"
+#include "Mesh.h"
 #include "ECS.h"
 
 struct camera
@@ -70,8 +71,9 @@ ENABLE_BITWISE_OPERATORS(entity_flags, u32);
 
 struct player
 {
-    v3 Position = v3(0.0f, 20, 1.0f);
-    v3 Rotation = v3(-bkm::PI_HALF, 0.0f, 0.0f);
+    //v3 Position = v3(0.0f, 20, 1.0f);
+    v3 Position = v3(2.5f, 0.0f, 0.0f);
+    v3 Rotation = v3(0.0f, bkm::PI_HALF / 2, 0.0f);
     v3 Velocity = v3(0.0f);
     bool IsPhysicsObject = false;
     bool Grounded = false;
@@ -96,7 +98,8 @@ internal const i32 MaxAliveEntitiesCount = 16;
 struct game
 {
     camera Camera;
-    v3 CameraOffset = v3(0.0f, 0.8f, 0.0f);
+    //v3 CameraOffset = v3(0.0f, 0.8f, 0.0f);
+    v3 CameraOffset = v3(0.0f, 0.0f, 0.0f);
 
     player Player;
 
@@ -212,15 +215,18 @@ internal texture_coords GetTextureCoords(i32 GridWidth, i32 GridHeight, i32 Bott
 
 struct block_pos
 {
-    i32 C, R, L;
+    i32 C, R, L; // Column, Row, Layer // X, Z, Y
 };
 
 internal block_pos GetWorldToBlockPos(const v3& WorldPos)
 {
-    // Figuring out if somehit is it
+    // Kinda wonky
     i32 C = (i32)bkm::Floor(WorldPos.x + 0.5f);
     i32 R = (i32)bkm::Floor(WorldPos.z + 0.5f);
     i32 L = (i32)bkm::Floor(WorldPos.y + 0.5f);
 
     return { C,R,L };
 }
+
+// TODO: Move somewhere
+internal buffer ReadBinary(const char* Path);

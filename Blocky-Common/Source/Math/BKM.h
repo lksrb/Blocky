@@ -296,6 +296,33 @@ namespace bkm {
         return result;
     }
 
+    inline m4 Transpose(m4 m)
+    {
+        m4 result;
+
+        result[0][0] = m[0][0];
+        result[0][1] = m[1][0];
+        result[0][2] = m[2][0];
+        result[0][3] = m[3][0];
+
+        result[1][0] = m[0][1];
+        result[1][1] = m[1][1];
+        result[1][2] = m[2][1];
+        result[1][3] = m[3][1];
+
+        result[2][0] = m[0][2];
+        result[2][1] = m[1][2];
+        result[2][2] = m[2][2];
+        result[2][3] = m[3][2];
+
+        result[3][0] = m[0][3];
+        result[3][1] = m[1][3];
+        result[3][2] = m[2][3];
+        result[3][3] = m[3][3];
+
+        return result;
+    }
+
     inline m4 Translate(m4 m, v3 v)
     {
         m4 result(m);

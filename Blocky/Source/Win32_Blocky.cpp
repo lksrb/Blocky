@@ -94,13 +94,14 @@ struct game_input
 #include "Blocky.h"
 #include "Blocky.cpp"
 
+internal u32 g_ClientWidth = 0;
+internal u32 g_ClientHeight = 0;
 #if USE_VULKAN_RENDERER
 #else
 #include "DX12/DX12Renderer.cpp"
 #endif
 
-internal u32 g_ClientWidth = 0;
-internal u32 g_ClientHeight = 0;
+
 internal bool g_DoResize = false;
 internal bool g_IsRunning = false;
 internal bool g_IsFocused = false;
@@ -167,6 +168,39 @@ LRESULT Win32ProcedureHandler(HWND WindowHandle, UINT Message, WPARAM WParam, LP
             Result = DefWindowProc(WindowHandle, Message, WParam, LParam);
             break;
         }
+    }
+
+    return Result;
+}
+
+// TODO: Move somewhere
+internal buffer ReadBinary(const char* Path)
+{
+    buffer Result;
+
+    HANDLE FileHandle = ::CreateFileA(Path, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr);
+    if (FileHandle != INVALID_HANDLE_VALUE)
+    {
+        DWORD dwBytesRead = 0;
+        DWORD dwBytesWritten = 0;
+        LARGE_INTEGER size;
+        if (::GetFileSizeEx(FileHandle, &size))
+        {
+            // NOTE: We allocate more but that does not matter for now
+            u8* data = static_cast<u8*>(::VirtualAlloc(nullptr, size.QuadPart, MEM_COMMIT, PAGE_READWRITE));
+
+            if (::ReadFile(FileHandle, data, static_cast<DWORD>(size.QuadPart), &dwBytesRead, nullptr))
+            {
+                Result.Data = data;
+                Result.Size = static_cast<u32>(size.QuadPart);
+            }
+            else
+            {
+                ::VirtualFree(data, 0, MEM_RELEASE);
+            }
+        }
+
+        ::CloseHandle(FileHandle);
     }
 
     return Result;
@@ -544,6 +578,9 @@ int main(int argc, char** argv)
         {
             EverySecond += TimeStep;
         }
+
+        // Clamp Timestep to atleast 60 fps to preserve physics simulation and update simulation aswell.
+        TimeStep = bkm::Clamp(TimeStep, 0.0f, 0.01666666f);
     }
 
     GameRendererDestroy(&GameRenderer);
