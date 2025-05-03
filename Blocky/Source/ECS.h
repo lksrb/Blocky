@@ -92,22 +92,35 @@ struct logic_component
     void* Storage;
 };
 
-struct render_component
+struct entity_part
+{
+    texture_block_coords Coords;
+    v3 LocalPosition;
+    v3 Size;
+};
+
+texture_block_coords TextureBlockCoordsCreate()
+{
+    return texture_block_coords{};
+}
+
+struct entity_model
+{
+    entity_part Parts[6]; // For now
+    i32 PartsCount = 0;
+};
+
+internal entity_model EntityModelCreate()
+{
+    entity_model Model;
+    return Model;
+}
+
+struct entity_render_component
 {
     v4 Color = v4(1.0f);
     texture Texture;
-};
-
-struct mesh_render_component
-{
-    mesh* Mesh;
-
-    // TODO: Materials
-    struct material
-    {
-
-    };
-    material* Material;
+    entity_model Model;
 };
 
 struct relationship_component
@@ -133,7 +146,7 @@ struct type_index<T, std::tuple<U, Types...>>
     static constexpr std::size_t value = 1 + type_index<T, std::tuple<Types...>>::value;
 };
 
-using components_pools = std::tuple<component_pool<transform_component>, component_pool<render_component>, component_pool<aabb_physics_component>, component_pool<logic_component>, component_pool<relationship_component>, component_pool<mesh_render_component>>;
+using components_pools = std::tuple<component_pool<transform_component>, component_pool<entity_render_component>, component_pool<aabb_physics_component>, component_pool<logic_component>, component_pool<relationship_component>>;
 
 struct entity_registry
 {
@@ -451,7 +464,7 @@ internal void ECS_Test()
         auto& T = AddComponent<transform_component>(&Registry, Entity);
         T.Translation.x = (f32)i;
 
-        auto& R = AddComponent<render_component>(&Registry, Entity);
+        auto& R = AddComponent<entity_render_component>(&Registry, Entity);
         R.Color = v4((f32)i, 1.0f, 1.0f, 1.0f);
     }
 
@@ -472,7 +485,7 @@ internal void ECS_Test()
     }
 
     {
-        auto View = ViewComponents<transform_component, render_component>(&Registry);
+        auto View = ViewComponents<transform_component, entity_render_component>(&Registry);
         for (auto Entity : View)
         {
             auto [Transform, Renderable] = View.Get(Entity);

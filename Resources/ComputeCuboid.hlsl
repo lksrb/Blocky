@@ -251,7 +251,7 @@ float4 PerPixel(ray Ray)
 }
 
 // First we accumulate
-[numthreads(4, 4, 1)]
+[numthreads(16, 16, 1)]
 void Accumulate(uint3 ID : SV_DispatchThreadID)
 {
     float2 Resolution = float2(1584, 861);

@@ -2,6 +2,62 @@
 
 #include "Cow.h"
 
+struct texture_rect
+{
+    u8 X, Y, Width, Height, RotationCount; // TODO: Can we can rid of rotation count?
+
+    texture_rect() = default;
+
+    texture_rect(u8 x, u8 y, u8 w, u8 h, u8 r)
+        : X(x), Y(y), Width(w), Height(h), RotationCount(r)
+    {}
+};
+
+// IDEA: We can keep the pixel coords on the texture and calculate them in runtime
+struct texture_rects
+{
+    texture_rects() = default;
+
+    texture_rects(texture_rect front, texture_rect back,
+                  texture_rect left, texture_rect right,
+                  texture_rect top, texture_rect bottom)
+        : Front(front), Back(back),
+        Left(left), Right(right),
+        Top(top), Bottom(bottom)
+    {}
+
+    union
+    {
+        struct
+        {
+            texture_rect Front;
+            texture_rect Back;
+            texture_rect Left;
+            texture_rect Right;
+            texture_rect Top;
+            texture_rect Bottom;
+        };
+
+        texture_rect Data[6];
+    };
+};
+
+internal void AddModelPart(entity_model* Model, v3 LocalPosition, v3 Size, texture_rects Rects)
+{
+    auto& Part = Model->Parts[Model->PartsCount++];
+    texture_block_coords TextureCoords;
+
+    i32 i = 0;
+    for (auto& Rect : Rects.Data)
+    {
+        TextureCoords.TextureCoords[i++] = GetTextureCoords(Rect.X, Rect.Y, Rect.Width, Rect.Height, Rect.RotationCount);
+    }
+
+    Part.Coords = TextureCoords;
+    Part.LocalPosition = LocalPosition * c_TexelSize;
+    Part.Size = Size * c_TexelSize;
+}
+
 internal game GameCreate(game_renderer* Renderer)
 {
     game Game = {};
@@ -18,18 +74,69 @@ internal game GameCreate(game_renderer* Renderer)
 
     Game.Registry = EntityRegistryCreate(100);
 
+    entity_model CowModel = EntityModelCreate();
+
+    // Body
+    {
+        texture_rects Rects = {
+            { 12, 10, 28, 13, 0 },
+            { 12, 10, 40, 13, 0 },
+            { 10, 18, 18, 31, 1 },
+            { 10, 18, 40, 31, 3 },
+            { 12, 18, 50, 31, 2 },
+            { 12, 18, 28, 31, 0 }
+        };
+
+        AddModelPart(&CowModel, v3(0.0f), v3(12.0f, 10.0f, 18.0f), Rects);
+    }
+
+    // Head
+    {
+        texture_rects Rects = {
+            { 8, 8,  6, 13, 0 },
+            { 8, 8, 20, 13, 0 },
+            { 6, 8,  0, 13, 0 },
+            { 6, 8, 14, 13, 0 },
+            { 8, 6,  6,  5, 0 },
+            { 8, 6, 14,  5, 0 }
+        };
+        AddModelPart(&CowModel, v3(0, (10 + 8) / 4 - 1, (18 + 6) / 2), v3(8, 8, 6), Rects);
+    }
+
+    // Legs
+    {
+        texture_rects Rects = {
+            { 4, 12,  4, 31, 0 },
+            { 4, 12, 12, 31, 0 },
+            { 4, 12,  0, 31, 0 },
+            { 4, 12,  8, 31, 0 },
+            { 4,  4,  4, 19, 0 },
+            { 4,  4,  8, 19, 2 }
+        };
+
+        v2 Offset;
+        Offset.x = 4;
+        Offset.y = 7;
+        f32 y = -11;
+        AddModelPart(&CowModel, v3(Offset.x, y, -Offset.y), v3(4, 12, 4), Rects);
+        AddModelPart(&CowModel, v3(-Offset.x, y, Offset.y), v3(4, 12, 4), Rects);
+        AddModelPart(&CowModel, v3(Offset.x, y, Offset.y), v3(4, 12, 4), Rects);
+        AddModelPart(&CowModel, v3(-Offset.x, y, -Offset.y), v3(4, 12, 4), Rects);
+    }
+
     // Create another set of cows
     for (i32 i = 10; i < 11; i++)
     {
         auto CowEntity = CreateEntity(&Game.Registry);
 
         auto& Transform = AddComponent<transform_component>(&Game.Registry, CowEntity);
-        Transform.Translation = v3((f32)i, 17, 2);
-        Transform.Scale = v3(0.7f, 0.7f, 1.0f);
+        Transform.Translation = v3((f32)c_TexelSize / 2, 17.0, c_TexelSize / 2);
+        Transform.Scale = v3(1.0f);
         Transform.Rotation = v3(0.0f, 0.0f, 0.0f);
 
-        auto& Render = AddComponent<render_component>(&Game.Registry, CowEntity);
+        auto& Render = AddComponent<entity_render_component>(&Game.Registry, CowEntity);
         Render.Texture = Game.CowTexture;
+        Render.Model = CowModel;
 
         auto& AABB = AddComponent<aabb_physics_component>(&Game.Registry, CowEntity);
         AABB.BoxSize = v3(0.8f, 1.8, 0.8f);
@@ -186,9 +293,6 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
     // Set view projection to render player's view
     GameRendererSetViewProjectionCuboid(Renderer, Game->Camera.GetViewProjection());
 
-    // RTRTRT
-    GameRendererSetInverseViewAndProjection(Renderer, bkm::Inverse(Game->Camera.View), bkm::Inverse(Game->Camera.Projection), v4(Game->Player.Position + Game->CameraOffset, 0.0));
-
     // Render blocks
     if (1)
     {
@@ -225,8 +329,6 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
     }
 }
 
-extern bool CameraMoved = false;
-
 internal void GamePlayerUpdate(game* Game, const game_input* Input, game_renderer* Renderer, f32 TimeStep)
 {
     auto& Player = Game->Player;
@@ -241,8 +343,6 @@ internal void GamePlayerUpdate(game* Game, const game_input* Input, game_rendere
 
     bool JustPressed = false;
     bool JumpKeyPressed = false;
-
-    CameraMoved = false;
 
     if (Input->IsKeyPressed(key::T))
     {
@@ -264,16 +364,11 @@ internal void GamePlayerUpdate(game* Game, const game_input* Input, game_rendere
         v2i MouseDelta = MousePos - OldMousePos;
         OldMousePos = MousePos;
 
-        f32 MouseSensitivity = 1.0f;
+        f32 MouseSensitivity = 0.5f;
 
         // Update rotation based on mouse input
         Player.Rotation.y -= (f32)MouseDelta.x * MouseSensitivity * TimeStep; // Yaw
         Player.Rotation.x -= (f32)MouseDelta.y * MouseSensitivity * TimeStep; // Pitch
-
-        if (MouseDelta.x != 0 && MouseDelta.y != 0)
-        {
-            CameraMoved = true;
-        }
     }
 
     // Clamp pitch to avoid gimbal lock
@@ -296,31 +391,26 @@ internal void GamePlayerUpdate(game* Game, const game_input* Input, game_rendere
         if (Input->IsKeyDown(key::W))
         {
             Direction += v3(Forward.x, 0.0f, Forward.z);
-            CameraMoved = true;
         }
 
         if (Input->IsKeyDown(key::S))
         {
             Direction -= v3(Forward.x, 0.0f, Forward.z);
-            CameraMoved = true;
         }
 
         if (Input->IsKeyDown(key::A))
         {
             Direction -= Right;
-            CameraMoved = true;
         }
 
         if (Input->IsKeyDown(key::D))
         {
             Direction += Right;
-            CameraMoved = true;
         }
 
         if (Input->IsKeyPressed(key::BackSpace) || Input->IsKeyDown(key::Space))
         {
             JumpKeyPressed = true;
-            CameraMoved = true;
         }
 
         if (Input->IsKeyPressed(key::G))
@@ -333,12 +423,10 @@ internal void GamePlayerUpdate(game* Game, const game_input* Input, game_rendere
             if (Input->IsKeyDown(key::Q) || Input->IsKeyDown(key::BackSpace) || Input->IsKeyDown(key::Space))
             {
                 Direction += v3(0.0f, 1.0f, 0.0f);
-                CameraMoved = true;
             }
             else if (Input->IsKeyDown(key::E) || Input->IsKeyDown(key::Control) || Input->IsKeyDown(key::Shift))
             {
                 Direction -= v3(0.0f, 1.0f, 0.0f);
-                CameraMoved = true;
             }
         }
 
@@ -755,174 +843,21 @@ internal void GamePhysicsSimulationUpdateEntities(game* Game, f32 TimeStep)
 
 internal void GameRenderEntities(game* Game, game_renderer* Renderer, f32 TimeStep)
 {
-    texture_coords BodyTextureCoords[6];
+    //debug_cycle_counter GameRenderEntities("Render Entities");
+
+    auto View = ViewComponents<transform_component, entity_render_component>(&Game->Registry);
+    for (auto Entity : View)
     {
-        auto Front = GetTextureCoords(12, 10, 28, 13);
-        auto Back = GetTextureCoords(12, 10, 40, 13);
+        auto [Transform, Render] = View.Get(Entity);
 
-        auto Left = GetTextureCoords(10, 18, 18, 31, 1);
-        auto Right = GetTextureCoords(10, 18, 40, 31, 3);
-
-        auto Top = GetTextureCoords(12, 18, 50, 31, 2);
-        auto Bottom = GetTextureCoords(12, 18, 28, 31, 0);
-
-        BodyTextureCoords[0] = Front;
-        BodyTextureCoords[1] = Back;
-        BodyTextureCoords[2] = Left;
-        BodyTextureCoords[3] = Right;
-        BodyTextureCoords[4] = Top;
-        BodyTextureCoords[5] = Bottom;
-    }
-
-    texture_coords HeadTextureCoords[6];
-    {
-        auto Front = GetTextureCoords(8, 8, 6, 13);
-        auto Back = GetTextureCoords(8, 8, 20, 13);
-        auto Left = GetTextureCoords(6, 8, 0, 13);
-        auto Right = GetTextureCoords(6, 8, 14, 13);
-        auto Top = GetTextureCoords(8, 6, 6, 5);
-        auto Bottom = GetTextureCoords(8, 6, 14, 5);
-
-        HeadTextureCoords[0] = Front;
-        HeadTextureCoords[1] = Back;
-        HeadTextureCoords[2] = Left;
-        HeadTextureCoords[3] = Right;
-        HeadTextureCoords[4] = Top;
-        HeadTextureCoords[5] = Bottom;
-    }
-
-    texture_coords LegTextureCoords[6];
-    {
-        auto Left = GetTextureCoords(4, 12, 0, 31);
-        auto Right = GetTextureCoords(4, 12, 8, 31);
-
-        auto Front = GetTextureCoords(4, 12, 4, 31);
-        auto Back = GetTextureCoords(4, 12, 12, 31);
-
-        auto Top = GetTextureCoords(4, 4, 4, 19);
-        auto Bottom = GetTextureCoords(4, 4, 8, 19, 2);
-
-        LegTextureCoords[0] = Front;
-        LegTextureCoords[1] = Back;
-        LegTextureCoords[2] = Left;
-        LegTextureCoords[3] = Right;
-        LegTextureCoords[4] = Top;
-        LegTextureCoords[5] = Bottom;
-    }
-
-    if (0)
-    {
-        auto View = ViewComponents<transform_component, render_component>(&Game->Registry);
-        for (auto Entity : View)
+        for (i32 i = 0; i < Render.Model.PartsCount; i++)
         {
-            auto [Transform, Render] = View.Get(Entity);
+            entity_part& Part = Render.Model.Parts[i];
 
-            local_persist mesh_v2* Mesh;
-
-            // Create a cow mesh
-            if (!Mesh)
-            {
-                Mesh = new mesh_v2;
-                auto& CowBody = Mesh->Submeshes.emplace_back();
-
-                transform_component LocalTransform;
-                LocalTransform.Rotation = v3(0.0f, 1.0f, 0.0f);
-                CowBody.LocalTransform = LocalTransform.Matrix();
-            }
-
-            GameRendererSubmitMesh(Renderer, Transform.Translation, Transform.Rotation, Transform.Scale, Mesh);
-        }
-    }
-
-    if (1)
-    {
-        //debug_cycle_counter GameUpdateCounter("Render Entities");
-
-        auto View = ViewComponents<transform_component, render_component, aabb_physics_component>(&Game->Registry);
-        for (auto Entity : View)
-        {
-            auto [Transform, Render, AABBPhysics] = View.Get(Entity);
-
-            // Body
-            GameRendererSubmitCustomCuboid_FAST(Renderer, Transform.Translation, Transform.Rotation, Transform.Scale, Render.Texture, BodyTextureCoords, v4(1.0f));
-            // So now, there is a difficult problem ahead of us
-            // As you know, we render each part of cow's body as individual cuboid. Its nice and simple.
-            // However, when we think about the future, where this function is for general entities made out of cuboid, 
-            // We need some sort of relation ship component so that an entity can have limbs etc.
-            // This is of course a simple problem to solve but performance may suffer?
-            // 
-            // Options:
-            // A) We make proper models and each individual limb is a submesh of a particular mesh. And we now have the flexibility of making a proper animations inside blender
-            // 
-            // B) We render each limb as a separate entity and use parent/child to get the right behaviour and modify animation inside the update loop
-            // 
-            if (1)
-            {
-                // IDEA: Move the head based on its scale to preserve the same position of the head/body
-                // f32 Y = CowTranslation.y - Scale.y * 0.5f - LegScale.y * 0.5f;
-                // Head
-                {
-                    local_persist transform_component CowHeadTransform;
-                    CowHeadTransform.Translation = v3(0, 0.4f, 0.7f);
-                    //CowHeadTransform.Rotation = v3(bkm::Sin(Time) * 0.5f, 0, 0);
-                    CowHeadTransform.Scale = v3(0.5f / 0.7f, 0.5f / 0.7f, 0.4f);
-
-                    GameRendererSubmitCustomCuboid_FAST(Renderer, Transform.Matrix() * CowHeadTransform.Matrix(), Render.Texture, HeadTextureCoords, v4(1.0f));
-                }
-
-                // Legs
-                if (1)
-                {
-                    f32 DeltaX = 0.30f;
-                    f32 DeltaZ = 0.35f;
-                    f32 ScaleX = 0.3f / 0.7f * 0.9f;
-                    f32 ScaleY = 1.0f;
-                    f32 ScaleZ = 0.3f * 0.9f;
-
-                    transform_component LegTransform[4];
-                    LegTransform[0].Translation = v3(0, -1.0f, 0);
-                    LegTransform[0].Scale = v3(ScaleX, ScaleY, ScaleZ);
-
-                    LegTransform[1].Translation = v3(0, -1.0f, 0);
-                    LegTransform[1].Scale = v3(ScaleX, ScaleY, ScaleZ);
-
-                    LegTransform[2].Translation = v3(0, -1.0f, 0);
-                    LegTransform[2].Scale = v3(ScaleX, ScaleY, ScaleZ);
-
-                    LegTransform[3].Translation = v3(0, -1.0f, 0);
-                    LegTransform[3].Scale = v3(ScaleX, ScaleY, ScaleZ);
-
-                    //f32 Y = CowTranslation.y - Scale.y * 0.5f - LegScale.y * 0.5f;
-
-                    /*  v3 Offsets[4];
-                      Offsets[0] = v3(DeltaX, Y, DeltaZ);
-                      Offsets[1] = v3(-DeltaX, Y, DeltaZ);
-                      Offsets[2] = v3(-DeltaX, Y, -DeltaZ);
-                      Offsets[3] = v3(DeltaX, Y, -DeltaZ);*/
-
-                    // Animation system 
-                    f32 LegRotation = bkm::Sin(Game->Time * 10.3f * bkm::Length(AABBPhysics.Velocity)) * 0.3f;
-
-                    transform_component KneeTransform[4] = {};
-                    KneeTransform[0].Translation = v3(DeltaX, 0.0f, -DeltaZ);
-                    KneeTransform[0].Rotation = v3(-LegRotation, 0, 0);
-
-                    KneeTransform[1].Translation = v3(-DeltaX, 0.0f, -DeltaZ);
-                    KneeTransform[1].Rotation = v3(LegRotation, 0, 0);
-
-                    KneeTransform[2].Translation = v3(-DeltaX, 0.0f, DeltaZ);
-                    KneeTransform[2].Rotation = v3(LegRotation, 0, 0);
-
-                    KneeTransform[3].Translation = v3(DeltaX, 0.0f, DeltaZ);
-                    KneeTransform[3].Rotation = v3(-LegRotation, 0, 0);
-
-                    // Front Left
-                    for (u32 i = 0; i < 4; i++)
-                    {
-                        GameRendererSubmitCustomCuboid_FAST(Renderer, Transform.Matrix() * KneeTransform[i].Matrix() * LegTransform[i].Matrix(), Render.Texture, LegTextureCoords, v4(1.0f));
-                    }
-                }
-            }
+            // TODO: SIMD STUFF, we can take advantage in matrix multiplication
+            m4 M = bkm::Translate(m4(1.0f), Part.LocalPosition) * bkm::Scale(m4(1.0f), Part.Size);
+            m4 TransformMatrix = Transform.Matrix() * M;
+            GameRendererSubmitCustomCuboid_FAST(Renderer, TransformMatrix, Render.Texture, Part.Coords.TextureCoords, Render.Color);
         }
     }
 }

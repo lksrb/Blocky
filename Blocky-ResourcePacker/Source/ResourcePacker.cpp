@@ -23,13 +23,14 @@ int main()
     // Blocky Pack format
     std::ostringstream OutStream;
 
-    // Write magic headers
+    // Write magic header
     OutStream << "BLPF";
 
     // Quad shader 
     //WriteShader(OutStream, "Resources/Quad.glsl");
+    ModelWrite(OutStream, "Resources/Mesh/Cow.glb");
 
-    MeshWrite(OutStream, "Resources/Mesh/Cow.glb");
+    //MeshWrite(OutStream, "Resources/Mesh/Cow.glb");
 
     // Our custom format for meshes:
     // Constains:
@@ -39,7 +40,7 @@ int main()
     //   - Submeshes
     //   - Texture
 
-    const char* PackedPath = "Resources/Mesh/Cow.blmesh";
+    const char* PackedPath = "Resources/Cow.blmodel";
     // Write it all at once
     {
         std::ofstream FileStream(PackedPath, std::ios::binary | std::ios::trunc); // Always overwrite

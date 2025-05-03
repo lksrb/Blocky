@@ -11,7 +11,7 @@
 
 // Just to replace "new"s everywhere, they are slow as fuck
 #define VmAllocArray(__type, __count) (__type*)::VirtualAlloc(nullptr, sizeof(__type) * __count, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE)
-                                                               
+
 // SIMD Stuff
 #define ENABLE_SIMD 1
 
@@ -90,8 +90,8 @@ struct game_input
 #else
 #include "DX12/DX12Renderer.h"
 #endif
-
 #include "Blocky.h"
+
 #include "Blocky.cpp"
 
 internal u32 g_ClientWidth = 0;
@@ -426,14 +426,15 @@ internal void Win32ProcessEvents(game_input* Input, const game_window& Window)
 internal game_window CreateGameWindow()
 {
     game_window Window;
-    const u32 DefaultWindowWidth = u32(1600 * 1.0f);
-    const u32 DefaultWindowHeight = u32(900 * 1.0f);
 
     // Show window on primary window
     // TODO: User should choose on which monitor to display
     // TODO: Error handle
     MONITORINFO PrimaryMonitorInfo = { sizeof(MONITORINFO) };
     GetMonitorInfo(MonitorFromWindow(nullptr, MONITOR_DEFAULTTOPRIMARY), &PrimaryMonitorInfo);
+
+    u32 DefaultWindowWidth = u32((PrimaryMonitorInfo.rcMonitor.right - PrimaryMonitorInfo.rcMonitor.left) * 0.85f);
+    u32 DefaultWindowHeight = u32((PrimaryMonitorInfo.rcMonitor.bottom - PrimaryMonitorInfo.rcMonitor.top) * 0.85f);
 
     // TODO: Fullscreen
 
@@ -474,8 +475,6 @@ internal game_window CreateGameWindow()
 
 int main(int argc, char** argv)
 {
-    //ECS_Test();
-
     Trace("Hello, Blocky!");
 
     // If the application is not DPI aware, Windows will automatically scale the pixels to a DPI scale value (150% for example)

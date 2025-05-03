@@ -94,50 +94,50 @@ internal void CowCreate(entity_registry* Registry, entity Entity, logic_componen
     // Initialize random series for random behaviour
     Cow->RandomSeries = RandomSeriesCreate();
 
-    auto& MeshRender = AddComponent<mesh_render_component>(Registry, Entity);
-    auto Mesh = MeshRender.Mesh = new mesh;
+    //auto& MeshRender = AddComponent<mesh_render_component>(Registry, Entity);
+    //auto Mesh = MeshRender.Mesh = new mesh;
 
-    return;
-    // Read mesh
-    {
-        buffer Buffer = ReadBinary("Resources/Mesh/Cow.blmesh");
-        u8* Pointer = (u8*)Buffer.Data;
+    //return;
+    //// Read mesh
+    //{
+    //    buffer Buffer = ReadBinary("Resources/Mesh/Cow.blmesh");
+    //    u8* Pointer = (u8*)Buffer.Data;
 
-        // Get tag
-        char Tag[4];
-        memcpy(Tag, Pointer, 4);
-        Pointer += 4;
+    //    // Get tag
+    //    char Tag[4];
+    //    memcpy(Tag, Pointer, 4);
+    //    Pointer += 4;
 
-        // Get vertices
-        u32 Size = 0;
-        memcpy(&Size, Pointer, 4);
-        Pointer += 4;
-        Mesh->Vertices = { (mesh_vertex*)Pointer, Size };
-        Pointer += Size;
+    //    // Get vertices
+    //    u32 Size = 0;
+    //    memcpy(&Size, Pointer, 4);
+    //    Pointer += 4;
+    //    Mesh->Vertices = { (mesh_vertex*)Pointer, Size };
+    //    Pointer += Size;
 
-        // Get Indices
-        Size = 0;
-        memcpy(&Size, Pointer, 4);
-        Pointer += 4;
-        Mesh->Indices = { (u32*)Pointer, Size };
-        Pointer += Size;
+    //    // Get Indices
+    //    Size = 0;
+    //    memcpy(&Size, Pointer, 4);
+    //    Pointer += 4;
+    //    Mesh->Indices = { (u32*)Pointer, Size };
+    //    Pointer += Size;
 
-        // Get Submeshes
-        Size = 0;
-        memcpy(&Size, Pointer, 4);
-        Pointer += 4;
-        Mesh->Submeshes = { (submesh*)Pointer, Size };
-        Pointer += Size;
+    //    // Get Submeshes
+    //    Size = 0;
+    //    memcpy(&Size, Pointer, 4);
+    //    Pointer += 4;
+    //    Mesh->Submeshes = { (submesh*)Pointer, Size };
+    //    Pointer += Size;
 
-        // Get Texture
-        u32 Width;
-        u32 Height;
-        memcpy(&Width, Pointer, 4);
-        Pointer += 4;
-        memcpy(&Height, Pointer, 4);
-        Pointer += 4;
-        //Mesh->Texture = { Width, Height, Pointer };
-    }
+    //    // Get Texture
+    //    u32 Width;
+    //    u32 Height;
+    //    memcpy(&Width, Pointer, 4);
+    //    Pointer += 4;
+    //    memcpy(&Height, Pointer, 4);
+    //    Pointer += 4;
+    //    //Mesh->Texture = { Width, Height, Pointer };
+    //}
 }
 
 internal void CowDestroy(entity_registry* Registry, entity Entity, logic_component* Logic)
@@ -207,8 +207,8 @@ internal void CowUpdate(game* Game, entity_registry* Registry, entity Entity, lo
             {
                 Cow->ActionTimer = 0.0f;
 
-                //Cow->CurrentAction = { action_type::RotateRandomly, 1.0f, false };
-                Cow->CurrentAction = { action_type::LookAtPlayer, 1.0f, false };
+                Cow->CurrentAction = { action_type::RotateRandomly, 1.0f, false };
+                //Cow->CurrentAction = { action_type::LookAtPlayer, 1.0f, false };
 
                 // Once moment
                 switch (Cow->CurrentAction.Type)

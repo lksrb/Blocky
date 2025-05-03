@@ -3,7 +3,6 @@
 #include "Random.h"
 #include "AABB.h"
 #include "RayCast.h"
-#include "Mesh.h"
 #include "ECS.h"
 
 struct camera
@@ -71,8 +70,8 @@ ENABLE_BITWISE_OPERATORS(entity_flags, u32);
 
 struct player
 {
-    //v3 Position = v3(0.0f, 20, 1.0f);
-    v3 Position = v3(2.5f, 0.0f, 0.0f);
+    v3 Position = v3(0.0f, 20, 1.0f);
+    //v3 Position = v3(2.5f, 0.0f, 0.0f);
     v3 Rotation = v3(0.0f, bkm::PI_HALF / 2, 0.0f);
     v3 Velocity = v3(0.0f);
     bool IsPhysicsObject = false;
@@ -94,12 +93,13 @@ internal const i64 RowCount = 16;
 internal const i64 ColumnCount = 16;
 internal const i64 LayerCount = 256;
 internal const i32 MaxAliveEntitiesCount = 16;
+internal const f32 c_TexelSize = 1 / 16.0f; // Global scale for entity models. 1m block is exactly 16x16 texels.
 
 struct game
 {
     camera Camera;
-    //v3 CameraOffset = v3(0.0f, 0.8f, 0.0f);
-    v3 CameraOffset = v3(0.0f, 0.0f, 0.0f);
+    v3 CameraOffset = v3(0.0f, 0.8f, 0.0f);
+    //v3 CameraOffset = v3(0.0f, 0.0f, 0.0f);
 
     player Player;
 
@@ -184,14 +184,14 @@ internal texture_coords GetTextureCoords(i32 GridWidth, i32 GridHeight, i32 Bott
     f32 TextureWidth = 64.0f;
     f32 TextureHeight = 32.0f;
 
-    f32 PerTexelWidth = 1 / TextureWidth;
-    f32 PerTexelHeight = 1 / TextureHeight;
+    f32 TexelWidth = 1 / TextureWidth;
+    f32 TexelHeight = 1 / TextureHeight;
 
     // 8x8 Grid
     TextureCoords.Coords[0] = { 0.0f, 0.0f };
-    TextureCoords.Coords[1] = { GridWidth * PerTexelWidth, 0.0f };
-    TextureCoords.Coords[2] = { GridWidth * PerTexelWidth, GridHeight * PerTexelHeight };
-    TextureCoords.Coords[3] = { 0.0f, GridHeight * PerTexelHeight };
+    TextureCoords.Coords[1] = { GridWidth * TexelWidth, 0.0f };
+    TextureCoords.Coords[2] = { GridWidth * TexelWidth, GridHeight * TexelHeight };
+    TextureCoords.Coords[3] = { 0.0f, GridHeight * TexelHeight };
 
     // Rotate 90 degrees 'RotationCount'
     while (RotationCount-- > 0)
@@ -205,10 +205,10 @@ internal texture_coords GetTextureCoords(i32 GridWidth, i32 GridHeight, i32 Bott
     }
 
     // Translation of the Grid
-    TextureCoords.Coords[0] += v2(PerTexelWidth * BottomLeftX, PerTexelHeight * (TextureHeight - BottomLeftY - 1));
-    TextureCoords.Coords[1] += v2(PerTexelWidth * BottomLeftX, PerTexelHeight * (TextureHeight - BottomLeftY - 1));
-    TextureCoords.Coords[2] += v2(PerTexelWidth * BottomLeftX, PerTexelHeight * (TextureHeight - BottomLeftY - 1));
-    TextureCoords.Coords[3] += v2(PerTexelWidth * BottomLeftX, PerTexelHeight * (TextureHeight - BottomLeftY - 1));
+    TextureCoords.Coords[0] += v2(TexelWidth * BottomLeftX, TexelHeight * (TextureHeight - BottomLeftY - 1));
+    TextureCoords.Coords[1] += v2(TexelWidth * BottomLeftX, TexelHeight * (TextureHeight - BottomLeftY - 1));
+    TextureCoords.Coords[2] += v2(TexelWidth * BottomLeftX, TexelHeight * (TextureHeight - BottomLeftY - 1));
+    TextureCoords.Coords[3] += v2(TexelWidth * BottomLeftX, TexelHeight * (TextureHeight - BottomLeftY - 1));
 
     return TextureCoords;
 };

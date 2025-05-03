@@ -1,0 +1,9 @@
+[BODY]
+Position = 0 0 0
+Size = 12 10 18
+Front = 12 10 28 13 0
+Back = 12 10 40 13 0
+Left = 10 18 18 31 1
+Right = 10 18 40 31 3
+Top = 12 18 50 31 2
+Bottom = 12 18 28 31 0
