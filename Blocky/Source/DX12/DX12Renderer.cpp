@@ -648,9 +648,6 @@ internal void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
 #endif
     }
 
-
-
-
     CommandList->Reset(DirectCommandAllocator, Renderer->QuadPipeline.Handle);
 
     // Frame that was presented needs to be set to render target again

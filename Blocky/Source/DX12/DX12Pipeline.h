@@ -16,8 +16,10 @@ internal dx12_pipeline DX12GraphicsPipelineCreate(ID3D12Device* Device, ID3D12Ro
     // Initialize DXC
     IDxcCompiler3* Compiler;
     IDxcLibrary* Library;
+    IDxcIncludeHandler* IncludeHandler;
     DxAssert(DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&Compiler)));
     DxAssert(DxcCreateInstance(CLSID_DxcLibrary, IID_PPV_ARGS(&Library)));
+    DxAssert(Library->CreateIncludeHandler(&IncludeHandler));
 
     IDxcBlobEncoding* SourceShader;
     DxAssert(Library->CreateBlobFromFile(ShaderPath, nullptr, &SourceShader));
@@ -30,6 +32,7 @@ internal dx12_pipeline DX12GraphicsPipelineCreate(ID3D12Device* Device, ID3D12Ro
             L"-E", L"VSMain", // Entry point
             L"-Zi",            // Debug info
             L"-Qembed_debug",  // Embed debug info
+            L"-IResources"
         };
 #else
         LPCWSTR Arguments[] = {
@@ -48,7 +51,7 @@ internal dx12_pipeline DX12GraphicsPipelineCreate(ID3D12Device* Device, ID3D12Ro
         Buffer.Size = SourceShader->GetBufferSize();
 
         IDxcResult* Result;
-        DxAssert(Compiler->Compile(&Buffer, Arguments, CountOf(Arguments), nullptr, IID_PPV_ARGS(&Result)));
+        DxAssert(Compiler->Compile(&Buffer, Arguments, CountOf(Arguments), IncludeHandler, IID_PPV_ARGS(&Result)));
 
         HRESULT ErrorCode;
         Result->GetStatus(&ErrorCode);
@@ -76,6 +79,7 @@ internal dx12_pipeline DX12GraphicsPipelineCreate(ID3D12Device* Device, ID3D12Ro
            L"-E", L"PSMain", // Entry point
            L"-Zi",            // Debug info
            L"-Qembed_debug",  // Embed debug info
+           L"-IResources"
         };
 #else
         LPCWSTR Arguments[] = {
@@ -85,7 +89,6 @@ internal dx12_pipeline DX12GraphicsPipelineCreate(ID3D12Device* Device, ID3D12Ro
            //L"-Qembed_debug",  // Embed debug info
         };
 #endif
-
         DxcBuffer Buffer = {};
 
         BOOL Known;
@@ -94,7 +97,7 @@ internal dx12_pipeline DX12GraphicsPipelineCreate(ID3D12Device* Device, ID3D12Ro
         Buffer.Size = SourceShader->GetBufferSize();
 
         IDxcResult* Result;
-        DxAssert(Compiler->Compile(&Buffer, Arguments, CountOf(Arguments), nullptr, IID_PPV_ARGS(&Result)));
+        DxAssert(Compiler->Compile(&Buffer, Arguments, CountOf(Arguments), IncludeHandler, IID_PPV_ARGS(&Result)));
 
         HRESULT ErrorCode;
         Result->GetStatus(&ErrorCode);

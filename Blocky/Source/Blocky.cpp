@@ -278,6 +278,7 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
         GameRenderEntities(Game, Renderer, TimeStep);
     }
 
+
     // Update camera
     {
         Game->Camera.View = bkm::Translate(m4(1.0f), Game->Player.Position + Game->CameraOffset)
