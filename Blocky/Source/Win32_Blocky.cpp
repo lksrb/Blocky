@@ -543,6 +543,7 @@ int main(int argc, char** argv)
         // Render stuff
         {
             //ScopedTimer timer("Game render");
+
             GameRendererRender(&GameRenderer, g_ClientWidth, g_ClientHeight);
         }
 

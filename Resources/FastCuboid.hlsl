@@ -7,6 +7,7 @@ struct vertex_shader_input
 {
     // Per Vertex
     float4 Position : POSITION;
+    //float3 Normal : NORMAL;
 
     // Per instance
     float4 TransformRow0 : TRANSFORMA;

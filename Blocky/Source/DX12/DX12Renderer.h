@@ -52,11 +52,6 @@ struct texture_block_coords
     }
 };
 
-struct block_coords
-{
-    texture_coords TextureCoords[6];
-};
-
 struct quad_vertex
 {
     v3 Position;
@@ -65,9 +60,10 @@ struct quad_vertex
     u32 TexIndex;
 };
 
-struct cuboid_vertex
+struct basic_cuboid_vertex
 {
     v4 Position;
+    v3 Normal;
     v2 TextureCoord;
 };
 
@@ -91,7 +87,7 @@ struct fast_cuboid_transform_vertex_data
         XMMATRIX XmmTransform;
     };
 
-    block_coords TextureCoords;
+    texture_block_coords TextureCoords;
 
     v4 Color;
     u32 TextureIndex;
@@ -100,9 +96,15 @@ struct fast_cuboid_transform_vertex_data
 // Basically a push constant
 // TODO: Look up standardized push constant minimum value
 // I think its 256 bytes
-struct dx12_root_signature_constant_buffer
+struct quad_root_signature_constant_buffer
 {
     m4 ViewProjection;
+};
+
+struct cuboid_root_signature_constant_buffer
+{
+    m4 ViewProjection;
+    m4 InverseView;
 };
 
 // API-agnostic type definition
@@ -122,14 +124,6 @@ struct game_renderer
     ID3D12CommandAllocator* DirectCommandAllocators[FIF];
     ID3D12GraphicsCommandList2* DirectCommandList;
     ID3D12CommandQueue* DirectCommandQueue;
-
-    ID3D12CommandAllocator* CopyCommandAllocators[FIF];
-    ID3D12CommandQueue* CopyCommandQueue;
-    ID3D12GraphicsCommandList2* CopyCommandList;
-
-    ID3D12CommandAllocator* ComputeCommandAllocators[FIF];
-    ID3D12CommandQueue* ComputeCommandQueue;
-    ID3D12GraphicsCommandList2* ComputeCommandList;
 
     IDXGISwapChain4* SwapChain;
     ID3D12Resource* BackBuffers[FIF];
@@ -171,7 +165,7 @@ struct game_renderer
     quad_vertex* QuadVertexDataBase;
     quad_vertex* QuadVertexDataPtr;
     u32 QuadIndexCount = 0;
-    dx12_root_signature_constant_buffer QuadRootSignatureBuffer;
+    quad_root_signature_constant_buffer QuadRootSignatureBuffer;
 
     // Basic Cuboid - Has same texture for every quad
     u32 CuboidInstanceCount = 0;
@@ -179,15 +173,7 @@ struct game_renderer
     dx12_vertex_buffer CuboidTransformVertexBuffers[FIF] = {};
     dx12_vertex_buffer CuboidPositionsVertexBuffer = {};
     cuboid_transform_vertex_data* CuboidInstanceData = nullptr;
-    dx12_root_signature_constant_buffer CuboidRootSignatureBuffer;
-
-    // Custom Cuboid - Is able to have different texture for each quad - This means it will be slower to submit but are more flexible
-    // NOTE: Basic and Customed might merge in the future, we will see.
-    // They are the same and Quad but is in the same layer as cuboid
-    dx12_vertex_buffer CustomCuboidVertexBuffers[FIF] = {};
-    quad_vertex* CustomCuboidVertexDataBase;
-    quad_vertex* CustomCuboidVertexDataPtr;
-    u32 CustomCuboidIndexCount = 0;
+    cuboid_root_signature_constant_buffer CuboidRootSignatureBuffer;
 
     // FAST Custom Cuboid
     dx12_pipeline FastCuboidPipeline = {};
@@ -214,11 +200,9 @@ internal void GameRendererFlush(game_renderer* Renderer);
 // ===============================================================================================================
 //                                                   RENDERER API                                               
 // ===============================================================================================================
-// Forward declarations
-struct entity_model;
 
 internal void GameRendererSetViewProjectionQuad(game_renderer* Renderer, const m4& ViewProjection);
-internal void GameRendererSetViewProjectionCuboid(game_renderer* Renderer, const m4& ViewProjection);
+internal void GameRendererSetViewProjectionCuboid(game_renderer* Renderer, const m4& ViewProjection, const m4& InverseView);
 
 // Render commands
 internal void GameRendererSubmitQuad(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v2& Scale, const v4& Color);
@@ -233,6 +217,89 @@ internal void GameRendererSubmitCustomCuboid(game_renderer* Renderer, const m4& 
 
 internal void GameRendererSubmitCustomCuboid(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale, const texture& Texture, texture_coords TextureCoords[6], const v4& Color);
 
-internal void GameRendererSubmitCustomCuboid_FAST(game_renderer* Renderer, const m4& Transform, const texture& Texture, texture_coords TextureCoords[6], const v4& Color);
+// Each face has to have a normal vector, so unfortunately we cannot encode Cuboid as 8 vertices
+internal constexpr v4 c_CuboidVerticesPositions[24] =
+{
+    // Front face (+Z)
+    { -0.5f, -0.5f,  0.5f, 1.0f },
+    {  0.5f, -0.5f,  0.5f, 1.0f },
+    {  0.5f,  0.5f,  0.5f, 1.0f },
+    { -0.5f,  0.5f,  0.5f, 1.0f },
 
-internal void GameRendererSubmitCustomCuboid_FAST(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale, const texture& Texture, texture_coords TextureCoords[6], const v4& Color);
+    // Back face (-Z)
+    {  0.5f, -0.5f, -0.5f, 1.0f },
+    { -0.5f, -0.5f, -0.5f, 1.0f },
+    { -0.5f,  0.5f, -0.5f, 1.0f },
+    {  0.5f,  0.5f, -0.5f, 1.0f },
+
+    // Left face (-X)
+    { -0.5f, -0.5f, -0.5f, 1.0f },
+    { -0.5f, -0.5f,  0.5f, 1.0f },
+    { -0.5f,  0.5f,  0.5f, 1.0f },
+    { -0.5f,  0.5f, -0.5f, 1.0f },
+
+    // Right face (+X)
+    {  0.5f, -0.5f,  0.5f, 1.0f },
+    {  0.5f, -0.5f, -0.5f, 1.0f },
+    {  0.5f,  0.5f, -0.5f, 1.0f },
+    {  0.5f,  0.5f,  0.5f, 1.0f },
+
+    // Top face (+Y)
+    { -0.5f,  0.5f,  0.5f, 1.0f },
+    {  0.5f,  0.5f,  0.5f, 1.0f },
+    {  0.5f,  0.5f, -0.5f, 1.0f },
+    { -0.5f,  0.5f, -0.5f, 1.0f },
+
+    // Bottom face (-Y)
+    { -0.5f, -0.5f, -0.5f, 1.0f },
+    {  0.5f, -0.5f, -0.5f, 1.0f },
+    {  0.5f, -0.5f,  0.5f, 1.0f },
+    { -0.5f, -0.5f,  0.5f, 1.0f }
+};
+
+internal constexpr basic_cuboid_vertex c_CuboidVertices[24] =
+{
+    // Front face (+Z)
+    basic_cuboid_vertex(v4{ -0.5f, -0.5f,  0.5f, 1.0f }, v3{ 0.0f, 0.0f, 1.0f }, v2{ 0.0f, 0.0f }),
+    basic_cuboid_vertex(v4{  0.5f, -0.5f,  0.5f, 1.0f }, v3{ 0.0f, 0.0f, 1.0f }, v2{ 1.0f, 0.0f }),
+    basic_cuboid_vertex(v4{  0.5f,  0.5f,  0.5f, 1.0f }, v3{ 0.0f, 0.0f, 1.0f }, v2{ 1.0f, 1.0f }),
+    basic_cuboid_vertex(v4{ -0.5f,  0.5f,  0.5f, 1.0f }, v3{ 0.0f, 0.0f, 1.0f }, v2{ 0.0f, 1.0f }),
+
+    // Back face (-Z)                                                                    
+    basic_cuboid_vertex(v4{  0.5f, -0.5f, -0.5f, 1.0f }, v3{ 0.0f, 0.0f, -1.0f}, v2{ 0.0f, 0.0f }),
+    basic_cuboid_vertex(v4{ -0.5f, -0.5f, -0.5f, 1.0f }, v3{ 0.0f, 0.0f, -1.0f}, v2{ 1.0f, 0.0f }),
+    basic_cuboid_vertex(v4{ -0.5f,  0.5f, -0.5f, 1.0f }, v3{ 0.0f, 0.0f, -1.0f}, v2{ 1.0f, 1.0f }),
+    basic_cuboid_vertex(v4{  0.5f,  0.5f, -0.5f, 1.0f }, v3{ 0.0f, 0.0f, -1.0f}, v2{ 0.0f, 1.0f }),
+
+    // Left face (-X)                                                                    
+    basic_cuboid_vertex(v4{ -0.5f, -0.5f, -0.5f, 1.0f }, v3{ -1.0f, 0.0f, 0.0f}, v2{ 0.0f, 0.0f }),
+    basic_cuboid_vertex(v4{ -0.5f, -0.5f,  0.5f, 1.0f }, v3{ -1.0f, 0.0f, 0.0f}, v2{ 1.0f, 0.0f }),
+    basic_cuboid_vertex(v4{ -0.5f,  0.5f,  0.5f, 1.0f }, v3{ -1.0f, 0.0f, 0.0f}, v2{ 1.0f, 1.0f }),
+    basic_cuboid_vertex(v4{ -0.5f,  0.5f, -0.5f, 1.0f }, v3{ -1.0f, 0.0f, 0.0f}, v2{ 0.0f, 1.0f }),
+
+    // Right face (+X)                                                                   
+    basic_cuboid_vertex(v4{  0.5f, -0.5f,  0.5f, 1.0f }, v3{ 1.0f, 0.0f, 0.0f }, v2{ 0.0f, 0.0f }),
+    basic_cuboid_vertex(v4{  0.5f, -0.5f, -0.5f, 1.0f }, v3{ 1.0f, 0.0f, 0.0f }, v2{ 1.0f, 0.0f }),
+    basic_cuboid_vertex(v4{  0.5f,  0.5f, -0.5f, 1.0f }, v3{ 1.0f, 0.0f, 0.0f }, v2{ 1.0f, 1.0f }),
+    basic_cuboid_vertex(v4{  0.5f,  0.5f,  0.5f, 1.0f }, v3{ 1.0f, 0.0f, 0.0f }, v2{ 0.0f, 1.0f }),
+
+    // Top face (+Y)                                                                     
+    basic_cuboid_vertex(v4{ -0.5f,  0.5f,  0.5f, 1.0f }, v3{ 0.0f, 1.0f, 0.0f }, v2{ 0.0f, 0.0f }),
+    basic_cuboid_vertex(v4{  0.5f,  0.5f,  0.5f, 1.0f }, v3{ 0.0f, 1.0f, 0.0f }, v2{ 1.0f, 0.0f }),
+    basic_cuboid_vertex(v4{  0.5f,  0.5f, -0.5f, 1.0f }, v3{ 0.0f, 1.0f, 0.0f }, v2{ 1.0f, 1.0f }),
+    basic_cuboid_vertex(v4{ -0.5f,  0.5f, -0.5f, 1.0f }, v3{ 0.0f, 1.0f, 0.0f }, v2{ 0.0f, 1.0f }),
+
+    // Bottom face (-Y)                                                                  
+    basic_cuboid_vertex(v4{ -0.5f, -0.5f, -0.5f, 1.0f }, v3{ 0.0f, -1.0f, 0.0f}, v2{ 0.0f, 0.0f }),
+    basic_cuboid_vertex(v4{  0.5f, -0.5f, -0.5f, 1.0f }, v3{ 0.0f, -1.0f, 0.0f}, v2{ 1.0f, 0.0f }),
+    basic_cuboid_vertex(v4{  0.5f, -0.5f,  0.5f, 1.0f }, v3{ 0.0f, -1.0f, 0.0f}, v2{ 1.0f, 1.0f }),
+    basic_cuboid_vertex(v4{ -0.5f, -0.5f,  0.5f, 1.0f }, v3{ 0.0f, -1.0f, 0.0f}, v2{ 0.0f, 1.0f })
+};
+
+internal constexpr v4 c_QuadVertexPositions[4]
+{
+    { -0.5f, -0.5f, 0.0f, 1.0f },
+    {  0.5f, -0.5f, 0.0f, 1.0f },
+    {  0.5f,  0.5f, 0.0f, 1.0f },
+    { -0.5f,  0.5f, 0.0f, 1.0f }
+};

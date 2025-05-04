@@ -51,13 +51,13 @@ enum class block_type : u32
 };
 #define BLOCK_TYPE_COUNT (u32)block_type::INVALID
 
-enum class entity_type : u32
-{
-    None = 0,
-    Player,
-    Cow,
-    // ...
-};
+//enum class entity_type : u32
+//{
+//    None = 0,
+//    Player,
+//    Cow,
+//    // ...
+//};
 
 enum class entity_flags : u32
 {

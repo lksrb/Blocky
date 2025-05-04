@@ -3,138 +3,6 @@
 #include "DX12Texture.cpp"
 #include "DX12Buffer.cpp"
 
-// Each face has to have a normal vector, so unfortunately we cannot encode Cuboid as 8 vertices
-internal constexpr v4 c_CuboidVerticesPositions[24] =
-{
-    // Front face (+Z)
-    { -0.5f, -0.5f,  0.5f, 1.0f },
-    {  0.5f, -0.5f,  0.5f, 1.0f },
-    {  0.5f,  0.5f,  0.5f, 1.0f },
-    { -0.5f,  0.5f,  0.5f, 1.0f },
-
-    // Back face (-Z)
-    {  0.5f, -0.5f, -0.5f, 1.0f },
-    { -0.5f, -0.5f, -0.5f, 1.0f },
-    { -0.5f,  0.5f, -0.5f, 1.0f },
-    {  0.5f,  0.5f, -0.5f, 1.0f },
-
-    // Left face (-X)
-    { -0.5f, -0.5f, -0.5f, 1.0f },
-    { -0.5f, -0.5f,  0.5f, 1.0f },
-    { -0.5f,  0.5f,  0.5f, 1.0f },
-    { -0.5f,  0.5f, -0.5f, 1.0f },
-
-    // Right face (+X)
-    {  0.5f, -0.5f,  0.5f, 1.0f },
-    {  0.5f, -0.5f, -0.5f, 1.0f },
-    {  0.5f,  0.5f, -0.5f, 1.0f },
-    {  0.5f,  0.5f,  0.5f, 1.0f },
-
-    // Top face (+Y)
-    { -0.5f,  0.5f,  0.5f, 1.0f },
-    {  0.5f,  0.5f,  0.5f, 1.0f },
-    {  0.5f,  0.5f, -0.5f, 1.0f },
-    { -0.5f,  0.5f, -0.5f, 1.0f },
-
-    // Bottom face (-Y)
-    { -0.5f, -0.5f, -0.5f, 1.0f },
-    {  0.5f, -0.5f, -0.5f, 1.0f },
-    {  0.5f, -0.5f,  0.5f, 1.0f },
-    { -0.5f, -0.5f,  0.5f, 1.0f }
-};
-
-internal constexpr cuboid_vertex c_CuboidVertices[24] =
-{
-    // Front face (+Z)
-    cuboid_vertex(v4{ -0.5f, -0.5f,  0.5f, 1.0f }, v2{ 0.0f, 0.0f }),
-    cuboid_vertex(v4{  0.5f, -0.5f,  0.5f, 1.0f }, v2{ 1.0f, 0.0f }),
-    cuboid_vertex(v4{  0.5f,  0.5f,  0.5f, 1.0f }, v2{ 1.0f, 1.0f }),
-    cuboid_vertex(v4{ -0.5f,  0.5f,  0.5f, 1.0f }, v2{ 0.0f, 1.0f }),
-
-    // Back face (-Z)
-    cuboid_vertex(v4{  0.5f, -0.5f, -0.5f, 1.0f }, v2{ 0.0f, 0.0f }),
-    cuboid_vertex(v4{ -0.5f, -0.5f, -0.5f, 1.0f }, v2{ 1.0f, 0.0f }),
-    cuboid_vertex(v4{ -0.5f,  0.5f, -0.5f, 1.0f }, v2{ 1.0f, 1.0f }),
-    cuboid_vertex(v4{  0.5f,  0.5f, -0.5f, 1.0f }, v2{ 0.0f, 1.0f }),
-
-    // Left face (-X)
-    cuboid_vertex(v4{ -0.5f, -0.5f, -0.5f, 1.0f }, v2{ 0.0f, 0.0f }),
-    cuboid_vertex(v4{ -0.5f, -0.5f,  0.5f, 1.0f }, v2{ 1.0f, 0.0f }),
-    cuboid_vertex(v4{ -0.5f,  0.5f,  0.5f, 1.0f }, v2{ 1.0f, 1.0f }),
-    cuboid_vertex(v4{ -0.5f,  0.5f, -0.5f, 1.0f }, v2{ 0.0f, 1.0f }),
-
-    // Right face (+X)
-    cuboid_vertex(v4{  0.5f, -0.5f,  0.5f, 1.0f }, v2{ 0.0f, 0.0f }),
-    cuboid_vertex(v4{  0.5f, -0.5f, -0.5f, 1.0f }, v2{ 1.0f, 0.0f }),
-    cuboid_vertex(v4{  0.5f,  0.5f, -0.5f, 1.0f }, v2{ 1.0f, 1.0f }),
-    cuboid_vertex(v4{  0.5f,  0.5f,  0.5f, 1.0f }, v2{ 0.0f, 1.0f }),
-
-    // Top face (+Y)
-    cuboid_vertex(v4{ -0.5f,  0.5f,  0.5f, 1.0f }, v2{ 0.0f, 0.0f }),
-    cuboid_vertex(v4{  0.5f,  0.5f,  0.5f, 1.0f }, v2{ 1.0f, 0.0f }),
-    cuboid_vertex(v4{  0.5f,  0.5f, -0.5f, 1.0f }, v2{ 1.0f, 1.0f }),
-    cuboid_vertex(v4{ -0.5f,  0.5f, -0.5f, 1.0f }, v2{ 0.0f, 1.0f }),
-
-    // Bottom face (-Y)
-    cuboid_vertex(v4{ -0.5f, -0.5f, -0.5f, 1.0f }, v2{ 0.0f, 0.0f }),
-    cuboid_vertex(v4{  0.5f, -0.5f, -0.5f, 1.0f }, v2{ 1.0f, 0.0f }),
-    cuboid_vertex(v4{  0.5f, -0.5f,  0.5f, 1.0f }, v2{ 1.0f, 1.0f }),
-    cuboid_vertex(v4{ -0.5f, -0.5f,  0.5f, 1.0f }, v2{ 0.0f, 1.0f })
-};
-
-struct cuboid_vertex_full
-{
-    v4 Position;
-    v3 Normal;
-};
-
-internal constexpr cuboid_vertex_full c_CuboidVerticesFull[24] =
-{
-    // Front face (+Z)
-    cuboid_vertex_full(v4{ -0.5f, -0.5f,  0.5f, 1.0f }, v3{ 0.0f, 0.0f, 1.0f }),
-    cuboid_vertex_full(v4{  0.5f, -0.5f,  0.5f, 1.0f }, v3{ 0.0f, 0.0f, 1.0f }),
-    cuboid_vertex_full(v4{  0.5f,  0.5f,  0.5f, 1.0f }, v3{ 0.0f, 0.0f, 1.0f }),
-    cuboid_vertex_full(v4{ -0.5f,  0.5f,  0.5f, 1.0f }, v3{ 0.0f, 0.0f, 1.0f }),
-
-    // Back face (-Z)                                                 
-    cuboid_vertex_full(v4{  0.5f, -0.5f, -0.5f, 1.0f }, v3{ 0.0f, 0.0f, -1.0f }),
-    cuboid_vertex_full(v4{ -0.5f, -0.5f, -0.5f, 1.0f }, v3{ 0.0f, 0.0f, -1.0f }),
-    cuboid_vertex_full(v4{ -0.5f,  0.5f, -0.5f, 1.0f }, v3{ 0.0f, 0.0f, -1.0f }),
-    cuboid_vertex_full(v4{  0.5f,  0.5f, -0.5f, 1.0f }, v3{ 0.0f, 0.0f, -1.0f }),
-
-    // Left face (-X)                                                 
-    cuboid_vertex_full(v4{ -0.5f, -0.5f, -0.5f, 1.0f }, v3{ -1.0f, 0.0f, 0.0f }),
-    cuboid_vertex_full(v4{ -0.5f, -0.5f,  0.5f, 1.0f }, v3{ -1.0f, 0.0f, 0.0f }),
-    cuboid_vertex_full(v4{ -0.5f,  0.5f,  0.5f, 1.0f }, v3{ -1.0f, 0.0f, 0.0f }),
-    cuboid_vertex_full(v4{ -0.5f,  0.5f, -0.5f, 1.0f }, v3{ -1.0f, 0.0f, 0.0f }),
-
-    // Right face (+X)                                                
-    cuboid_vertex_full(v4{  0.5f, -0.5f,  0.5f, 1.0f }, v3{ 1.0f, 0.0f, 0.0f }),
-    cuboid_vertex_full(v4{  0.5f, -0.5f, -0.5f, 1.0f }, v3{ 1.0f, 0.0f, 0.0f }),
-    cuboid_vertex_full(v4{  0.5f,  0.5f, -0.5f, 1.0f }, v3{ 1.0f, 0.0f, 0.0f }),
-    cuboid_vertex_full(v4{  0.5f,  0.5f,  0.5f, 1.0f }, v3{ 1.0f, 0.0f, 0.0f }),
-
-    // Top face (+Y)                                                  
-    cuboid_vertex_full(v4{ -0.5f,  0.5f,  0.5f, 1.0f }, v3{ 0.0f, 1.0f, 0.0f }),
-    cuboid_vertex_full(v4{  0.5f,  0.5f,  0.5f, 1.0f }, v3{ 0.0f, 1.0f, 0.0f }),
-    cuboid_vertex_full(v4{  0.5f,  0.5f, -0.5f, 1.0f }, v3{ 0.0f, 1.0f, 0.0f }),
-    cuboid_vertex_full(v4{ -0.5f,  0.5f, -0.5f, 1.0f }, v3{ 0.0f, 1.0f, 0.0f }),
-
-    // Bottom face (-Y)                                               
-    cuboid_vertex_full(v4{ -0.5f, -0.5f, -0.5f, 1.0f }, v3{ 0.0f, -1.0f, 0.0f }),
-    cuboid_vertex_full(v4{  0.5f, -0.5f, -0.5f, 1.0f }, v3{ 0.0f, -1.0f, 0.0f }),
-    cuboid_vertex_full(v4{  0.5f, -0.5f,  0.5f, 1.0f }, v3{ 0.0f, -1.0f, 0.0f }),
-    cuboid_vertex_full(v4{ -0.5f, -0.5f,  0.5f, 1.0f }, v3{ 0.0f, -1.0f, 0.0f })
-};
-
-internal constexpr v4 c_QuadVertexPositions[4]
-{
-    { -0.5f, -0.5f, 0.0f, 1.0f },
-    {  0.5f, -0.5f, 0.0f, 1.0f },
-    {  0.5f,  0.5f, 0.0f, 1.0f },
-    { -0.5f,  0.5f, 0.0f, 1.0f }
-};
-
 internal game_renderer GameRendererCreate(const game_window& Window)
 {
     game_renderer Renderer = {};
@@ -153,7 +21,6 @@ internal void GameRendererDestroy(game_renderer* Renderer)
     for (u32 i = 0; i < FIF; i++)
     {
         // Command allocators
-        Renderer->CopyCommandAllocators[i]->Release();
         Renderer->DirectCommandAllocators[i]->Release();
 
         // Depth testing
@@ -172,9 +39,7 @@ internal void GameRendererDestroy(game_renderer* Renderer)
     Renderer->SRVDescriptorHeap->Release();
     Renderer->Fence->Release();
     Renderer->DirectCommandList->Release();
-    Renderer->CopyCommandList->Release();
     Renderer->DirectCommandQueue->Release();
-    Renderer->CopyCommandQueue->Release();
     Renderer->RootSignature->Release();
     Renderer->Factory->Release();
     Renderer->Device->Release();
@@ -283,31 +148,6 @@ internal void GameRendererInitD3D(game_renderer* Renderer, const game_window& Wi
         DxAssert(Renderer->Device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&Renderer->Fence)));
         Renderer->DirectFenceEvent = CreateEvent(nullptr, false, false, nullptr);
         Assert(Renderer->DirectFenceEvent != INVALID_HANDLE_VALUE, "Could not create fence event.");
-    }
-
-    // Create copy command queue
-    {
-        // Create direct command allocator
-        for (u32 i = 0; i < FIF; i++)
-        {
-            DxAssert(Renderer->Device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_COPY, IID_PPV_ARGS(&Renderer->CopyCommandAllocators[i])));
-        }
-
-        D3D12_COMMAND_QUEUE_DESC Desc = {};
-        Desc.Type = D3D12_COMMAND_LIST_TYPE_COPY;
-        Desc.Priority = D3D12_COMMAND_QUEUE_PRIORITY_NORMAL;
-        Desc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
-        Desc.NodeMask = 0;
-        DxAssert(Renderer->Device->CreateCommandQueue(&Desc, IID_PPV_ARGS(&Renderer->CopyCommandQueue)));
-
-        // Create a copy command list
-        {
-            DxAssert(Renderer->Device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_COPY, Renderer->CopyCommandAllocators[Renderer->CurrentBackBufferIndex], nullptr, IID_PPV_ARGS(&Renderer->CopyCommandList)));
-
-            // Command lists are created in the recording state, but there is nothing
-            // to record yet. The main loop expects it to be closed, so close it now.
-            DxAssert(Renderer->CopyCommandList->Close());
-        }
     }
 
     // Create swapchain
@@ -464,7 +304,7 @@ internal void GameRendererInitD3DPipeline(game_renderer* Renderer)
 
         D3D12_ROOT_PARAMETER Parameters[2] = {};
         Parameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
-        Parameters[0].Constants.Num32BitValues = 16;  // 4x4 matrix (16 floats)
+        Parameters[0].Constants.Num32BitValues = sizeof(Renderer->CuboidRootSignatureBuffer) / 4;
         Parameters[0].Constants.ShaderRegister = 0;  // Matches b0 in HLSL
         Parameters[0].Constants.RegisterSpace = 0;
         Parameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
@@ -534,13 +374,15 @@ internal void GameRendererInitD3DPipeline(game_renderer* Renderer)
         }
     }
 
-    // Cuboids
+    // Basic Cuboids - if a cuboid does not have unique texture for each quad, then we can use this
+    // TODO: We could even create a pipeline for NoRotNoScale cuboids and pass only translation vector
     {
         // Define the vertex input layout.
         D3D12_INPUT_ELEMENT_DESC InputElementDescs[] =
         {
             // Per vertex
             { "POSITION", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+            { "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
             { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
 
             // Per instance
@@ -568,20 +410,6 @@ internal void GameRendererInitD3DPipeline(game_renderer* Renderer)
         Renderer->CuboidInstanceData = VmAllocArray(cuboid_transform_vertex_data, c_MaxCubePerBatch);
     }
 
-    // Custom Cuboid
-    {
-        for (u32 i = 0; i < FIF; i++)
-        {
-            Renderer->CustomCuboidVertexBuffers[i] = DX12VertexBufferCreate(Device, sizeof(quad_vertex) * c_MaxQuadVertices);
-        }
-
-        Renderer->CustomCuboidVertexDataBase = VmAllocArray(quad_vertex, c_MaxQuadVertices);
-        Renderer->CustomCuboidVertexDataPtr = Renderer->CustomCuboidVertexDataBase;
-
-        // For better debugging
-        memset(Renderer->CustomCuboidVertexDataBase, 0, sizeof(quad_vertex) * c_MaxQuadVertices);
-    }
-
     // FAST Custom cuboid
     {
         // Define the vertex input layout.
@@ -589,6 +417,7 @@ internal void GameRendererInitD3DPipeline(game_renderer* Renderer)
         {
             // Per vertex
             { "POSITION", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+            //{ "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
 
             // Per instance
             { "TRANSFORMA", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
@@ -835,8 +664,6 @@ internal void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
         DX12VertexBufferSendData(&Renderer->CuboidTransformVertexBuffers[CurrentBackBufferIndex], Renderer->DirectCommandList, Renderer->CuboidInstanceData, Renderer->CuboidInstanceCount * sizeof(cuboid_transform_vertex_data));
 
         DX12VertexBufferSendData(&Renderer->FastCuboidTransformVertexBuffers[CurrentBackBufferIndex], Renderer->DirectCommandList, Renderer->FastCuboidInstanceData, Renderer->FastCuboidInstanceCount * sizeof(fast_cuboid_transform_vertex_data));
-
-        DX12VertexBufferSendData(&Renderer->CustomCuboidVertexBuffers[CurrentBackBufferIndex], Renderer->DirectCommandList, Renderer->CustomCuboidVertexDataBase, sizeof(quad_vertex) * Renderer->CustomCuboidIndexCount);
     }
 
     // Set and clear render target view
@@ -873,13 +700,13 @@ internal void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
     {
         CommandList->SetPipelineState(Renderer->CuboidPipeline.Handle);
 
-        CommandList->SetGraphicsRoot32BitConstants(0, 16, &Renderer->CuboidRootSignatureBuffer, 0);
+        CommandList->SetGraphicsRoot32BitConstants(0, sizeof(Renderer->CuboidRootSignatureBuffer) / 4, &Renderer->CuboidRootSignatureBuffer, 0);
 
         // Bind vertex positions
         local_persist D3D12_VERTEX_BUFFER_VIEW CuboidVertexBufferView;
         CuboidVertexBufferView.BufferLocation = Renderer->CuboidPositionsVertexBuffer.Buffer.Handle->GetGPUVirtualAddress();
         CuboidVertexBufferView.SizeInBytes = (u32)Renderer->CuboidPositionsVertexBuffer.Buffer.Size;
-        CuboidVertexBufferView.StrideInBytes = sizeof(cuboid_vertex);
+        CuboidVertexBufferView.StrideInBytes = sizeof(basic_cuboid_vertex);
 
         // Bind transforms
         local_persist D3D12_VERTEX_BUFFER_VIEW TransformVertexBufferView;
@@ -932,31 +759,6 @@ internal void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
 
         // Issue draw call
         CommandList->DrawIndexedInstanced(36, Renderer->FastCuboidInstanceCount, 0, 0, 0);
-    }
-
-    // Render custom cuboids
-    if (Renderer->CustomCuboidIndexCount > 0)
-    {
-        CommandList->SetPipelineState(Renderer->QuadPipeline.Handle);
-
-        // Bind vertex buffer
-        local_persist D3D12_VERTEX_BUFFER_VIEW CustomCuboidVertexBufferView;
-        CustomCuboidVertexBufferView.BufferLocation = Renderer->CustomCuboidVertexBuffers[CurrentBackBufferIndex].Buffer.Handle->GetGPUVirtualAddress();
-        CustomCuboidVertexBufferView.StrideInBytes = sizeof(quad_vertex);
-        CustomCuboidVertexBufferView.SizeInBytes = Renderer->CustomCuboidIndexCount * sizeof(quad_vertex);
-        CommandList->IASetVertexBuffers(0, 1, &CustomCuboidVertexBufferView);
-
-        // Bind index buffer
-        local_persist D3D12_INDEX_BUFFER_VIEW CustomCuboidIndexBufferView;
-        CustomCuboidIndexBufferView.BufferLocation = Renderer->QuadIndexBuffer.Buffer.Handle->GetGPUVirtualAddress();
-        CustomCuboidIndexBufferView.Format = DXGI_FORMAT_R32_UINT;
-        CustomCuboidIndexBufferView.SizeInBytes = Renderer->CustomCuboidIndexCount * sizeof(u32);
-        CommandList->IASetIndexBuffer(&CustomCuboidIndexBufferView);
-
-        CommandList->SetGraphicsRoot32BitConstants(0, 16, &Renderer->CuboidRootSignatureBuffer.ViewProjection, 0);
-
-        // Issue draw call
-        CommandList->DrawIndexedInstanced(Renderer->CustomCuboidIndexCount, 1, 0, 0, 0);
     }
 
     // Render quads
@@ -1014,9 +816,7 @@ internal void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
 
     // Reset Cuboid indices
     Renderer->CuboidInstanceCount = 0;
-    Renderer->CustomCuboidIndexCount = 0;
     Renderer->FastCuboidInstanceCount = 0;
-    Renderer->CustomCuboidVertexDataPtr = Renderer->CustomCuboidVertexDataBase;
 
     // Reset textures
     Renderer->CurrentTextureStackIndex = 1;
@@ -1064,60 +864,10 @@ internal void GameRendererSetViewProjectionQuad(game_renderer* Renderer, const m
     Renderer->QuadRootSignatureBuffer.ViewProjection = ViewProjection;
 }
 
-internal void GameRendererSetViewProjectionCuboid(game_renderer* Renderer, const m4& ViewProjection)
+internal void GameRendererSetViewProjectionCuboid(game_renderer* Renderer, const m4& ViewProjection, const m4& InverseView)
 {
     Renderer->CuboidRootSignatureBuffer.ViewProjection = ViewProjection;
-}
-
-internal void GameRendererSubmitCustomCuboid(game_renderer* Renderer, const m4& Transform, const texture& Texture, texture_coords TextureCoords[6], const v4& Color)
-{
-    Assert(Renderer->CustomCuboidIndexCount < c_MaxQuadIndices, "Renderer->CustomCuboidIndexCount < c_MaxQuadIndices");
-    Assert(Texture.Handle != nullptr, "Texture is invalid!");
-
-    // TODO: ID system, pointers are unreliable
-    u32 TextureIndex = 0;
-    for (u32 i = 1; i < Renderer->CurrentTextureStackIndex; i++)
-    {
-        if (Renderer->TextureStack[i].ptr == Texture.SRVDescriptor.ptr)
-        {
-            TextureIndex = i;
-            break;
-        }
-    }
-
-    if (TextureIndex == 0)
-    {
-        Assert(Renderer->CurrentTextureStackIndex < c_MaxTexturesPerDrawCall, "Renderer->TextureStackIndex < c_MaxTexturesPerDrawCall");
-        TextureIndex = Renderer->CurrentTextureStackIndex;
-        Renderer->TextureStack[TextureIndex] = Texture.SRVDescriptor;
-        Renderer->CurrentTextureStackIndex++;
-    }
-
-    u32 j = 0;
-    for (u32 i = 0; i < CountOf(c_CuboidVerticesPositions); i++)
-    {
-        Renderer->CustomCuboidVertexDataPtr->Position = v3(Transform * c_CuboidVerticesPositions[i]);
-        Renderer->CustomCuboidVertexDataPtr->Color = Color;
-        Renderer->CustomCuboidVertexDataPtr->TexCoord = TextureCoords[j].Coords[i % 4];
-        Renderer->CustomCuboidVertexDataPtr->TexIndex = TextureIndex;
-        Renderer->CustomCuboidVertexDataPtr++;
-
-        if ((i + 1) % 4 == 0)
-        {
-            j++;
-        }
-    }
-
-    Renderer->CustomCuboidIndexCount += 36;
-}
-
-internal void GameRendererSubmitCustomCuboid(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale, const texture& Texture, texture_coords TextureCoords[6], const v4& Color)
-{
-    m4 Transform = bkm::Translate(m4(1.0f), Translation)
-        * bkm::ToM4(qtn(Rotation))
-        * bkm::Scale(m4(1.0f), Scale);
-
-    GameRendererSubmitCustomCuboid(Renderer, Transform, Texture, TextureCoords, Color);
+    Renderer->CuboidRootSignatureBuffer.InverseView = InverseView;
 }
 
 internal void GameRendererSubmitQuad(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v2& Scale, const v4& Color)
@@ -1369,7 +1119,7 @@ internal void GameRendererSubmitCuboidNoRotScale(game_renderer* Renderer, const 
 }
 
 
-internal void GameRendererSubmitCustomCuboid_FAST(game_renderer* Renderer, const m4& Transform, const texture& Texture, texture_coords TextureCoords[6], const v4& Color)
+internal void GameRendererSubmitCustomCuboid(game_renderer* Renderer, const m4& Transform, const texture& Texture, texture_coords TextureCoords[6], const v4& Color)
 {
     Assert(Renderer->FastCuboidInstanceCount < c_MaxCubePerBatch, "Renderer->FastCuboidInstanceCount < c_MaxCuboidsPerBatch");
 
@@ -1405,7 +1155,7 @@ internal void GameRendererSubmitCustomCuboid_FAST(game_renderer* Renderer, const
     Renderer->FastCuboidInstanceCount++;
 }
 
-internal void GameRendererSubmitCustomCuboid_FAST(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale, const texture& Texture, texture_coords TextureCoords[6], const v4& Color)
+internal void GameRendererSubmitCustomCuboid(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale, const texture& Texture, texture_coords TextureCoords[6], const v4& Color)
 {
     Assert(Renderer->FastCuboidInstanceCount < c_MaxCubePerBatch, "Renderer->FastCuboidInstanceCount < c_MaxCuboidsPerBatch");
     auto& Cuboid = Renderer->FastCuboidInstanceData[Renderer->FastCuboidInstanceCount];
