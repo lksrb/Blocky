@@ -107,37 +107,38 @@ struct cuboid_root_signature_constant_buffer
     m4 InverseView;
 };
 
-struct alignas(16) point_light
+struct point_light
 {
     v3 Position;
     f32 Intensity;
+
     v3 Radiance;
-    f32 FallOff;
     f32 Radius;
+
+    f32 FallOff;
+    v3 _Pad0;
 };
 
-struct alignas(16) directional_light
+struct directional_light
 {
     v3 Direction;
     f32 Intensity;
     v3 Radiance;
+    f32 _Pad0;
 };
 
-struct alignas(16) light_environment
+struct light_environment
 {
-    static constexpr u32 MaxDirectionalLights = 64;
     static constexpr u32 MaxPointLights = 64;
+    static constexpr u32 MaxDirectionalLights = 4;
 
-    directional_light DirectionalLights[64];
-    i32 DirectionalLightCount;
-
-    point_light PointLights[64];
-    i32 PointLightCount;
+    directional_light DirectionalLight[MaxDirectionalLights];
+    point_light PointLights[MaxPointLights];
+    i32 PointLightCount = 0;
+    i32 DirectionalLightCount = 0;
 
     inline void Clear() { DirectionalLightCount = PointLightCount = 0; };
-
-    inline auto& EmplaceDirectionalLight() { Assert(DirectionalLightCount < MaxDirectionalLights, "Too many directional lights!"); return DirectionalLights[DirectionalLightCount++]; }
-
+    inline auto& EmplaceDirectionalLight() { Assert(DirectionalLightCount < MaxDirectionalLights, "Too many directional lights!"); return DirectionalLight[DirectionalLightCount++]; }
     inline auto& EmplacePointLight() { Assert(PointLightCount < MaxPointLights, "Too many point lights!"); return PointLights[PointLightCount++]; }
 };
 

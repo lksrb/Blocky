@@ -5,9 +5,12 @@ struct point_light
 {
     float3 Position;
     float Intensity;
+
     float3 Radiance;
-    float FallOff;
     float Radius;
+
+    float FallOff;
+    float3 _Pad;
 };
 
 struct directional_light
@@ -15,6 +18,7 @@ struct directional_light
     float3 Direction;
     float Intensity;
     float3 Radiance;
+    float _Pad;
 };
 
 // Directional light calculation
@@ -23,7 +27,7 @@ float3 CalculateDirectionalLight(directional_light Light, float3 Normal, float3 
     float3 Result = float3(0.0, 0.0, 0.0);
 
     // Calculate direction of the Light source
-    float3 LightDir = normalize(-Light.Direction.xyz);
+    float3 LightDir = normalize(-Light.Direction);
 
     // Calculate diffuse 
     float DiffuseAngle = max(dot(Normal, LightDir), 0.0);
@@ -51,8 +55,8 @@ float3 CalculatePointLight(point_light Light, float3 Normal, float3 ViewDir, flo
 {
     float3 Result = float3(0.0, 0.0, 0.0);
 
-    float3 LightDir = normalize(float3(Light.Position) - WorldPosition);
-    float LightDistance = length(float3(Light.Position) - WorldPosition);
+    float3 LightDir = normalize(Light.Position.xyz - WorldPosition);
+    float LightDistance = length(Light.Position.xyz - WorldPosition);
 
     // Calculate diffuse
     float DiffuseAngle = max(dot(Normal, LightDir), 0.0);

@@ -522,16 +522,23 @@ internal void GameRendererInitD3DPipeline(game_renderer* Renderer)
     // Create light environment
     {
         Renderer->LightEnvironmentConstantBuffer = DX12ConstantBufferCreate(Device, sizeof(light_environment));
-       /* directional_light Light;
-        Light.Direction = float3(1.0, -1.0, 1.0);
-        Light.Intensity = 0.5;
-        Light.Radiance = float3(1.0, 1.0, 1.0);*/
+        directional_light& DirLight = Renderer->LightEnvironment.EmplaceDirectionalLight();
+        DirLight.Direction = v3(1.0, -1.0, 1.0);
+        DirLight.Intensity = 0.8;
+        DirLight.Radiance = v3(1.0, 1.0, 1.0);
         point_light& Light = Renderer->LightEnvironment.EmplacePointLight();
         Light.Position = v3(10, 20, 10);
         Light.Radius = 10.0;
         Light.FallOff = 1.0;
         Light.Radiance = v3(1.0, 1.0, 1.0);
         Light.Intensity = 1.0f;
+
+        point_light& Light2 = Renderer->LightEnvironment.EmplacePointLight();
+        Light2.Position = v3(7, 20, 10);
+        Light2.Radius = 10.0;
+        Light2.FallOff = 1.0;
+        Light2.Radiance = v3(1.0, 0.0, 1.0);
+        Light2.Intensity = 1.0f;
 
         DX12ConstantBufferSetData(&Renderer->LightEnvironmentConstantBuffer, &Renderer->LightEnvironment, sizeof(light_environment));
     }
