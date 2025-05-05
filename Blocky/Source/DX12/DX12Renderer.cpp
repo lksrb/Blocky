@@ -302,18 +302,23 @@ internal void GameRendererInitD3DPipeline(game_renderer* Renderer)
         Ranges[0].RegisterSpace = 0;
         Ranges[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
-        D3D12_ROOT_PARAMETER Parameters[2] = {};
+        D3D12_ROOT_PARAMETER Parameters[3] = {};
         Parameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
         Parameters[0].Constants.Num32BitValues = sizeof(Renderer->CuboidRootSignatureBuffer) / 4;
-        Parameters[0].Constants.ShaderRegister = 0;  // Matches b0 in HLSL
+        Parameters[0].Constants.ShaderRegister = 0;  // b0
         Parameters[0].Constants.RegisterSpace = 0;
         Parameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
 
-        // Descriptor table
-        Parameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-        Parameters[1].DescriptorTable.NumDescriptorRanges = CountOf(Ranges);
-        Parameters[1].DescriptorTable.pDescriptorRanges = Ranges;
+        Parameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
         Parameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+        Parameters[1].Descriptor.ShaderRegister = 1; // b1
+        Parameters[1].Descriptor.RegisterSpace = 0;
+
+        // Descriptor table
+        Parameters[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+        Parameters[2].DescriptorTable.NumDescriptorRanges = CountOf(Ranges);
+        Parameters[2].DescriptorTable.pDescriptorRanges = Ranges;
+        Parameters[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 
         D3D12_ROOT_SIGNATURE_DESC Desc = {};
         Desc.NumParameters = CountOf(Parameters);
@@ -489,7 +494,7 @@ internal void GameRendererInitD3DPipeline(game_renderer* Renderer)
     // Create descriptor heap that holds texture and uav descriptors
     {
         D3D12_DESCRIPTOR_HEAP_DESC Desc = {};
-        Desc.NumDescriptors = c_MaxTexturesPerDrawCall;
+        Desc.NumDescriptors = c_MaxTexturesPerDrawCall; // + 1 for light environment
         Desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
         Desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE; // Must be visible to shaders
         Desc.NodeMask = 0;
@@ -512,6 +517,23 @@ internal void GameRendererInitD3DPipeline(game_renderer* Renderer)
         Device->CreateShaderResourceView(Renderer->WhiteTexture.Handle, &Desc, SRV);
 
         SRV.ptr += Increment;
+    }
+
+    // Create light environment
+    {
+        Renderer->LightEnvironmentConstantBuffer = DX12ConstantBufferCreate(Device, sizeof(light_environment));
+       /* directional_light Light;
+        Light.Direction = float3(1.0, -1.0, 1.0);
+        Light.Intensity = 0.5;
+        Light.Radiance = float3(1.0, 1.0, 1.0);*/
+        point_light& Light = Renderer->LightEnvironment.EmplacePointLight();
+        Light.Position = v3(10, 20, 10);
+        Light.Radius = 10.0;
+        Light.FallOff = 1.0;
+        Light.Radiance = v3(1.0, 1.0, 1.0);
+        Light.Intensity = 1.0f;
+
+        DX12ConstantBufferSetData(&Renderer->LightEnvironmentConstantBuffer, &Renderer->LightEnvironment, sizeof(light_environment));
     }
 }
 
@@ -689,7 +711,7 @@ internal void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
     // Number of 32 bit values - 16 floats in 4x4 matrix
     CommandList->SetGraphicsRootSignature(Renderer->RootSignature);
     CommandList->SetDescriptorHeaps(1, (ID3D12DescriptorHeap* const*)&Renderer->SRVDescriptorHeap);
-    CommandList->SetGraphicsRootDescriptorTable(1, Renderer->SRVDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
+    CommandList->SetGraphicsRootDescriptorTable(2, Renderer->SRVDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
     CommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
     // Render instanced cuboids
@@ -698,6 +720,8 @@ internal void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
         CommandList->SetPipelineState(Renderer->CuboidPipeline.Handle);
 
         CommandList->SetGraphicsRoot32BitConstants(0, sizeof(Renderer->CuboidRootSignatureBuffer) / 4, &Renderer->CuboidRootSignatureBuffer, 0);
+
+        CommandList->SetGraphicsRootConstantBufferView(1, Renderer->LightEnvironmentConstantBuffer.Buffer.Handle->GetGPUVirtualAddress());
 
         // Bind vertex positions
         local_persist D3D12_VERTEX_BUFFER_VIEW CuboidVertexBufferView;

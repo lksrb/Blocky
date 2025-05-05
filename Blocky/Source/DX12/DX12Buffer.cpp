@@ -46,12 +46,12 @@ internal void DX12BufferDestroy(dx12_buffer* Buffer)
 
 internal dx12_vertex_buffer DX12VertexBufferCreate(ID3D12Device* Device, u64 Size)
 {
-    dx12_vertex_buffer Result = {};
-    Result.Buffer = DX12BufferCreate(Device, D3D12_RESOURCE_STATE_COMMON, D3D12_HEAP_TYPE_DEFAULT, Size);
-    Result.IntermediateBuffer = DX12BufferCreate(Device, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_HEAP_TYPE_UPLOAD, Size);
+    dx12_vertex_buffer VertexBuffer = {};
+    VertexBuffer.Buffer = DX12BufferCreate(Device, D3D12_RESOURCE_STATE_COMMON, D3D12_HEAP_TYPE_DEFAULT, Size);
+    VertexBuffer.IntermediateBuffer = DX12BufferCreate(Device, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_HEAP_TYPE_UPLOAD, Size);
 
-    Result.IntermediateBuffer.Handle->Map(0, nullptr, &Result.MappedIntermediateData);
-    return Result;
+    VertexBuffer.IntermediateBuffer.Handle->Map(0, nullptr, &VertexBuffer.MappedIntermediateData);
+    return VertexBuffer;
 }
 
 internal void DX12VertexBufferDestroy(dx12_vertex_buffer* VertexBuffer)
@@ -106,4 +106,22 @@ internal void DX12IndexBufferDestroy(dx12_index_buffer* IndexBuffer)
     DX12BufferDestroy(&IndexBuffer->Buffer);
 }
 
+internal dx12_constant_buffer DX12ConstantBufferCreate(ID3D12Device* Device, u64 Size)
+{
+    dx12_constant_buffer ConstantBuffer = {};
+    ConstantBuffer.Buffer = DX12BufferCreate(Device, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_HEAP_TYPE_UPLOAD, Size);
+    ConstantBuffer.Buffer.Handle->Map(0, nullptr, &ConstantBuffer.MappedData);
+    return ConstantBuffer;
+}
 
+internal void DX12ConstantBufferDestroy(dx12_constant_buffer* ConstantBuffer)
+{
+    ConstantBuffer->Buffer.Handle->Unmap(0, nullptr);
+    DX12BufferDestroy(&ConstantBuffer->Buffer);
+}
+
+internal void DX12ConstantBufferSetData(dx12_constant_buffer* ConstantBuffer, const void* Data, u64 Size)
+{
+    Assert(ConstantBuffer->Buffer.Size >= Size, "Buffer overload!");
+    memcpy(ConstantBuffer->MappedData, Data, Size);
+}

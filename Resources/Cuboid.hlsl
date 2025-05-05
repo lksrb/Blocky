@@ -50,6 +50,18 @@ pixel_shader_input VSMain(vertex_shader_input In)
     return Out;
 }
 
+// TODO: Reduce the amount of active point lights by calculating which light is visible and which is not
+// std140 - buffer layout must be multiplier of 16 to match C++ struct
+// 256 - Alignment
+cbuffer light_environment : register(b1)
+{
+    directional_light u_DirectionalLights[64];
+    int u_DirectionalLightCount;
+    
+    point_light u_PointLights[64];
+    int u_PointLightCount;
+};
+
 // Upper bound
 Texture2D<float4> g_Texture[32] : register(t0);
 SamplerState g_Sampler : register(s0);
@@ -63,10 +75,17 @@ float4 PSMain(pixel_shader_input In) : SV_TARGET
     float3 TextureColor = g_Texture[In.TexIndex].Sample(g_Sampler, In.TexCoord);
     
     // Phase 1: Directional light
-    float3 Result = CalculateDirectionalLights(Normal, ViewDir, Shininess, TextureColor * In.Color.rgb);
+    float3 Result; //CalculateDirectionalLight(u_DirectionalLights[0], Normal, ViewDir, Shininess, TextureColor * In.Color.rgb);
+    
+    point_light Light;
+    Light.Position = float3(10, 20, 10);
+    Light.Radius = 10.0;
+    Light.FallOff = 1.0;
+    Light.Radiance = float3(1.0, 1.0, 1.0);
+    Light.Intensity = 1.0;
     
     // Phase 2: Point lights
-    Result += CalculatePointLights(Normal, ViewDir, Shininess, In.WorldPosition.xyz, TextureColor * In.Color.rgb);
+    Result = CalculatePointLight(u_PointLights[0], Normal, ViewDir, Shininess, In.WorldPosition.xyz, TextureColor * In.Color.rgb);
     
     //float4 Result = In.Color * g_Texture[In.TexIndex].Sample(g_Sampler, In.TexCoord);
     //float4 Result = In.Color;

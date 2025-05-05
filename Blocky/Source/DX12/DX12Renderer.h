@@ -107,6 +107,40 @@ struct cuboid_root_signature_constant_buffer
     m4 InverseView;
 };
 
+struct alignas(16) point_light
+{
+    v3 Position;
+    f32 Intensity;
+    v3 Radiance;
+    f32 FallOff;
+    f32 Radius;
+};
+
+struct alignas(16) directional_light
+{
+    v3 Direction;
+    f32 Intensity;
+    v3 Radiance;
+};
+
+struct alignas(16) light_environment
+{
+    static constexpr u32 MaxDirectionalLights = 64;
+    static constexpr u32 MaxPointLights = 64;
+
+    directional_light DirectionalLights[64];
+    i32 DirectionalLightCount;
+
+    point_light PointLights[64];
+    i32 PointLightCount;
+
+    inline void Clear() { DirectionalLightCount = PointLightCount = 0; };
+
+    inline auto& EmplaceDirectionalLight() { Assert(DirectionalLightCount < MaxDirectionalLights, "Too many directional lights!"); return DirectionalLights[DirectionalLightCount++]; }
+
+    inline auto& EmplacePointLight() { Assert(PointLightCount < MaxPointLights, "Too many point lights!"); return PointLights[PointLightCount++]; }
+};
+
 // API-agnostic type definition
 // There is a potential problem with navigating stuff if we would have multiple platforms
 struct game_renderer
@@ -182,6 +216,10 @@ struct game_renderer
     dx12_vertex_buffer FastCuboidTransformVertexBuffers[FIF] = {};
 
     dx12_vertex_buffer FastCuboidVertexBufferPositions;
+
+    // Light stuff
+    light_environment LightEnvironment;
+    dx12_constant_buffer LightEnvironmentConstantBuffer;
 };
 
 // Init / Destroy functions
