@@ -422,7 +422,7 @@ internal void GameRendererInitD3DPipeline(game_renderer* Renderer)
         {
             // Per vertex
             { "POSITION", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-            //{ "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+            //{ "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
 
             // Per instance
             { "TRANSFORMA", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
@@ -761,7 +761,8 @@ internal void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
     {
         CommandList->SetPipelineState(Renderer->FastCuboidPipeline.Handle);
 
-        CommandList->SetGraphicsRoot32BitConstants(0, 16, &Renderer->CuboidRootSignatureBuffer, 0);
+        CommandList->SetGraphicsRoot32BitConstants(0, sizeof(Renderer->CuboidRootSignatureBuffer) / 4, &Renderer->CuboidRootSignatureBuffer, 0);
+        CommandList->SetGraphicsRootConstantBufferView(1, Renderer->LightEnvironmentConstantBuffer.Buffer.Handle->GetGPUVirtualAddress());
 
         // Bind vertex positions
         local_persist D3D12_VERTEX_BUFFER_VIEW FastCuboidVertexBufferView;
@@ -1146,7 +1147,6 @@ internal void GameRendererSubmitCuboidNoRotScale(game_renderer* Renderer, const 
 #endif
 }
 
-
 internal void GameRendererSubmitCustomCuboid(game_renderer* Renderer, const m4& Transform, const texture& Texture, texture_coords TextureCoords[6], const v4& Color)
 {
     Assert(Renderer->FastCuboidInstanceCount < c_MaxCubePerBatch, "Renderer->FastCuboidInstanceCount < c_MaxCuboidsPerBatch");
@@ -1237,4 +1237,50 @@ internal void GameRendererSubmitCustomCuboid(game_renderer* Renderer, const v3& 
     Cuboid.XmmTransform = /*XMMatrixTranspose*/(XmmTransform); // Avoid doing it on the GPU multiple times
 
     Renderer->FastCuboidInstanceCount++;
+}
+
+internal void GameRendererSubmitQuadedCuboid(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v2& Scale, const texture& Texture, const texture_block_coords& TextureCoords, const v4& Color)
+{
+    Assert(Renderer->QuadIndexCount < c_MaxQuadIndices, "Renderer->QuadIndexCount < c_MaxQuadIndices");
+    Assert(Texture.Handle != nullptr, "Texture is invalid!");
+
+    // TODO: ID system, pointers are unreliable
+    u32 TextureIndex = 0;
+    for (u32 i = 1; i < Renderer->CurrentTextureStackIndex; i++)
+    {
+        if (Renderer->TextureStack[i].ptr == Texture.SRVDescriptor.ptr)
+        {
+            TextureIndex = i;
+            break;
+        }
+    }
+
+    if (TextureIndex == 0)
+    {
+        Assert(Renderer->CurrentTextureStackIndex < c_MaxTexturesPerDrawCall, "Renderer->TextureStackIndex < c_MaxTexturesPerDrawCall");
+        TextureIndex = Renderer->CurrentTextureStackIndex;
+        Renderer->TextureStack[TextureIndex] = Texture.SRVDescriptor;
+        Renderer->CurrentTextureStackIndex++;
+    }
+
+    m4 Transform = bkm::Translate(m4(1.0f), Translation)
+        * bkm::ToM4(qtn(Rotation))
+        * bkm::Scale(m4(1.0f), v3(Scale, 1.0f));
+
+    v2 Coords[4];
+    Coords[0] = { 0.0f, 0.0f };
+    Coords[1] = { 1.0f, 0.0f };
+    Coords[2] = { 1.0f, 1.0f };
+    Coords[3] = { 0.0f, 1.0f };
+
+    for (u32 i = 0; i < CountOf(c_CuboidVerticesPositionsAndNormals); i++)
+    {
+        Renderer->QuadVertexDataPtr->Position = v3(Transform * c_CuboidVerticesPositionsAndNormals[i].Position);
+        Renderer->QuadVertexDataPtr->Color = Color;
+        Renderer->QuadVertexDataPtr->TexCoord = Coords[i];
+        Renderer->QuadVertexDataPtr->TexIndex = TextureIndex;
+        Renderer->QuadVertexDataPtr++;
+    }
+
+    Renderer->QuadIndexCount += 6;
 }

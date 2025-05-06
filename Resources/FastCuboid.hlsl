@@ -1,12 +1,16 @@
+#include "Light.hlsl"
+
 cbuffer root_constants : register(b0)
 {
     column_major float4x4 ViewProjection;
+    //column_major float4x4 InverseViewProjection;
+    column_major float4x4 InverseViewMatrix;
 };
 
 struct vertex_shader_input
 {
     // Per Vertex
-    float4 Position : POSITION;
+    float4 VertexPosition : POSITION;
     //float3 Normal : NORMAL;
 
     // Per instance
@@ -70,7 +74,7 @@ pixel_shader_input VSMain(vertex_shader_input In, uint VertexID : SV_VertexID)
 
     float4x4 Transform = float4x4(In.TransformRow0, In.TransformRow1, In.TransformRow2, In.TransformRow3);
     
-    Out.Position = mul(ViewProjection, mul(transpose(Transform), In.Position));
+    Out.Position = mul(ViewProjection, mul(transpose(Transform), In.VertexPosition));
     Out.Color = In.Color;
     Out.TexCoord = TextureCoord[VertexID];
     Out.TexIndex = In.TexIndex;

@@ -50,6 +50,7 @@ pixel_shader_input VSMain(vertex_shader_input In)
     return Out;
 }
 
+
 // TODO: Reduce the amount of active point lights by calculating which light is visible and which is not
 cbuffer light_environment : register(b1)
 {
