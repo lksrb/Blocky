@@ -858,7 +858,8 @@ internal void GameRenderEntities(game* Game, game_renderer* Renderer, f32 TimeSt
             // TODO: SIMD STUFF, we can take advantage in matrix multiplication
             m4 M = bkm::Translate(m4(1.0f), Part.LocalPosition) * bkm::Scale(m4(1.0f), Part.Size);
             m4 TransformMatrix = Transform.Matrix() * M;
-            GameRendererSubmitCustomCuboid(Renderer, TransformMatrix, Render.Texture, Part.Coords.TextureCoords, Render.Color);
+
+            GameRendererSubmitQuadedCuboid(Renderer, TransformMatrix, Render.Texture, Part.Coords, Render.Color);
         }
     }
 }

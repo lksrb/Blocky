@@ -24,6 +24,7 @@ workspace "Blocky"
 		"premake5.lua",
 		"Resources/Quad.hlsl",
 		"Resources/Cuboid.hlsl",
+		"Resources/QuadedCuboid.hlsl",
 		"Resources/FastCuboid.hlsl",
 		"Blocky/Blocky.lua",
 		"Blocky-ResourcePacker/Blocky-ResourcePacker.lua",

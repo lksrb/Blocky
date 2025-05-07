@@ -361,7 +361,7 @@ internal void GameRendererInitD3DPipeline(game_renderer* Renderer)
 
         // Quad Index buffer
         {
-            u32* QuadIndices = VmAllocArray(u32, c_MaxQuadIndices);
+            u32* QuadIndices = VmAllocArray(u32, bkm::Max(c_MaxQuadedCuboidIndices, c_MaxQuadIndices));
             u32 Offset = 0;
             for (u32 i = 0; i < c_MaxQuadIndices; i += 6)
             {
@@ -413,6 +413,33 @@ internal void GameRendererInitD3DPipeline(game_renderer* Renderer)
             Renderer->CuboidTransformVertexBuffers[i] = DX12VertexBufferCreate(Device, sizeof(cuboid_transform_vertex_data) * c_MaxCubePerBatch);
         }
         Renderer->CuboidInstanceData = VmAllocArray(cuboid_transform_vertex_data, c_MaxCubePerBatch);
+    }
+
+    // Quaded cuboid pipeline
+    {
+        // Define the vertex input layout.
+        D3D12_INPUT_ELEMENT_DESC InputElementDescs[] =
+        {
+            { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+            { "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+            { "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+            { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+            { "TEXINDEX", 0, DXGI_FORMAT_R32_UINT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+        };
+
+        Renderer->QuadedCuboidPipeline = DX12GraphicsPipelineCreate(Device, Renderer->RootSignature, InputElementDescs, CountOf(InputElementDescs), L"Resources/QuadedCuboid.hlsl");
+
+        for (u32 i = 0; i < FIF; i++)
+        {
+            Renderer->QuadedCuboidVertexBuffers[i] = DX12VertexBufferCreate(Device, sizeof(quaded_cuboid_vertex_gpu) * c_MaxQuadedCuboidVertices);
+        }
+
+        Renderer->QuadedCuboidVertexDataBase = VmAllocArray(quaded_cuboid_vertex_gpu, c_MaxQuadedCuboidVertices);
+        Renderer->QuadedCuboidVertexDataPtr = Renderer->QuadedCuboidVertexDataBase;
+
+        // For better debugging
+        // TODO: Remove
+        memset(Renderer->QuadedCuboidVertexDataBase, 0, sizeof(quaded_cuboid_vertex_gpu) * c_MaxQuadedCuboidVertices);
     }
 
     // FAST Custom cuboid
@@ -1239,9 +1266,18 @@ internal void GameRendererSubmitCustomCuboid(game_renderer* Renderer, const v3& 
     Renderer->FastCuboidInstanceCount++;
 }
 
-internal void GameRendererSubmitQuadedCuboid(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v2& Scale, const texture& Texture, const texture_block_coords& TextureCoords, const v4& Color)
+internal void GameRendererSubmitQuadedCuboid(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale, const texture& Texture, const texture_block_coords& TextureCoords, const v4& Color)
 {
-    Assert(Renderer->QuadIndexCount < c_MaxQuadIndices, "Renderer->QuadIndexCount < c_MaxQuadIndices");
+    m4 Transform = bkm::Translate(m4(1.0f), Translation)
+        * bkm::ToM4(qtn(Rotation))
+        * bkm::Scale(m4(1.0f), Scale);
+
+    GameRendererSubmitQuadedCuboid(Renderer, Transform, Texture, TextureCoords, Color);
+}
+
+internal void GameRendererSubmitQuadedCuboid(game_renderer* Renderer, const m4& Transform, const texture& Texture, const texture_block_coords& TextureCoords, const v4& Color)
+{
+    Assert(Renderer->QuadedCuboidIndexCount < bkm::Max(c_MaxQuadIndices, c_MaxQuadedCuboidIndices), "Renderer->QuadedCuboidIndexCount < bkm::Max(c_MaxQuadIndices, c_MaxQuadedCuboidIndices)");
     Assert(Texture.Handle != nullptr, "Texture is invalid!");
 
     // TODO: ID system, pointers are unreliable
@@ -1263,24 +1299,22 @@ internal void GameRendererSubmitQuadedCuboid(game_renderer* Renderer, const v3& 
         Renderer->CurrentTextureStackIndex++;
     }
 
-    m4 Transform = bkm::Translate(m4(1.0f), Translation)
-        * bkm::ToM4(qtn(Rotation))
-        * bkm::Scale(m4(1.0f), v3(Scale, 1.0f));
+   
 
-    v2 Coords[4];
-    Coords[0] = { 0.0f, 0.0f };
-    Coords[1] = { 1.0f, 0.0f };
-    Coords[2] = { 1.0f, 1.0f };
-    Coords[3] = { 0.0f, 1.0f };
-
+    u32 j = 0;
     for (u32 i = 0; i < CountOf(c_CuboidVerticesPositionsAndNormals); i++)
     {
-        Renderer->QuadVertexDataPtr->Position = v3(Transform * c_CuboidVerticesPositionsAndNormals[i].Position);
-        Renderer->QuadVertexDataPtr->Color = Color;
-        Renderer->QuadVertexDataPtr->TexCoord = Coords[i];
-        Renderer->QuadVertexDataPtr->TexIndex = TextureIndex;
-        Renderer->QuadVertexDataPtr++;
+        Renderer->QuadedCuboidVertexDataPtr->Position = v3(Transform * c_CuboidVerticesPositionsAndNormals[i].Position);
+        Renderer->QuadedCuboidVertexDataPtr->Color = Color;
+        Renderer->QuadedCuboidVertexDataPtr->TexCoord = TextureCoords.TextureCoords[j].Coords[i % 4];
+        Renderer->QuadedCuboidVertexDataPtr->TexIndex = TextureIndex;
+        Renderer->QuadedCuboidVertexDataPtr++;
+
+        if ((i + 1) % 4 == 0)
+        {
+            j++;
+        }
     }
 
-    Renderer->QuadIndexCount += 6;
+    Renderer->QuadedCuboidIndexCount += 36;
 }

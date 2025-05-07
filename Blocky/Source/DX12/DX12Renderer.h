@@ -12,9 +12,13 @@
 
 internal constexpr u32 c_MaxCubePerBatch = 1 << 16;
 internal constexpr u32 c_MaxQuadsPerBatch = 1 << 4;
+internal constexpr u32 c_MaxTexturesPerDrawCall = 32; // TODO: Get this from the driver
 internal constexpr u32 c_MaxQuadVertices = c_MaxQuadsPerBatch * 4;
 internal constexpr u32 c_MaxQuadIndices = c_MaxQuadsPerBatch * 6;
-internal constexpr u32 c_MaxTexturesPerDrawCall = 32; // TODO: Get this from the driver
+
+internal constexpr u32 c_MaxQuadedCuboids = 1 << 8;
+internal constexpr u32 c_MaxQuadedCuboidVertices = c_MaxQuadedCuboids * 4;
+internal constexpr u32 c_MaxQuadedCuboidIndices = c_MaxQuadedCuboids * 6;
 
 struct texture_coords
 {
@@ -281,6 +285,9 @@ internal void GameRendererSubmitCuboidNoRotScale(game_renderer* Renderer, const 
 internal void GameRendererSubmitCustomCuboid(game_renderer* Renderer, const m4& Transform, const texture& Texture, texture_coords TextureCoords[6], const v4& Color);
 
 internal void GameRendererSubmitCustomCuboid(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale, const texture& Texture, texture_coords TextureCoords[6], const v4& Color);
+
+internal void GameRendererSubmitQuadedCuboid(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale, const texture& Texture, const texture_block_coords& TextureCoords, const v4& Color);
+internal void GameRendererSubmitQuadedCuboid(game_renderer* Renderer, const m4& Transform, const texture& Texture, const texture_block_coords& TextureCoords, const v4& Color);
 
 // Each face has to have a normal vector, so unfortunately we cannot encode Cuboid as 8 vertices
 internal constexpr v4 c_CuboidVerticesPositions[24] =

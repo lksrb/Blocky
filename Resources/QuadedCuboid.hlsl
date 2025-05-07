@@ -2,30 +2,24 @@
 
 cbuffer root_constants : register(b0)
 {
-    column_major float4x4 ViewProjection;
-    //column_major float4x4 InverseViewProjection;
-    row_major float4x4 InverseViewMatrix;
+    column_major float4x4 c_ViewProjection;
+    //column_major float4x4 Inversec_ViewProjection;
+    row_major float4x4 c_InverseViewMatrix;
 };
 
 struct vertex_shader_input
 {
-    float4 VertexPosition : POSITION;
+    float3 Position : POSITION;
     float3 Normal : NORMAL;
-    float2 TexCoord : TEXCOORD;
-
-    // Per instance
-    float4 TransformRow0 : TRANSFORMA;
-    float4 TransformRow1 : TRANSFORMB;
-    float4 TransformRow2 : TRANSFORMC;
-    float4 TransformRow3 : TRANSFORMD;
     float4 Color : COLOR;
+    float2 TexCoord : TEXCOORD;
     uint TexIndex : TEXINDEX;
 };
 
 struct pixel_shader_input
 {
     float4 Position : SV_POSITION;
-    float4 WorldPosition : WORLDPOSITION;
+    float3 WorldPosition : WORLDPOSITION;
     float4 Color : COLOR;
     float3 Normal : NORMAL;
     float3 ViewPosition : VIEWPOSITION;
@@ -37,19 +31,16 @@ pixel_shader_input VSMain(vertex_shader_input In)
 {
     pixel_shader_input Out;
     
-    float4x4 Transform = float4x4(In.TransformRow0, In.TransformRow1, In.TransformRow2, In.TransformRow3);
-    
-    Out.Position = mul(ViewProjection, mul(transpose(Transform), In.VertexPosition));
-    Out.WorldPosition = mul(transpose(Transform), In.VertexPosition);
-    Out.Normal = In.Normal; // There is no need for transforming normals since blocks are axis-aligned
-    Out.ViewPosition = mul(InverseViewMatrix, Out.WorldPosition).xyz;
+    Out.Position = mul(c_ViewProjection, float4(In.Position, 1.0));
+    Out.WorldPosition = In.Position;
+    Out.Normal = In.Normal; // Already calculated on CPU side
+    Out.ViewPosition = mul(c_InverseViewMatrix, float4(Out.WorldPosition, 1.0)).xyz;
     Out.Color = In.Color;
     Out.TexCoord = In.TexCoord;
     Out.TexIndex = In.TexIndex;
 
     return Out;
 }
-
 
 // TODO: Reduce the amount of active point lights by calculating which light is visible and which is not
 cbuffer light_environment : register(b1)
