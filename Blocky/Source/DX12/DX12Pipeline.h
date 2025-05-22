@@ -6,7 +6,7 @@ struct dx12_pipeline
 };
 
 // TODO: Make more generic 
-internal dx12_pipeline DX12GraphicsPipelineCreate(ID3D12Device* Device, ID3D12RootSignature* RootSignature, D3D12_INPUT_ELEMENT_DESC Inputs[], u32 InputsCount, const wchar_t* ShaderPath, D3D12_CULL_MODE CullMode = D3D12_CULL_MODE_BACK)
+internal dx12_pipeline DX12GraphicsPipelineCreate(ID3D12Device* Device, ID3D12RootSignature* RootSignature, D3D12_INPUT_ELEMENT_DESC Inputs[], u32 InputsCount, const wchar_t* ShaderPath, D3D12_CULL_MODE CullMode = D3D12_CULL_MODE_BACK, bool DepthTesting = true)
 {
     dx12_pipeline Pipeline = {};
 
@@ -134,7 +134,7 @@ internal dx12_pipeline DX12GraphicsPipelineCreate(ID3D12Device* Device, ID3D12Ro
     PipelineDesc.RasterizerState.ConservativeRaster = D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF;
 
     // Depth and stencil state
-    PipelineDesc.DepthStencilState.DepthEnable = TRUE;
+    PipelineDesc.DepthStencilState.DepthEnable = DepthTesting;
     PipelineDesc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
     PipelineDesc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS;  // Closer pixels are drawn
     PipelineDesc.DepthStencilState.StencilEnable = FALSE;  // Stencil disabled for now

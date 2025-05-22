@@ -108,6 +108,9 @@ struct game
 
     texture PointLightIconTexture;
 
+    texture SunTexture;
+    //texture MoonTexture;
+
     f32 Time;
 
     entity_registry Registry;

@@ -492,6 +492,23 @@ internal void GameRendererInitD3DPipeline(game_renderer* Renderer)
         }
     }
 
+    // Skybox
+    {
+        D3D12_INPUT_ELEMENT_DESC InputElementDescs[] =
+        {
+            { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+        };
+
+        Renderer->SkyboxPipeline = DX12GraphicsPipelineCreate(Device, Renderer->RootSignature, InputElementDescs, CountOf(InputElementDescs), L"Resources/Skybox.hlsl", D3D12_CULL_MODE_NONE, false);
+        Renderer->SkyboxVertexBuffer = DX12VertexBufferCreate(Device, sizeof(c_SkyboxVertices));
+
+        DX12SubmitToQueueImmidiate(Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, [Renderer](ID3D12GraphicsCommandList* CommandList)
+        {
+            DX12VertexBufferSendData(&Renderer->SkyboxVertexBuffer, CommandList, c_SkyboxVertices, sizeof(c_SkyboxVertices));
+        });
+        Renderer->SkyboxIndexBuffer = DX12IndexBufferCreate(Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, c_SkyboxIndices, CountOf(c_SkyboxIndices));
+    }
+
     // Create white texture
     {
         u32 WhiteColor = 0xffffffff;
@@ -726,6 +743,30 @@ internal void GameRendererRender(game_renderer* Renderer)
     CommandList->SetGraphicsRootDescriptorTable(2, Renderer->SRVDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
     CommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
+    // Render a skybox
+    {
+        CommandList->SetPipelineState(Renderer->SkyboxPipeline.Handle);
+
+        // There is a singular version of a call
+        CommandList->SetGraphicsRoot32BitConstants(0, 16, &Renderer->RenderData.SkyboxRootSignatureBuffer, 0);
+
+        // Bind vertex positions
+        local_persist D3D12_VERTEX_BUFFER_VIEW SkyboxVertexBufferView;
+        SkyboxVertexBufferView.BufferLocation = Renderer->SkyboxVertexBuffer.Buffer.Handle->GetGPUVirtualAddress();
+        SkyboxVertexBufferView.SizeInBytes = (u32)Renderer->SkyboxVertexBuffer.Buffer.Size;
+        SkyboxVertexBufferView.StrideInBytes = sizeof(v3);
+        CommandList->IASetVertexBuffers(0, 1, &SkyboxVertexBufferView);
+
+        // Bind index buffer
+        local_persist D3D12_INDEX_BUFFER_VIEW SkyboxIndexBufferView;
+        SkyboxIndexBufferView.BufferLocation = Renderer->SkyboxIndexBuffer.Buffer.Handle->GetGPUVirtualAddress();
+        SkyboxIndexBufferView.SizeInBytes = sizeof(c_SkyboxIndices);
+        SkyboxIndexBufferView.Format = DXGI_FORMAT_R32_UINT;
+        CommandList->IASetIndexBuffer(&SkyboxIndexBufferView);
+
+        CommandList->DrawIndexedInstanced(36, 1, 0, 0, 0);
+    }
+
     // Render instanced cuboids
     if (Renderer->CuboidInstanceCount > 0)
     {
@@ -923,6 +964,7 @@ internal void GameRendererSetRenderData(game_renderer* Renderer, const m4& View,
     RenderData.CuboidRootSignatureBuffer.View = View;
     RenderData.CuboidRootSignatureBuffer.ViewProjection = Projection * View;
     RenderData.HUDRootSignatureBuffer.Projection = HUDProjection;
+    RenderData.SkyboxRootSignatureBuffer.InverseViewProjection = bkm::Inverse(RenderData.CuboidRootSignatureBuffer.ViewProjection);
 }
 
 internal void GameRendererSubmitQuad(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v2& Scale, const v4& Color)

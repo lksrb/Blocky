@@ -12,7 +12,7 @@ struct dx12_index_buffer
 {
     dx12_buffer Buffer;
 };
-internal dx12_index_buffer DX12IndexBufferCreate(ID3D12Device* Device, ID3D12CommandAllocator* CommandAllocator, ID3D12GraphicsCommandList* CommandList, ID3D12CommandQueue* CommandQueue, u32* Data, u32 Count);
+internal dx12_index_buffer DX12IndexBufferCreate(ID3D12Device* Device, ID3D12CommandAllocator* CommandAllocator, ID3D12GraphicsCommandList* CommandList, ID3D12CommandQueue* CommandQueue, const u32* Data, u32 Count);
 internal void DX12IndexBufferDestroy(dx12_index_buffer* IndexBuffer);
 
 struct dx12_vertex_buffer

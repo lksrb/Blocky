@@ -131,9 +131,15 @@ struct fast_cuboid_transform_vertex_data
 // Basically a push constant
 // TODO: Look up standardized push constant minimum value
 // I think its 256 bytes
+// TODO: Combine these into a single concept?
 struct hud_quad_root_signature_constant_buffer
 {
     m4 Projection;
+};
+
+struct skybox_quad_root_signature_constant_buffer
+{
+    m4 InverseViewProjection;
 };
 
 struct cuboid_root_signature_constant_buffer
@@ -181,6 +187,7 @@ struct render_data
 {
     hud_quad_root_signature_constant_buffer HUDRootSignatureBuffer;
     cuboid_root_signature_constant_buffer CuboidRootSignatureBuffer;
+    skybox_quad_root_signature_constant_buffer SkyboxRootSignatureBuffer;
 };
 
 // API-agnostic type definition
@@ -256,6 +263,11 @@ struct game_renderer
     quaded_cuboid_vertex* QuadedCuboidVertexDataPtr;
     u32 QuadedCuboidIndexCount = 0;
 
+    // Skybox
+    dx12_pipeline SkyboxPipeline;
+    dx12_vertex_buffer SkyboxVertexBuffer;
+    dx12_index_buffer SkyboxIndexBuffer;
+
     // All possible data the renderer needs
     render_data RenderData;
 
@@ -319,8 +331,36 @@ internal void GameRendererSubmitPointLight(game_renderer* Renderer, const v3& Po
 // ===============================================================================================================
 internal void GameRendererHUDSubmitQuad(game_renderer* Renderer, v3 VertexPositions[4], const texture& Texture, const texture_coords& Coords = texture_coords(), const v4& Color = v4(1.0f));
 
+internal constexpr v3 c_SkyboxVertices[8] = 
+{
+    {-1.0f, -1.0f, -1.0f}, // 0: Left  Bottom Back
+    { 1.0f, -1.0f, -1.0f}, // 1: Right Bottom Back
+    { 1.0f,  1.0f, -1.0f}, // 2: Right Top    Back
+    {-1.0f,  1.0f, -1.0f}, // 3: Left  Top    Back
+    {-1.0f, -1.0f,  1.0f}, // 4: Left  Bottom Front
+    { 1.0f, -1.0f,  1.0f}, // 5: Right Bottom Front
+    { 1.0f,  1.0f,  1.0f}, // 6: Right Top    Front
+    {-1.0f,  1.0f,  1.0f}  // 7: Left  Top    Front
+};
+
+internal constexpr u32 c_SkyboxIndices[36] = 
+{
+    // Back face
+    0, 1, 2,  2, 3, 0,
+    // Front face
+    4, 5, 6,  6, 7, 4,
+    // Left face
+    0, 4, 7,  7, 3, 0,
+    // Right face
+    1, 5, 6,  6, 2, 1,
+    // Bottom face
+    0, 1, 5,  5, 4, 0,
+    // Top face
+    3, 2, 6,  6, 7, 3
+};
+
 // Each face has to have a normal vector, so unfortunately we cannot encode Cuboid as 8 vertices
-internal constexpr v4 c_CuboidVerticesPositions[24] =
+internal constexpr v4 c_CuboidVerticesPositions[24] = 
 {
     // Front face (+Z)
     { -0.5f, -0.5f,  0.5f, 1.0f },

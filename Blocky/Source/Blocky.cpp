@@ -74,6 +74,10 @@ internal game GameCreate(game_renderer* Renderer)
 
     Game.PointLightIconTexture = TextureCreate(Renderer->Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, "Resources/Textures/PointLight.png");
 
+    //Game.SunTexture = TextureCreate(Renderer->Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, "Resources/Textures/MC/environemnt/sun.png");
+
+    //Game.MoonTexture = TextureCreate(Renderer->Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, "Resources/Textures/MC/environemnt/moon.png");
+
     Game.Registry = EntityRegistryCreate(100);
 
     entity_model CowModel = EntityModelCreate();
@@ -311,14 +315,14 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
 
     // Lights
     GameRendererSubmitPointLight(Renderer, v3(14, 20, 10), 10.0, 1.0f, v3(1.0f), 2.0f);
-    GameRendererSubmitDirectionalLight(Renderer, v3(1.0, -1.0, 1.0), 0.5f, v3(1.0f));
+    GameRendererSubmitDirectionalLight(Renderer, v3(-1.0, -1.0, 1.0), 0.5f, v3(1.0f));
 
+    // Render Debug UI
     if (Game->RenderDebugUI)
     {
         // For each point lights so we know that its there
         GameRendererSubmitBillboardQuad(Renderer, v3(14, 20, 10), v2(0.5), Game->PointLightIconTexture, v4(1.0f));
     }
-
 
     // Render HUD
     if (Game->RenderHUD)

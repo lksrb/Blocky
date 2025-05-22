@@ -80,7 +80,7 @@ internal void DX12VertexBufferSendData(dx12_vertex_buffer* VertexBuffer, ID3D12G
     CommandList->ResourceBarrier(1, &Barrier);
 }
 
-internal dx12_index_buffer DX12IndexBufferCreate(ID3D12Device* Device, ID3D12CommandAllocator* CommandAllocator, ID3D12GraphicsCommandList* CommandList, ID3D12CommandQueue* CommandQueue, u32* Data, u32 Count)
+internal dx12_index_buffer DX12IndexBufferCreate(ID3D12Device* Device, ID3D12CommandAllocator* CommandAllocator, ID3D12GraphicsCommandList* CommandList, ID3D12CommandQueue* CommandQueue, const u32* Data, u32 Count)
 {
     dx12_index_buffer IndexBuffer = {};
     IndexBuffer.Buffer = DX12BufferCreate(Device, D3D12_RESOURCE_STATE_COMMON, D3D12_HEAP_TYPE_DEFAULT, Count * sizeof(u32));
