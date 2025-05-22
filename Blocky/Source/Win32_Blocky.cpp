@@ -17,12 +17,13 @@
 
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
+#include <hidusage.h>
 
 #include "Common.h"
 
 struct game_window
 {
-    HWND WindowHandle;
+    HWND Handle;
     HINSTANCE ModuleInstance;
 
     u32 ClientAreaWidth;
@@ -59,6 +60,10 @@ struct game_input
     v2i LastMousePosition;
     v2i VirtualMousePosition;
 
+    // Without mouse acceleration
+    v2i RawLastMousePosition;
+    v2i RawVirtualMousePosition;
+
     i32 MouseScrollDelta;
 
     // Temp
@@ -76,6 +81,9 @@ struct game_input
         MousePressed[(u32)Mouse] = IsDown;
     }
 
+    v2i GetMouseInput() const { return IsCursorLocked ? VirtualMousePosition : LastMousePosition; };
+    v2i GetRawMouseInput() const { return IsCursorLocked ? RawVirtualMousePosition : RawLastMousePosition; };
+
     bool IsKeyDown(key Key) const { return KeyDown[(u32)Key]; }
     bool IsKeyPressed(key Key) const { return KeyPressed[(u32)Key]; }
 
@@ -83,25 +91,16 @@ struct game_input
     bool IsMousePressed(mouse Mouse) const { return MousePressed[(u32)Mouse]; }
 };
 
-#define USE_VULKAN_RENDERER 0
-
-#if USE_VULKAN_RENDERER
-#include "Vulkan/VulkanRenderer.h"
-#else
+// Headers
 #include "DX12/DX12Renderer.h"
-#endif
 #include "Blocky.h"
 
+// Source files
 #include "Blocky.cpp"
+#include "DX12/DX12Renderer.cpp"
 
 internal u32 g_ClientWidth = 0;
 internal u32 g_ClientHeight = 0;
-#if USE_VULKAN_RENDERER
-#else
-#include "DX12/DX12Renderer.cpp"
-#endif
-
-
 internal bool g_DoResize = false;
 internal bool g_IsRunning = false;
 internal bool g_IsFocused = false;
@@ -282,22 +281,22 @@ internal void Win32ProcessEvents(game_input* Input, const game_window& Window)
             }
             case WM_MOUSEMOVE:
             {
-                v2i MousePos = { GET_X_LPARAM(Message.lParam), GET_Y_LPARAM(Message.lParam) };
-                v2i MouseDelta = MousePos - Input->LastMousePosition;
-                Input->VirtualMousePosition += MouseDelta;
-                Input->LastMousePosition = MousePos;
+                 v2i MousePos = { GET_X_LPARAM(Message.lParam), GET_Y_LPARAM(Message.lParam) };
+                 v2i MouseDelta = MousePos - Input->LastMousePosition;
+                 Input->VirtualMousePosition += MouseDelta;
+                 Input->LastMousePosition = MousePos;
 
-                // Is this really necessary?
-                //// Clamping cursor positions so we dont wander off
-                //if (Input->LastMousePosition.x < 0) Input->LastMousePosition.x = 0;
-                //if (Input->LastMousePosition.y < 0) Input->LastMousePosition.y = 0;
-                //if (Input->LastMousePosition.x > static_cast<i32>(g_ClientWidth)) Input->LastMousePosition.x = g_ClientWidth;
-                //if (Input->LastMousePosition.y > static_cast<i32>(g_ClientHeight)) Input->LastMousePosition.y = g_ClientHeight;
+                 // Is this really necessary?
+                 //// Clamping cursor positions so we dont wander off
+                 //if (Input->LastMousePosition.x < 0) Input->LastMousePosition.x = 0;
+                 //if (Input->LastMousePosition.y < 0) Input->LastMousePosition.y = 0;
+                 //if (Input->LastMousePosition.x > static_cast<i32>(g_ClientWidth)) Input->LastMousePosition.x = g_ClientWidth;
+                 //if (Input->LastMousePosition.y > static_cast<i32>(g_ClientHeight)) Input->LastMousePosition.y = g_ClientHeight;
 
-                //if (Input->VirtualMousePosition.x < 0) Input->VirtualMousePosition.x = 0;
-                //if (Input->VirtualMousePosition.y < 0) Input->VirtualMousePosition.y = 0;
-                //if (Input->VirtualMousePosition.x > static_cast<i32>(g_ClientWidth)) Input->VirtualMousePosition.x = g_ClientWidth;
-                //if (Input->VirtualMousePosition.y > static_cast<i32>(g_ClientHeight)) Input->VirtualMousePosition.y = g_ClientHeight;
+                 //if (Input->VirtualMousePosition.x < 0) Input->VirtualMousePosition.x = 0;
+                 //if (Input->VirtualMousePosition.y < 0) Input->VirtualMousePosition.y = 0;
+                 //if (Input->VirtualMousePosition.x > static_cast<i32>(g_ClientWidth)) Input->VirtualMousePosition.x = g_ClientWidth;
+                 //if (Input->VirtualMousePosition.y > static_cast<i32>(g_ClientHeight)) Input->VirtualMousePosition.y = g_ClientHeight;
 
                 break;
             }
@@ -347,7 +346,43 @@ internal void Win32ProcessEvents(game_input* Input, const game_window& Window)
                 g_IsRunning = false;
                 break;
             }
+            case WM_INPUT:
+            {
+                // The official Microsoft examples are pretty terrible about this.
+                // Size needs to be non-constant because GetRawInputData() can return the
+                // size necessary for the RAWINPUT data, which is a weird feature.
+                UINT RawInputStructSize = sizeof(RAWINPUT);
+                static RAWINPUT RawInput[sizeof(RAWINPUT)];
+                if (GetRawInputData((HRAWINPUT)Message.lParam, RID_INPUT, RawInput, &RawInputStructSize, sizeof(RAWINPUTHEADER)))
+                {
+                    if (RawInput->header.dwType == RIM_TYPEMOUSE)
+                    {
+                        RAWMOUSE RawMouse = RawInput->data.mouse;
 
+                        if (RawMouse.usFlags != MOUSE_MOVE_RELATIVE)
+                            break;
+
+                        v2i Delta(RawMouse.lLastX, RawMouse.lLastY);
+                        Input->RawVirtualMousePosition += Delta;
+                        Input->RawLastMousePosition = Delta;
+
+                        //// Clamping cursor positions so we dont wander off
+                        //   RECT rect;
+                        //GetClientRect(Window.Handle, &rect);
+                        //if (io.LastCursorPos.x < 0) io.LastCursorPos.x = 0;
+                        //if (io.LastCursorPos.y < 0) io.LastCursorPos.y = 0;
+                        //if (io.LastCursorPos.x > static_cast<i32>(app.Width)) io.LastCursorPos.x = app.Width;
+                        //if (io.LastCursorPos.y > static_cast<i32>(app.Height)) io.LastCursorPos.y = app.Height;
+
+                        //if (io.VirtualCursorPos.x < 0) io.VirtualCursorPos.x = 0;
+                        //if (io.VirtualCursorPos.y < 0) io.VirtualCursorPos.y = 0;
+                        //if (io.VirtualCursorPos.x > static_cast<i32>(app.Width)) io.VirtualCursorPos.x = app.Width;
+                        //if (io.VirtualCursorPos.y > static_cast<i32>(app.Height)) io.VirtualCursorPos.y = app.Height;
+                    }
+                }
+
+                break;
+            }
             default:
             {
                 TranslateMessage(&Message);
@@ -382,15 +417,15 @@ internal void Win32ProcessEvents(game_input* Input, const game_window& Window)
             Trace("Cursor locked.");
 
             RECT Rect;
-            ::GetClientRect(Window.WindowHandle, &Rect);
+            ::GetClientRect(Window.Handle, &Rect);
 
             // Store cursor position
             ::GetCursorPos(&Input->RestoreMousePosition);
-            ::ScreenToClient(Window.WindowHandle, &Input->RestoreMousePosition);
+            ::ScreenToClient(Window.Handle, &Input->RestoreMousePosition);
 
             // Center cursor position
             POINT CenterCursor = { (LONG)g_ClientWidth / 2, (LONG)g_ClientHeight / 2 };
-            ::ClientToScreen(Window.WindowHandle, &CenterCursor);
+            ::ClientToScreen(Window.Handle, &CenterCursor);
             ::SetCursorPos(CenterCursor.x, CenterCursor.y);
         }
         else // Unlock
@@ -399,7 +434,7 @@ internal void Win32ProcessEvents(game_input* Input, const game_window& Window)
 
             // Set last cursor position from the stored one
             POINT LastCursorPos = Input->RestoreMousePosition;
-            ::ClientToScreen(Window.WindowHandle, &LastCursorPos);
+            ::ClientToScreen(Window.Handle, &LastCursorPos);
             ::SetCursorPos(LastCursorPos.x, LastCursorPos.y);
             Input->LastMousePosition = { LastCursorPos.x, LastCursorPos.y };
         }
@@ -410,14 +445,14 @@ internal void Win32ProcessEvents(game_input* Input, const game_window& Window)
     {
         // Center cursor position
         POINT CenterCursor = { static_cast<int>(g_ClientWidth / 2), static_cast<int>(g_ClientHeight / 2) };
-        ::ClientToScreen(Window.WindowHandle, &CenterCursor);
+        ::ClientToScreen(Window.Handle, &CenterCursor);
 
         // Center cursor
         if (Input->LastMousePosition.x != CenterCursor.y || Input->LastMousePosition.y != CenterCursor.y)
         {
             POINT Pos = { (LONG)g_ClientWidth / 2, (LONG)g_ClientHeight / 2 };
             Input->LastMousePosition = { Pos.x, Pos.y };
-            ::ClientToScreen(Window.WindowHandle, &Pos);
+            ::ClientToScreen(Window.Handle, &Pos);
             ::SetCursorPos(Pos.x, Pos.y);
         }
     }
@@ -457,18 +492,32 @@ internal game_window CreateGameWindow()
     // NOTE: When using Vulkan, WS_EX_NOREDIRECTIONBITMAP does not work on Intel GPUs (even when they just pass data)
     DWORD ExStyle = WS_EX_APPWINDOW | WS_EX_NOREDIRECTIONBITMAP;
 
-    Window.WindowHandle = CreateWindowExW(ExStyle, WindowClass.lpszClassName, L"Blocky", WS_OVERLAPPEDWINDOW,
+    Window.Handle = CreateWindowExW(ExStyle, WindowClass.lpszClassName, L"Blocky", WS_OVERLAPPEDWINDOW,
                              WindowX, WindowY, DefaultWindowWidth, DefaultWindowHeight,
                              0, 0, WindowClass.hInstance, 0);
     Window.ModuleInstance = WindowClass.hInstance;
 
     RECT ClientRect;
-    GetClientRect(Window.WindowHandle, &ClientRect);
+    GetClientRect(Window.Handle, &ClientRect);
 
     Window.ClientAreaWidth = ClientRect.right - ClientRect.left;
     Window.ClientAreaHeight = ClientRect.bottom - ClientRect.top;
 
     Trace("Window Client Area: %u, %u", Window.ClientAreaWidth, Window.ClientAreaHeight);
+
+    // Register mouse device for raw input
+    {
+        RAWINPUTDEVICE rid[1];
+
+        // Register mouse
+        rid[0].usUsagePage = HID_USAGE_PAGE_GENERIC; // Generic desktop controls
+        rid[0].usUsage = HID_USAGE_GENERIC_MOUSE;
+        rid[0].dwFlags = RIDEV_INPUTSINK;            // Receive input even if not in focus
+        rid[0].hwndTarget = Window.Handle;
+        BOOL success = RegisterRawInputDevices(rid, CountOf(rid), sizeof(RAWINPUTDEVICE));
+        // TODO: Fallback to default input
+        Assert(success, "Failed to register raw input device!");
+    }
 
     return Window;
 }
@@ -501,7 +550,7 @@ int main(int argc, char** argv)
     game Game = GameCreate(&GameRenderer);
 
     // Show window after initialization
-    ShowWindow(Window.WindowHandle, SW_SHOW);
+    ShowWindow(Window.Handle, SW_SHOW);
 
     // NOTE: This value represent how many increments of performance counter is happening
     LARGE_INTEGER CounterFrequency;
@@ -525,7 +574,7 @@ int main(int argc, char** argv)
         // Process events
         Win32ProcessEvents(&Input, Window);
 
-        IsMinimized = IsIconic(Window.WindowHandle);
+        IsMinimized = IsIconic(Window.Handle);
 
         if (g_DoResize)
         {
@@ -565,14 +614,13 @@ int main(int argc, char** argv)
         local_persist f32 EverySecond = 1.0f;
 
         // Display it on the title bar
-
         if (EverySecond >= 1.0f)
         {
             EverySecond = 0.0f;
             char Title[128];
             sprintf_s(Title, "Blocky | TimeStep: %.3f ms | FPS: %d | CycleCount: %d", TimeStep * 1000.0f, (i32)FPS, (i32)CyclesElapsed);
 
-            SetWindowTextA(Window.WindowHandle, Title);
+            SetWindowTextA(Window.Handle, Title);
         }
         else
         {

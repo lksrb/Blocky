@@ -28,11 +28,6 @@ struct camera
         Projection = bkm::Ortho(OrthoLeft, OrthoRight, OrthoBottom, OrthoTop, OrthographicNear, OrthographicFar);
     }
 
-    void RecalculateProjectionOrtho_V2(u32 Width, u32 Height)
-    {
-        Projection = bkm::Ortho(0, (f32)Width, (f32)Height, 0, -1.0f, 1.0f);
-    }
-
     void RecalculateProjectionPerspective(u32 Width, u32 Height)
     {
         AspectRatio = static_cast<f32>(Width) / Height;
@@ -114,6 +109,8 @@ struct game
     f32 Time;
 
     entity_registry Registry;
+
+    bool RenderHUD = true;
 };
 
 internal game GameCreate(game_renderer* Renderer);

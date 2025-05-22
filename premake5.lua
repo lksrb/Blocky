@@ -29,6 +29,7 @@ workspace "Blocky"
 		"Blocky/Blocky.lua",
 		"Blocky-ResourcePacker/Blocky-ResourcePacker.lua",
 		"Resources/Light.hlsl",
+		"Resources/HUD.hlsl",
 	}
 
 	flags {

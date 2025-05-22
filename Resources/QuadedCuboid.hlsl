@@ -9,7 +9,7 @@ cbuffer root_constants : register(b0)
 
 struct vertex_shader_input
 {
-    float3 Position : POSITION;
+    float4 Position : POSITION;
     float3 Normal : NORMAL;
     float4 Color : COLOR;
     float2 TexCoord : TEXCOORD;
@@ -31,9 +31,9 @@ pixel_shader_input VSMain(vertex_shader_input In)
 {
     pixel_shader_input Out;
     
-    Out.Position = mul(c_ViewProjection, float4(In.Position, 1.0));
+    Out.Position = mul(c_ViewProjection, In.Position);
     Out.WorldPosition = In.Position;
-    Out.Normal = In.Normal; // Already calculated on CPU side
+    Out.Normal = In.Normal;
     Out.ViewPosition = mul(c_InverseViewMatrix, float4(Out.WorldPosition, 1.0)).xyz;
     Out.Color = In.Color;
     Out.TexCoord = In.TexCoord;
@@ -71,9 +71,9 @@ float4 PSMain(pixel_shader_input In) : SV_TARGET
     }
     
     // Phase 2: Point lights
-    for (int i = 0; i < u_PointLightCount; i++)
+    for (int j = 0; j < u_PointLightCount; j++)
     {
-        Result += CalculatePointLight(u_PointLights[i], Normal, ViewDir, Shininess, In.WorldPosition.xyz, TextureColor * In.Color.rgb);
+        Result += CalculatePointLight(u_PointLights[j], Normal, ViewDir, Shininess, In.WorldPosition.xyz, TextureColor * In.Color.rgb);
     }
     
     //if (Result.a == 0.0f)

@@ -318,6 +318,8 @@ struct v4
     }
 };
 
+struct m4;
+
 // Column major matrix
 struct m3
 {

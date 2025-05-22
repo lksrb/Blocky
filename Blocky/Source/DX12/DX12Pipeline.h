@@ -6,7 +6,7 @@ struct dx12_pipeline
 };
 
 // TODO: Make more generic 
-internal dx12_pipeline DX12GraphicsPipelineCreate(ID3D12Device* Device, ID3D12RootSignature* RootSignature, D3D12_INPUT_ELEMENT_DESC Inputs[], u32 InputsCount, const wchar_t* ShaderPath)
+internal dx12_pipeline DX12GraphicsPipelineCreate(ID3D12Device* Device, ID3D12RootSignature* RootSignature, D3D12_INPUT_ELEMENT_DESC Inputs[], u32 InputsCount, const wchar_t* ShaderPath, D3D12_CULL_MODE CullMode = D3D12_CULL_MODE_BACK)
 {
     dx12_pipeline Pipeline = {};
 
@@ -122,7 +122,7 @@ internal dx12_pipeline DX12GraphicsPipelineCreate(ID3D12Device* Device, ID3D12Ro
     // Rasterizer state
     PipelineDesc.RasterizerState = {};
     PipelineDesc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
-    PipelineDesc.RasterizerState.CullMode = D3D12_CULL_MODE_BACK;
+    PipelineDesc.RasterizerState.CullMode = CullMode;
     PipelineDesc.RasterizerState.FrontCounterClockwise = TRUE;
     PipelineDesc.RasterizerState.DepthBias = D3D12_DEFAULT_DEPTH_BIAS;
     PipelineDesc.RasterizerState.DepthBiasClamp = D3D12_DEFAULT_DEPTH_BIAS_CLAMP;

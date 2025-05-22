@@ -156,6 +156,7 @@ internal void CowUpdate(game* Game, entity_registry* Registry, entity Entity, lo
     // Actions
     if (1)
     {
+        Transform.Rotation.y += TimeStep;
         switch (Cow->CurrentAction.Type)
         {
             case action_type::None:
@@ -180,14 +181,15 @@ internal void CowUpdate(game* Game, entity_registry* Registry, entity Entity, lo
 
                 if (Abs(AngleDiff) < RotationStep)
                 {
-                    Transform.Rotation.y = TargetAngle;
+                    //Transform.Rotation.y = TargetAngle;
                     Cow->CurrentAction.Finished = true;
 
                 }
                 else
                 {
-                    Transform.Rotation.y += Sign(TargetAngle - Transform.Rotation.y) * RotationStep;
+                    //Transform.Rotation.y += Sign(TargetAngle - Transform.Rotation.y) * RotationStep;
                 }
+                break;
             }
 
             case action_type::LookAtPlayer:

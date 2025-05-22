@@ -17,7 +17,6 @@ project "Blocky"
 
 	includedirs {
 		"Source",
-		"%{IncludeDir.VulkanSDK}",
 		"%{IncludeDir.Blocky_Common}"
 	}
 

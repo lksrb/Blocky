@@ -1,5 +1,7 @@
 #pragma once
 
+#if 0
+
 // Shaderc and SPIR-V for cross-plaftform shader compilation (TODO: We should just invoke shaderc compiler's executable)
 #include <shaderc/shaderc.hpp>
 #include <spirv_cross/spirv_cross.hpp>
@@ -246,3 +248,5 @@ static void WriteShader(std::ostringstream& OutStream, const char* Path, bool Fo
     OutStream.write(reinterpret_cast<char*>(&size), sizeof(u32));
     OutStream.write(reinterpret_cast<char*>(result.compiled_fragment_shader.data()), result.compiled_fragment_shader.size() * sizeof(u32));
 }
+
+#endif

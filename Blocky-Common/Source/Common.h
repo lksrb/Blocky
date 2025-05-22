@@ -3,6 +3,8 @@
 // General defines
 #define internal static
 #define local_persist static
+#define global static
+
 #define CountOf(arr) sizeof(arr) / sizeof(arr[0])
 #define STRINGIFY(x) #x
 

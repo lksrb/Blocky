@@ -171,12 +171,12 @@ internal void GameRendererInitD3D(game_renderer* Renderer, const game_window& Wi
         FullScreenDesc.Windowed = true;
 
         IDXGISwapChain1* SwapChain1;
-        HRESULT Result = (Renderer->Factory->CreateSwapChainForHwnd(Renderer->DirectCommandQueue, Window.WindowHandle, &Desc, &FullScreenDesc, nullptr, &SwapChain1));
+        HRESULT Result = (Renderer->Factory->CreateSwapChainForHwnd(Renderer->DirectCommandQueue, Window.Handle, &Desc, &FullScreenDesc, nullptr, &SwapChain1));
 
         DumpInfoQueue();
         // Disable the Alt+Enter fullscreen toggle feature. Switching to fullscreen
         // will be handled manually.
-        DxAssert(Renderer->Factory->MakeWindowAssociation(Window.WindowHandle, DXGI_MWA_NO_ALT_ENTER));
+        DxAssert(Renderer->Factory->MakeWindowAssociation(Window.Handle, DXGI_MWA_NO_ALT_ENTER));
         SwapChain1->QueryInterface(IID_PPV_ARGS(&Renderer->SwapChain));
         SwapChain1->Release();
 
@@ -339,13 +339,13 @@ internal void GameRendererInitD3DPipeline(game_renderer* Renderer)
         // Define the vertex input layout.
         D3D12_INPUT_ELEMENT_DESC InputElementDescs[] =
         {
-            { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+            { "POSITION", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
             { "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
             { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
             { "TEXINDEX", 0, DXGI_FORMAT_R32_UINT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
         };
 
-        Renderer->QuadPipeline = DX12GraphicsPipelineCreate(Device, Renderer->RootSignature, InputElementDescs, CountOf(InputElementDescs), L"Resources/Quad.hlsl");
+        Renderer->QuadPipeline = DX12GraphicsPipelineCreate(Device, Renderer->RootSignature, InputElementDescs, CountOf(InputElementDescs), L"Resources/Quad.hlsl", D3D12_CULL_MODE_NONE);
 
         for (u32 i = 0; i < FIF; i++)
         {
@@ -361,9 +361,10 @@ internal void GameRendererInitD3DPipeline(game_renderer* Renderer)
 
         // Quad Index buffer
         {
-            u32* QuadIndices = VmAllocArray(u32, bkm::Max(c_MaxQuadedCuboidIndices, c_MaxQuadIndices));
+            u32 MaxQuadIndexCount = bkm::Max(c_MaxQuadedCuboidIndices, c_MaxQuadIndices);
+            u32* QuadIndices = VmAllocArray(u32, MaxQuadIndexCount);
             u32 Offset = 0;
-            for (u32 i = 0; i < c_MaxQuadIndices; i += 6)
+            for (u32 i = 0; i < MaxQuadIndexCount; i += 6)
             {
                 QuadIndices[i + 0] = Offset + 0;
                 QuadIndices[i + 1] = Offset + 1;
@@ -375,7 +376,7 @@ internal void GameRendererInitD3DPipeline(game_renderer* Renderer)
 
                 Offset += 4;
             }
-            Renderer->QuadIndexBuffer = DX12IndexBufferCreate(Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, QuadIndices, c_MaxQuadIndices);
+            Renderer->QuadIndexBuffer = DX12IndexBufferCreate(Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, QuadIndices, MaxQuadIndexCount);
         }
     }
 
@@ -420,7 +421,7 @@ internal void GameRendererInitD3DPipeline(game_renderer* Renderer)
         // Define the vertex input layout.
         D3D12_INPUT_ELEMENT_DESC InputElementDescs[] =
         {
-            { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+            { "POSITION", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
             { "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
             { "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
             { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
@@ -431,15 +432,15 @@ internal void GameRendererInitD3DPipeline(game_renderer* Renderer)
 
         for (u32 i = 0; i < FIF; i++)
         {
-            Renderer->QuadedCuboidVertexBuffers[i] = DX12VertexBufferCreate(Device, sizeof(quaded_cuboid_vertex_gpu) * c_MaxQuadedCuboidVertices);
+            Renderer->QuadedCuboidVertexBuffers[i] = DX12VertexBufferCreate(Device, sizeof(quaded_cuboid_vertex) * c_MaxQuadedCuboidVertices);
         }
 
-        Renderer->QuadedCuboidVertexDataBase = VmAllocArray(quaded_cuboid_vertex_gpu, c_MaxQuadedCuboidVertices);
+        Renderer->QuadedCuboidVertexDataBase = VmAllocArray(quaded_cuboid_vertex, c_MaxQuadedCuboidVertices);
         Renderer->QuadedCuboidVertexDataPtr = Renderer->QuadedCuboidVertexDataBase;
 
         // For better debugging
         // TODO: Remove
-        memset(Renderer->QuadedCuboidVertexDataBase, 0, sizeof(quaded_cuboid_vertex_gpu) * c_MaxQuadedCuboidVertices);
+        memset(Renderer->QuadedCuboidVertexDataBase, 0, sizeof(quaded_cuboid_vertex) * c_MaxQuadedCuboidVertices);
     }
 
     // FAST Custom cuboid
@@ -508,6 +509,55 @@ internal void GameRendererInitD3DPipeline(game_renderer* Renderer)
         });
     }
 
+    // HUD renderer
+    {
+        // Define the vertex input layout.
+        D3D12_INPUT_ELEMENT_DESC InputElementDescs[] =
+        {
+            { "POSITION", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+            { "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+            { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+            { "TEXINDEX", 0, DXGI_FORMAT_R32_UINT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+        };
+
+        Renderer->HUDQuadPipeline = DX12GraphicsPipelineCreate(Device, Renderer->RootSignature, InputElementDescs, CountOf(InputElementDescs), L"Resources/HUD.hlsl");
+
+        for (u32 i = 0; i < FIF; i++)
+        {
+            Renderer->HUDQuadVertexBuffers[i] = DX12VertexBufferCreate(Device, sizeof(hud_quad_vertex) * c_MaxHUDQuadVertices);
+        }
+
+        Renderer->HUDQuadVertexDataBase = VmAllocArray(hud_quad_vertex, c_MaxHUDQuadVertices);;
+        Renderer->HUDQuadVertexDataPtr = Renderer->HUDQuadVertexDataBase;
+
+        // For better debugging
+        // TODO: Remove
+        memset(Renderer->HUDQuadVertexDataBase, 0, sizeof(hud_quad_vertex) * c_MaxHUDQuadVertices);
+
+        // TODO: Maybe our own index buffer?
+
+        // Quad Index buffer
+        if (0)
+        {
+            u32 MaxHUDQuadIndexCount = bkm::Max(c_MaxHUDQuadIndices, c_MaxHUDQuadIndices);
+            u32* HUDQuadIndices = VmAllocArray(u32, MaxHUDQuadIndexCount);
+            u32 Offset = 0;
+            for (u32 i = 0; i < MaxHUDQuadIndexCount; i += 6)
+            {
+                HUDQuadIndices[i + 0] = Offset + 0;
+                HUDQuadIndices[i + 1] = Offset + 1;
+                HUDQuadIndices[i + 2] = Offset + 2;
+
+                HUDQuadIndices[i + 3] = Offset + 2;
+                HUDQuadIndices[i + 4] = Offset + 3;
+                HUDQuadIndices[i + 5] = Offset + 0;
+
+                Offset += 4;
+            }
+            //Renderer->HUDQuadIndexBuffer = DX12IndexBufferCreate(Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, HUDQuadIndices, MaxHUDQuadIndexCount);
+        }
+    }
+
     // Create white texture
     {
         u32 WhiteColor = 0xffffffff;
@@ -560,12 +610,12 @@ internal void GameRendererInitD3DPipeline(game_renderer* Renderer)
         Light.Radiance = v3(1.0, 1.0, 1.0);
         Light.Intensity = 1.0f;
 
-        point_light& Light2 = Renderer->LightEnvironment.EmplacePointLight();
-        Light2.Position = v3(7, 20, 10);
-        Light2.Radius = 10.0;
-        Light2.FallOff = 1.0;
-        Light2.Radiance = v3(1.0, 0.0, 1.0);
-        Light2.Intensity = 1.0f;
+        //point_light& Light2 = Renderer->LightEnvironment.EmplacePointLight();
+        //Light2.Position = v3(7, 20, 10);
+        //Light2.Radius = 10.0;
+        //Light2.FallOff = 1.0;
+        //Light2.Radiance = v3(1.0, 0.0, 1.0);
+        //Light2.Intensity = 1.0f;
 
         DX12ConstantBufferSetData(&Renderer->LightEnvironmentConstantBuffer, &Renderer->LightEnvironment, sizeof(light_environment));
     }
@@ -704,7 +754,7 @@ internal void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
 #endif
     }
 
-    CommandList->Reset(DirectCommandAllocator, Renderer->QuadPipeline.Handle);
+    CommandList->Reset(DirectCommandAllocator, Renderer->CuboidPipeline.Handle);
 
     // Frame that was presented needs to be set to render target again
     auto Barrier = DX12Transition(BackBuffer, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
@@ -714,9 +764,14 @@ internal void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
     {
         DX12VertexBufferSendData(&Renderer->QuadVertexBuffers[CurrentBackBufferIndex], Renderer->DirectCommandList, Renderer->QuadVertexDataBase, sizeof(quad_vertex) * Renderer->QuadIndexCount);
 
+        DX12VertexBufferSendData(&Renderer->QuadedCuboidVertexBuffers[CurrentBackBufferIndex], Renderer->DirectCommandList, Renderer->QuadedCuboidVertexDataBase, sizeof(quaded_cuboid_vertex) * Renderer->QuadedCuboidIndexCount);
+
         DX12VertexBufferSendData(&Renderer->CuboidTransformVertexBuffers[CurrentBackBufferIndex], Renderer->DirectCommandList, Renderer->CuboidInstanceData, Renderer->CuboidInstanceCount * sizeof(cuboid_transform_vertex_data));
 
         DX12VertexBufferSendData(&Renderer->FastCuboidTransformVertexBuffers[CurrentBackBufferIndex], Renderer->DirectCommandList, Renderer->FastCuboidInstanceData, Renderer->FastCuboidInstanceCount * sizeof(fast_cuboid_transform_vertex_data));
+
+        // HUD
+        DX12VertexBufferSendData(&Renderer->HUDQuadVertexBuffers[CurrentBackBufferIndex], Renderer->DirectCommandList, Renderer->HUDQuadVertexDataBase, sizeof(hud_quad_vertex) * Renderer->HUDQuadIndexCount);
     }
 
     // Set and clear render target view
@@ -761,7 +816,7 @@ internal void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
         local_persist D3D12_VERTEX_BUFFER_VIEW CuboidVertexBufferView;
         CuboidVertexBufferView.BufferLocation = Renderer->CuboidPositionsVertexBuffer.Buffer.Handle->GetGPUVirtualAddress();
         CuboidVertexBufferView.SizeInBytes = (u32)Renderer->CuboidPositionsVertexBuffer.Buffer.Size;
-        CuboidVertexBufferView.StrideInBytes = sizeof(basic_cuboid_vertex);
+        CuboidVertexBufferView.StrideInBytes = sizeof(cuboid_vertex);
 
         // Bind transforms
         local_persist D3D12_VERTEX_BUFFER_VIEW TransformVertexBufferView;
@@ -781,6 +836,32 @@ internal void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
 
         // Issue draw call
         CommandList->DrawIndexedInstanced(36, Renderer->CuboidInstanceCount, 0, 0, 0);
+    }
+
+    // Render quaded cuboids
+    if (Renderer->QuadedCuboidIndexCount > 0)
+    {
+        CommandList->SetPipelineState(Renderer->QuadedCuboidPipeline.Handle);
+
+        CommandList->SetGraphicsRoot32BitConstants(0, sizeof(Renderer->CuboidRootSignatureBuffer) / 4, &Renderer->CuboidRootSignatureBuffer, 0);
+        CommandList->SetGraphicsRootConstantBufferView(1, Renderer->LightEnvironmentConstantBuffer.Buffer.Handle->GetGPUVirtualAddress());
+
+        // Bind cuboid vertex with normals
+        local_persist D3D12_VERTEX_BUFFER_VIEW VertexBufferView;
+        VertexBufferView.BufferLocation = Renderer->QuadedCuboidVertexBuffers[CurrentBackBufferIndex].Buffer.Handle->GetGPUVirtualAddress();
+        VertexBufferView.SizeInBytes = (u32)Renderer->QuadedCuboidVertexBuffers[CurrentBackBufferIndex].Buffer.Size;
+        VertexBufferView.StrideInBytes = sizeof(quaded_cuboid_vertex);
+        CommandList->IASetVertexBuffers(0, 1, &VertexBufferView);
+
+        // Bind index buffer
+        local_persist D3D12_INDEX_BUFFER_VIEW IndexBufferView;
+        IndexBufferView.BufferLocation = Renderer->QuadIndexBuffer.Buffer.Handle->GetGPUVirtualAddress();
+        IndexBufferView.SizeInBytes = Renderer->QuadedCuboidIndexCount * sizeof(u32);
+        IndexBufferView.Format = DXGI_FORMAT_R32_UINT;
+        CommandList->IASetIndexBuffer(&IndexBufferView);
+
+        // Issue draw call
+        CommandList->DrawIndexedInstanced(Renderer->QuadedCuboidIndexCount, 1, 0, 0, 0);
     }
 
     // Render fast instanced cuboids
@@ -818,34 +899,60 @@ internal void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
     }
 
     // Render quads
-    if (1)
+    if (Renderer->QuadIndexCount > 0)
     {
-        if (Renderer->QuadIndexCount > 0)
-        {
-            CommandList->SetPipelineState(Renderer->QuadPipeline.Handle);
+        CommandList->SetPipelineState(Renderer->QuadPipeline.Handle);
 
-            // Do not share depth
-            CommandList->ClearDepthStencilView(DSV, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
+        // Do not share depth
+        CommandList->ClearDepthStencilView(DSV, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
-            // Bind vertex buffer
-            local_persist D3D12_VERTEX_BUFFER_VIEW QuadVertexBufferView;
-            QuadVertexBufferView.BufferLocation = Renderer->QuadVertexBuffers[CurrentBackBufferIndex].Buffer.Handle->GetGPUVirtualAddress();
-            QuadVertexBufferView.StrideInBytes = sizeof(quad_vertex);
-            QuadVertexBufferView.SizeInBytes = Renderer->QuadIndexCount * sizeof(quad_vertex);
-            CommandList->IASetVertexBuffers(0, 1, &QuadVertexBufferView);
+        // Bind vertex buffer
+        local_persist D3D12_VERTEX_BUFFER_VIEW QuadVertexBufferView;
+        QuadVertexBufferView.BufferLocation = Renderer->QuadVertexBuffers[CurrentBackBufferIndex].Buffer.Handle->GetGPUVirtualAddress();
+        QuadVertexBufferView.StrideInBytes = sizeof(quad_vertex);
+        QuadVertexBufferView.SizeInBytes = Renderer->QuadIndexCount * sizeof(quad_vertex);
+        CommandList->IASetVertexBuffers(0, 1, &QuadVertexBufferView);
 
-            // Bind index buffer
-            local_persist D3D12_INDEX_BUFFER_VIEW QuadIndexBufferView;
-            QuadIndexBufferView.BufferLocation = Renderer->QuadIndexBuffer.Buffer.Handle->GetGPUVirtualAddress();
-            QuadIndexBufferView.Format = DXGI_FORMAT_R32_UINT;
-            QuadIndexBufferView.SizeInBytes = Renderer->QuadIndexCount * sizeof(u32);
-            CommandList->IASetIndexBuffer(&QuadIndexBufferView);
+        // Bind index buffer
+        local_persist D3D12_INDEX_BUFFER_VIEW QuadIndexBufferView;
+        QuadIndexBufferView.BufferLocation = Renderer->QuadIndexBuffer.Buffer.Handle->GetGPUVirtualAddress();
+        QuadIndexBufferView.Format = DXGI_FORMAT_R32_UINT;
+        QuadIndexBufferView.SizeInBytes = Renderer->QuadIndexCount * sizeof(u32);
+        CommandList->IASetIndexBuffer(&QuadIndexBufferView);
 
-            CommandList->SetGraphicsRoot32BitConstants(0, 16, &Renderer->QuadRootSignatureBuffer.ViewProjection, 0);
+        // TODO: For now just share the first half of the signature buffer, this needs some sort of distinction between HUD and Game stuff
+        CommandList->SetGraphicsRoot32BitConstants(0, 16, &Renderer->CuboidRootSignatureBuffer.ViewProjection, 0);
 
-            // Issue draw call
-            CommandList->DrawIndexedInstanced(Renderer->QuadIndexCount, 1, 0, 0, 0);
-        }
+        // Issue draw call
+        CommandList->DrawIndexedInstanced(Renderer->QuadIndexCount, 1, 0, 0, 0);
+    }
+
+    // Render HUD
+    if (Renderer->HUDQuadIndexCount > 0)
+    {
+        CommandList->SetPipelineState(Renderer->HUDQuadPipeline.Handle);
+
+        // Do not share depth
+        CommandList->ClearDepthStencilView(DSV, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
+
+        // Bind vertex buffer
+        local_persist D3D12_VERTEX_BUFFER_VIEW HUDQuadVertexBufferView;
+        HUDQuadVertexBufferView.BufferLocation = Renderer->HUDQuadVertexBuffers[CurrentBackBufferIndex].Buffer.Handle->GetGPUVirtualAddress();
+        HUDQuadVertexBufferView.StrideInBytes = sizeof(hud_quad_vertex);
+        HUDQuadVertexBufferView.SizeInBytes = Renderer->HUDQuadIndexCount * sizeof(hud_quad_vertex);
+        CommandList->IASetVertexBuffers(0, 1, &HUDQuadVertexBufferView);
+
+        // Bind index buffer
+        local_persist D3D12_INDEX_BUFFER_VIEW HUDQuadIndexBufferView;
+        HUDQuadIndexBufferView.BufferLocation = Renderer->QuadIndexBuffer.Buffer.Handle->GetGPUVirtualAddress();
+        HUDQuadIndexBufferView.Format = DXGI_FORMAT_R32_UINT;
+        HUDQuadIndexBufferView.SizeInBytes = Renderer->HUDQuadIndexCount * sizeof(u32);
+        CommandList->IASetIndexBuffer(&HUDQuadIndexBufferView);
+
+        CommandList->SetGraphicsRoot32BitConstants(0, 16, &Renderer->HUDRootSignatureBuffer.Projection, 0);
+
+        // Issue draw call
+        CommandList->DrawIndexedInstanced(Renderer->HUDQuadIndexCount, 1, 0, 0, 0);
     }
 
     // Present transition
@@ -869,6 +976,13 @@ internal void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
     // Reset indices
     Renderer->QuadIndexCount = 0;
     Renderer->QuadVertexDataPtr = Renderer->QuadVertexDataBase;
+
+    // HUD
+    Renderer->HUDQuadIndexCount = 0;
+    Renderer->HUDQuadVertexDataPtr = Renderer->HUDQuadVertexDataBase;
+
+    Renderer->QuadedCuboidVertexDataPtr = Renderer->QuadedCuboidVertexDataBase;
+    Renderer->QuadedCuboidIndexCount = 0;
 
     // Reset Cuboid indices
     Renderer->CuboidInstanceCount = 0;
@@ -915,12 +1029,8 @@ internal void GameRendererFlush(game_renderer* Renderer)
 // ===============================================================================================================
 //                                                   RENDERER API                                               
 // ===============================================================================================================
-internal void GameRendererSetViewProjectionQuad(game_renderer* Renderer, const m4& ViewProjection)
-{
-    Renderer->QuadRootSignatureBuffer.ViewProjection = ViewProjection;
-}
 
-internal void GameRendererSetViewProjectionCuboid(game_renderer* Renderer, const m4& ViewProjection, const m4& InverseView)
+internal void GameRendererSetViewProjection(game_renderer* Renderer, const m4& ViewProjection, const m4& InverseView)
 {
     Renderer->CuboidRootSignatureBuffer.ViewProjection = ViewProjection;
     Renderer->CuboidRootSignatureBuffer.InverseView = InverseView;
@@ -942,7 +1052,7 @@ internal void GameRendererSubmitQuad(game_renderer* Renderer, const v3& Translat
 
     for (u32 i = 0; i < CountOf(c_QuadVertexPositions); i++)
     {
-        Renderer->QuadVertexDataPtr->Position = v3(Transform * c_QuadVertexPositions[i]);
+        Renderer->QuadVertexDataPtr->Position = Transform * c_QuadVertexPositions[i];
         Renderer->QuadVertexDataPtr->Color = Color;
         Renderer->QuadVertexDataPtr->TexCoord = Coords[i];
         Renderer->QuadVertexDataPtr->TexIndex = 0;
@@ -988,7 +1098,7 @@ internal void GameRendererSubmitQuad(game_renderer* Renderer, const v3& Translat
 
     for (u32 i = 0; i < CountOf(c_QuadVertexPositions); i++)
     {
-        Renderer->QuadVertexDataPtr->Position = v3(Transform * c_QuadVertexPositions[i]);
+        Renderer->QuadVertexDataPtr->Position = Transform * c_QuadVertexPositions[i];
         Renderer->QuadVertexDataPtr->Color = Color;
         Renderer->QuadVertexDataPtr->TexCoord = Coords[i];
         Renderer->QuadVertexDataPtr->TexIndex = TextureIndex;
@@ -1030,7 +1140,7 @@ internal void GameRendererSubmitQuadCustom(game_renderer* Renderer, v3 VertexPos
 
     for (u32 i = 0; i < 4; i++)
     {
-        Renderer->QuadVertexDataPtr->Position = VertexPositions[i];
+        Renderer->QuadVertexDataPtr->Position = v4(VertexPositions[i], 1.0f);
         Renderer->QuadVertexDataPtr->Color = Color;
         Renderer->QuadVertexDataPtr->TexCoord = Coords[i];
         Renderer->QuadVertexDataPtr->TexIndex = TextureIndex;
@@ -1299,22 +1409,69 @@ internal void GameRendererSubmitQuadedCuboid(game_renderer* Renderer, const m4& 
         Renderer->CurrentTextureStackIndex++;
     }
 
-   
+    m3 InversedTransposedMatrix = m3(bkm::Transpose(bkm::Inverse(Transform)));
 
     u32 j = 0;
-    for (u32 i = 0; i < CountOf(c_CuboidVerticesPositionsAndNormals); i++)
+    for (u32 i = 0; i < CountOf(c_CuboidVertices); i++)
     {
-        Renderer->QuadedCuboidVertexDataPtr->Position = v3(Transform * c_CuboidVerticesPositionsAndNormals[i].Position);
+        Renderer->QuadedCuboidVertexDataPtr->Position = Transform * c_CuboidVertices[i].Position;
+        Renderer->QuadedCuboidVertexDataPtr->Normal = InversedTransposedMatrix * c_CuboidVertices[i].Normal;
         Renderer->QuadedCuboidVertexDataPtr->Color = Color;
         Renderer->QuadedCuboidVertexDataPtr->TexCoord = TextureCoords.TextureCoords[j].Coords[i % 4];
         Renderer->QuadedCuboidVertexDataPtr->TexIndex = TextureIndex;
         Renderer->QuadedCuboidVertexDataPtr++;
 
-        if ((i + 1) % 4 == 0)
+        // Each quad is 4 indexed vertices, so we 
+        if (i != 0 && (i + 1) % 4 == 0)
         {
             j++;
         }
     }
 
     Renderer->QuadedCuboidIndexCount += 36;
+}
+
+// ===============================================================================================================
+//                                             RENDERER API - HUD                                             
+// ===============================================================================================================
+
+internal void GameRendererHUDSetViewProjection(game_renderer* Renderer, const m4& Projection)
+{
+    Renderer->HUDRootSignatureBuffer.Projection = Projection;
+}
+
+internal void GameRendererHUDSubmitQuad(game_renderer* Renderer, v3 VertexPositions[4], const texture& Texture, const texture_coords& Coords, const v4& Color)
+{
+    Assert(Renderer->HUDQuadIndexCount < c_MaxHUDQuadIndices, "Renderer->HUDQuadIndexCount < c_MaxHUDQuadIndices");
+    Assert(Texture.Handle != nullptr, "Texture is invalid!");
+
+    // TODO: ID system, pointers are unreliable
+    u32 TextureIndex = 0;
+    for (u32 i = 1; i < Renderer->CurrentTextureStackIndex; i++)
+    {
+        if (Renderer->TextureStack[i].ptr == Texture.SRVDescriptor.ptr)
+        {
+            TextureIndex = i;
+            break;
+        }
+    }
+
+    if (TextureIndex == 0)
+    {
+        Assert(Renderer->CurrentTextureStackIndex < c_MaxTexturesPerDrawCall, "Renderer->CurrentTextureStackIndex < c_MaxTexturesPerDrawCall");
+        TextureIndex = Renderer->CurrentTextureStackIndex;
+        Renderer->TextureStack[TextureIndex] = Texture.SRVDescriptor;
+        Renderer->CurrentTextureStackIndex++;
+    }
+
+    for (u32 i = 0; i < 4; i++)
+    {
+        Renderer->HUDQuadVertexDataPtr->Position = v4(VertexPositions[i], 1.0f);
+        Renderer->HUDQuadVertexDataPtr->Color = Color;
+        Renderer->HUDQuadVertexDataPtr->TexCoord = Coords[i];
+        Renderer->HUDQuadVertexDataPtr->TexIndex = TextureIndex;
+        Renderer->HUDQuadVertexDataPtr++;
+    }
+
+    Renderer->HUDQuadIndexCount += 6;
 }

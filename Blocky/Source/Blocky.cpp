@@ -130,7 +130,7 @@ internal game GameCreate(game_renderer* Renderer)
         auto CowEntity = CreateEntity(&Game.Registry);
 
         auto& Transform = AddComponent<transform_component>(&Game.Registry, CowEntity);
-        Transform.Translation = v3((f32)c_TexelSize / 2, 17.0, c_TexelSize / 2);
+        Transform.Translation = v3((f32)c_TexelSize / 2 + 10.0f, 17.0, c_TexelSize / 2 + 10.0f);
         Transform.Scale = v3(1.0f);
         Transform.Rotation = v3(0.0f, 0.0f, 0.0f);
 
@@ -292,7 +292,7 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
     Game->Time += TimeStep;
 
     // Set view projection to render player's view
-    GameRendererSetViewProjectionCuboid(Renderer, Game->Camera.GetViewProjection(), bkm::Inverse(Game->Camera.View));
+    GameRendererSetViewProjection(Renderer, Game->Camera.GetViewProjection(), bkm::Inverse(Game->Camera.View));
 
     // Render blocks
     if (1)
@@ -310,23 +310,26 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
         }
     }
 
+    GameRendererSubmitQuad(Renderer, v3(10, 20, 10), v3(0.0f), v2(1), v4(1.0f));
+
     // Render HUD
-    if (1)
+    if (Game->RenderHUD)
     {
-        // Orthographic projection: 0, 0, ClientAreaWidth, ClientAreaHeight
-        Game->Camera.RecalculateProjectionOrtho_V2(ClientAreaWidth, ClientAreaHeight);
-        GameRendererSetViewProjectionQuad(Renderer, Game->Camera.Projection);
-        f32 crosshairSize = 15.0f * 2.0f;
-        f32 centerX = ClientAreaWidth / 2.0f - crosshairSize / 2.0f;
-        f32 centerY = ClientAreaHeight / 2.0f - crosshairSize / 2.0f;
+        m4 Projection = bkm::Ortho(0, (f32)ClientAreaWidth, (f32)ClientAreaHeight, 0, -1.0f, 1.0f);
+        GameRendererHUDSetViewProjection(Renderer, Projection);
+
+        // Build crosshair vertices
+        f32 CrosshairSize = 15.0f * 2.0f;
+        f32 CenterX = ClientAreaWidth / 2.0f - CrosshairSize / 2.0f;
+        f32 CenterY = ClientAreaHeight / 2.0f - CrosshairSize / 2.0f;
 
         v3 Positions[4];
-        Positions[3] = { centerX, centerY, 0.0f };
-        Positions[2] = { centerX + crosshairSize, centerY, 0.0f };
-        Positions[1] = { centerX + crosshairSize, centerY + crosshairSize, 0.0f };
-        Positions[0] = { centerX, centerY + crosshairSize, 0.0f };
+        Positions[3] = { CenterX, CenterY, 0.0f };
+        Positions[2] = { CenterX + CrosshairSize, CenterY, 0.0f };
+        Positions[1] = { CenterX + CrosshairSize, CenterY + CrosshairSize, 0.0f };
+        Positions[0] = { CenterX, CenterY + CrosshairSize, 0.0f };
 
-        GameRendererSubmitQuadCustom(Renderer, Positions, Game->CrosshairTexture, v4(1.0f, 1.0f, 1.0f, 0.7f));
+        GameRendererHUDSubmitQuad(Renderer, Positions, Game->CrosshairTexture, texture_coords(), v4(1.0f, 1.0f, 1.0f, 0.7f));
     }
 }
 
@@ -356,16 +359,18 @@ internal void GamePlayerUpdate(game* Game, const game_input* Input, game_rendere
     {
         local_persist v2i OldMousePos;
 
-        v2i MousePos = (Input->IsCursorLocked ? Input->VirtualMousePosition : Input->LastMousePosition);
+        v2i MousePos = Input->GetRawMouseInput();
 
         // Avoids teleporting with camera rotation due to large delta
         if (JustPressed)
             OldMousePos = MousePos;
 
         v2i MouseDelta = MousePos - OldMousePos;
+
+        //Trace("%i %i", MouseDelta.x, MouseDelta.y);
         OldMousePos = MousePos;
 
-        f32 MouseSensitivity = 0.5f;
+        f32 MouseSensitivity = 0.35f;
 
         // Update rotation based on mouse input
         Player.Rotation.y -= (f32)MouseDelta.x * MouseSensitivity * TimeStep; // Yaw
@@ -859,6 +864,7 @@ internal void GameRenderEntities(game* Game, game_renderer* Renderer, f32 TimeSt
             m4 M = bkm::Translate(m4(1.0f), Part.LocalPosition) * bkm::Scale(m4(1.0f), Part.Size);
             m4 TransformMatrix = Transform.Matrix() * M;
 
+            //GameRendererSubmitCustomCuboid(Renderer, TransformMatrix, Render.Texture, Part.Coords.TextureCoords, Render.Color);
             GameRendererSubmitQuadedCuboid(Renderer, TransformMatrix, Render.Texture, Part.Coords, Render.Color);
         }
     }

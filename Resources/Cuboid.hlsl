@@ -80,10 +80,34 @@ float4 PSMain(pixel_shader_input In) : SV_TARGET
     }
     
     // Phase 2: Point lights
-    for (int i = 0; i < u_PointLightCount; i++)
+    for (int j = 0; j < u_PointLightCount; j++)
     {
-        Result += CalculatePointLight(u_PointLights[i], Normal, ViewDir, Shininess, In.WorldPosition.xyz, TextureColor * In.Color.rgb);
+        Result += CalculatePointLight(u_PointLights[j], Normal, ViewDir, Shininess, In.WorldPosition.xyz, TextureColor * In.Color.rgb);
     }
+    
+#if 0
+    //float4 Result = In.Color;
+    //float4 Result = float4(In.TexCoord, 0.0f, 1.0f);
+    
+    float2 atlasSize; // size in pixels
+    g_Texture[In.TexIndex].GetDimensions(atlasSize.x, atlasSize.y);
+
+    float2 texelSize = 1.0 / atlasSize;
+    float2 uv = In.TexCoord;
+
+    // Tile size in UVs
+    float2 tileSize = float2(1.0 / 64.0, 1.0 / 32.0);
+
+    // Get tile offset (can be passed as a constant or precalculated)
+    float2 tileOffset = floor(uv / tileSize) * tileSize;
+
+    // Clamp within tile with half-texel margin
+    float2 clampedUV = clamp(
+        uv,
+        tileOffset + texelSize * 0.5,
+        tileOffset + tileSize - texelSize * 0.5
+    );
+#endif
     
     //if (Result.a == 0.0f)
     //    discard;

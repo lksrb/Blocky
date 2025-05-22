@@ -8,9 +8,9 @@ struct random_series
 };
 
 // Global seed
-inline u32 g_RandomSeed = 0;
+global u32 g_RandomSeed = 0;
 
-internal void RandomSetSeed(u32 Seed)
+global void RandomSetSeed(u32 Seed)
 {
     g_RandomSeed = Seed;
 
@@ -19,14 +19,14 @@ internal void RandomSetSeed(u32 Seed)
 
 // Fast implementation of pseudo-random numbers
 // This is used mostly in shaders but I think we can use it here aswell.
-internal u32 RandomPCGHash(u32 Input)
+global u32 RandomPCGHash(u32 Input)
 {
     u32 State = Input * 747796405u + 2891336453u;
     u32 Word = ((State >> ((State >> 28u) + 4u)) ^ State) * 277803737u;
     return (Word >> 22u) ^ Word;
 }
 
-internal u32 RandomU32(u32 Min = 0, u32 Max = UINT32_MAX)
+global u32 RandomU32(u32 Min = 0, u32 Max = UINT32_MAX)
 {
     g_RandomSeed = RandomPCGHash(g_RandomSeed);
 
@@ -35,7 +35,7 @@ internal u32 RandomU32(u32 Min = 0, u32 Max = UINT32_MAX)
 }
 
 // Test this
-internal u64 RandomU64()
+global u64 RandomU64()
 {
     u64 Value = 0;
 
@@ -50,21 +50,21 @@ internal u64 RandomU64()
     return Value;
 }
 
-internal random_series RandomSeriesCreate()
+global random_series RandomSeriesCreate()
 {
     random_series Series;
     Series.Seed = RandomPCGHash(g_RandomSeed);
     return Series;
 }
 
-internal f32 RandomFloat01(random_series* Series)
+global f32 RandomFloat01(random_series* Series)
 {
     Series->Seed = RandomPCGHash(Series->Seed);
     constexpr f32 Scale = f32(1.0f / UINT32_MAX);
     return f32(Series->Seed) * Scale;
 }
 
-internal v2 RandomNormal(random_series* Series)
+global v2 RandomNormal(random_series* Series)
 {
     // NOTE: Not uniform anymore since y axis depends on x axis
     v2 Result;
@@ -73,7 +73,7 @@ internal v2 RandomNormal(random_series* Series)
     return Result;
 }
 
-internal v2 RandomDirection(random_series* Series)
+global v2 RandomDirection(random_series* Series)
 {
     v2 Result = RandomNormal(Series);
     Result.x = Result.x > 0.0f ? 1.0f : -1.0f;
@@ -88,7 +88,7 @@ struct uuid
     u64 Value;
 };
 
-internal uuid UUIDCreate()
+global uuid UUIDCreate()
 {
     uuid UUID;
     UUID.Value = RandomU64(); // Now this might be silly but we will test, if it works
