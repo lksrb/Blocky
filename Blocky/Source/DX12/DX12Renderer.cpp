@@ -304,7 +304,7 @@ internal void GameRendererInitD3DPipeline(game_renderer* Renderer)
 
         D3D12_ROOT_PARAMETER Parameters[3] = {};
         Parameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
-        Parameters[0].Constants.Num32BitValues = sizeof(Renderer->CuboidRootSignatureBuffer) / 4;
+        Parameters[0].Constants.Num32BitValues = sizeof(cuboid_root_signature_constant_buffer) / 4;
         Parameters[0].Constants.ShaderRegister = 0;  // b0
         Parameters[0].Constants.RegisterSpace = 0;
         Parameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
@@ -443,72 +443,6 @@ internal void GameRendererInitD3DPipeline(game_renderer* Renderer)
         memset(Renderer->QuadedCuboidVertexDataBase, 0, sizeof(quaded_cuboid_vertex) * c_MaxQuadedCuboidVertices);
     }
 
-    // FAST Custom cuboid
-    {
-        // Define the vertex input layout.
-        D3D12_INPUT_ELEMENT_DESC InputElementDescs[] =
-        {
-            // Per vertex
-            { "POSITION", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-            //{ "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-
-            // Per instance
-            { "TRANSFORMA", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
-            { "TRANSFORMB", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1},
-            { "TRANSFORMC", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
-            { "TRANSFORMD", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
-
-            { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
-            { "TEXCOORD", 1, DXGI_FORMAT_R32G32_FLOAT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
-            { "TEXCOORD", 2, DXGI_FORMAT_R32G32_FLOAT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
-            { "TEXCOORD", 3, DXGI_FORMAT_R32G32_FLOAT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
-
-            { "TEXCOORD", 4, DXGI_FORMAT_R32G32_FLOAT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
-            { "TEXCOORD", 5, DXGI_FORMAT_R32G32_FLOAT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
-            { "TEXCOORD", 6, DXGI_FORMAT_R32G32_FLOAT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
-            { "TEXCOORD", 7, DXGI_FORMAT_R32G32_FLOAT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
-
-            { "TEXCOORD", 8, DXGI_FORMAT_R32G32_FLOAT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
-            { "TEXCOORD", 9, DXGI_FORMAT_R32G32_FLOAT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
-            { "TEXCOORD", 10, DXGI_FORMAT_R32G32_FLOAT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
-            { "TEXCOORD", 11, DXGI_FORMAT_R32G32_FLOAT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
-
-            { "TEXCOORD", 12, DXGI_FORMAT_R32G32_FLOAT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
-            { "TEXCOORD", 13, DXGI_FORMAT_R32G32_FLOAT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
-            { "TEXCOORD", 14, DXGI_FORMAT_R32G32_FLOAT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
-            { "TEXCOORD", 15, DXGI_FORMAT_R32G32_FLOAT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
-
-            { "TEXCOORD", 16, DXGI_FORMAT_R32G32_FLOAT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
-            { "TEXCOORD", 17, DXGI_FORMAT_R32G32_FLOAT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
-            { "TEXCOORD", 18, DXGI_FORMAT_R32G32_FLOAT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
-            { "TEXCOORD", 19, DXGI_FORMAT_R32G32_FLOAT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
-
-            { "TEXCOORD", 20, DXGI_FORMAT_R32G32_FLOAT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
-            { "TEXCOORD", 21, DXGI_FORMAT_R32G32_FLOAT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
-            { "TEXCOORD", 22, DXGI_FORMAT_R32G32_FLOAT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
-            { "TEXCOORD", 23, DXGI_FORMAT_R32G32_FLOAT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
-
-            { "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
-            { "TEXINDEX", 0, DXGI_FORMAT_R32_UINT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
-        };
-
-        Renderer->FastCuboidPipeline = DX12GraphicsPipelineCreate(Device, Renderer->RootSignature, InputElementDescs, CountOf(InputElementDescs), L"Resources/FastCuboid.hlsl");
-
-        for (u32 i = 0; i < FIF; i++)
-        {
-            Renderer->FastCuboidTransformVertexBuffers[i] = DX12VertexBufferCreate(Device, sizeof(fast_cuboid_transform_vertex_data) * c_MaxCubePerBatch);
-        }
-        // TODO: MEMORY POOLS
-        Renderer->FastCuboidInstanceData = VmAllocArray(fast_cuboid_transform_vertex_data, c_MaxCubePerBatch);
-
-        Renderer->FastCuboidVertexBufferPositions = DX12VertexBufferCreate(Device, sizeof(c_CuboidVerticesPositions));
-
-        DX12SubmitToQueueImmidiate(Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, [Renderer](ID3D12GraphicsCommandList* CommandList)
-        {
-            DX12VertexBufferSendData(&Renderer->FastCuboidVertexBufferPositions, CommandList, c_CuboidVerticesPositions, sizeof(c_CuboidVerticesPositions));
-        });
-    }
-
     // HUD renderer
     {
         // Define the vertex input layout.
@@ -596,28 +530,10 @@ internal void GameRendererInitD3DPipeline(game_renderer* Renderer)
         SRV.ptr += Increment;
     }
 
-    // Create light environment
+    // Create light environment constant buffer for each frame
+    for (u32 i = 0; i < FIF; i++)
     {
-        Renderer->LightEnvironmentConstantBuffer = DX12ConstantBufferCreate(Device, sizeof(light_environment));
-        directional_light& DirLight = Renderer->LightEnvironment.EmplaceDirectionalLight();
-        DirLight.Direction = v3(1.0, -1.0, 1.0);
-        DirLight.Intensity = 0.8;
-        DirLight.Radiance = v3(1.0, 1.0, 1.0);
-        point_light& Light = Renderer->LightEnvironment.EmplacePointLight();
-        Light.Position = v3(10, 20, 10);
-        Light.Radius = 10.0;
-        Light.FallOff = 1.0;
-        Light.Radiance = v3(1.0, 1.0, 1.0);
-        Light.Intensity = 1.0f;
-
-        //point_light& Light2 = Renderer->LightEnvironment.EmplacePointLight();
-        //Light2.Position = v3(7, 20, 10);
-        //Light2.Radius = 10.0;
-        //Light2.FallOff = 1.0;
-        //Light2.Radiance = v3(1.0, 0.0, 1.0);
-        //Light2.Intensity = 1.0f;
-
-        DX12ConstantBufferSetData(&Renderer->LightEnvironmentConstantBuffer, &Renderer->LightEnvironment, sizeof(light_environment));
+        Renderer->LightEnvironmentConstantBuffers[i] = DX12ConstantBufferCreate(Device, sizeof(light_environment));
     }
 }
 
@@ -708,7 +624,7 @@ internal void GameRendererResizeSwapChain(game_renderer* Renderer, u32 RequestWi
     Warn("SwapChain resized to %d %d", RequestWidth, RequestHeight);
 }
 
-internal void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
+internal void GameRendererRender(game_renderer* Renderer)
 {
     // Get current frame stuff
     auto CommandList = Renderer->DirectCommandList;
@@ -720,8 +636,12 @@ internal void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
     auto DSV = Renderer->DSVHandles[CurrentBackBufferIndex];
     auto& FrameFenceValue = Renderer->FrameFenceValues[CurrentBackBufferIndex];
 
+    // TODO: Figure out if this function needs to be called every frame.
+    DXGI_SWAP_CHAIN_DESC SwapChainDesc;
+    DxAssert(Renderer->SwapChain->GetDesc(&SwapChainDesc));
+
     // Reset state
-    DirectCommandAllocator->Reset();
+    DxAssert(DirectCommandAllocator->Reset());
 
     // Copy texture's descriptor to our renderer's descriptor
     {
@@ -754,11 +674,16 @@ internal void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
 #endif
     }
 
-    CommandList->Reset(DirectCommandAllocator, Renderer->CuboidPipeline.Handle);
+    DxAssert(CommandList->Reset(DirectCommandAllocator, Renderer->CuboidPipeline.Handle));
 
     // Frame that was presented needs to be set to render target again
     auto Barrier = DX12Transition(BackBuffer, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
     CommandList->ResourceBarrier(1, &Barrier);
+
+    // Set light environment data
+    {
+        DX12ConstantBufferSetData(&Renderer->LightEnvironmentConstantBuffers[CurrentBackBufferIndex], &Renderer->LightEnvironment, sizeof(light_environment));
+    }
 
     // Copy vertex data to gpu buffer
     {
@@ -767,8 +692,6 @@ internal void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
         DX12VertexBufferSendData(&Renderer->QuadedCuboidVertexBuffers[CurrentBackBufferIndex], Renderer->DirectCommandList, Renderer->QuadedCuboidVertexDataBase, sizeof(quaded_cuboid_vertex) * Renderer->QuadedCuboidIndexCount);
 
         DX12VertexBufferSendData(&Renderer->CuboidTransformVertexBuffers[CurrentBackBufferIndex], Renderer->DirectCommandList, Renderer->CuboidInstanceData, Renderer->CuboidInstanceCount * sizeof(cuboid_transform_vertex_data));
-
-        DX12VertexBufferSendData(&Renderer->FastCuboidTransformVertexBuffers[CurrentBackBufferIndex], Renderer->DirectCommandList, Renderer->FastCuboidInstanceData, Renderer->FastCuboidInstanceCount * sizeof(fast_cuboid_transform_vertex_data));
 
         // HUD
         DX12VertexBufferSendData(&Renderer->HUDQuadVertexBuffers[CurrentBackBufferIndex], Renderer->DirectCommandList, Renderer->HUDQuadVertexDataBase, sizeof(hud_quad_vertex) * Renderer->HUDQuadIndexCount);
@@ -783,8 +706,8 @@ internal void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
     D3D12_VIEWPORT Viewport;
     Viewport.TopLeftX = 0;
     Viewport.TopLeftY = 0;
-    Viewport.Width = (FLOAT)Width;
-    Viewport.Height = (FLOAT)Height;
+    Viewport.Width = (FLOAT)SwapChainDesc.BufferDesc.Width;
+    Viewport.Height = (FLOAT)SwapChainDesc.BufferDesc.Height;
     Viewport.MinDepth = D3D12_MIN_DEPTH;
     Viewport.MaxDepth = D3D12_MAX_DEPTH;
     CommandList->RSSetViewports(1, &Viewport);
@@ -792,8 +715,8 @@ internal void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
     D3D12_RECT ScissorRect;
     ScissorRect.left = 0;
     ScissorRect.top = 0;
-    ScissorRect.right = Width;
-    ScissorRect.bottom = Height;
+    ScissorRect.right = SwapChainDesc.BufferDesc.Width;
+    ScissorRect.bottom = SwapChainDesc.BufferDesc.Height;
     CommandList->RSSetScissorRects(1, &ScissorRect);
 
     // Set root constants
@@ -808,9 +731,9 @@ internal void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
     {
         CommandList->SetPipelineState(Renderer->CuboidPipeline.Handle);
 
-        CommandList->SetGraphicsRoot32BitConstants(0, sizeof(Renderer->CuboidRootSignatureBuffer) / 4, &Renderer->CuboidRootSignatureBuffer, 0);
+        CommandList->SetGraphicsRoot32BitConstants(0, sizeof(cuboid_root_signature_constant_buffer) / 4, &Renderer->RenderData.CuboidRootSignatureBuffer, 0);
 
-        CommandList->SetGraphicsRootConstantBufferView(1, Renderer->LightEnvironmentConstantBuffer.Buffer.Handle->GetGPUVirtualAddress());
+        CommandList->SetGraphicsRootConstantBufferView(1, Renderer->LightEnvironmentConstantBuffers[CurrentBackBufferIndex].Buffer.Handle->GetGPUVirtualAddress());
 
         // Bind vertex positions
         local_persist D3D12_VERTEX_BUFFER_VIEW CuboidVertexBufferView;
@@ -843,8 +766,8 @@ internal void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
     {
         CommandList->SetPipelineState(Renderer->QuadedCuboidPipeline.Handle);
 
-        CommandList->SetGraphicsRoot32BitConstants(0, sizeof(Renderer->CuboidRootSignatureBuffer) / 4, &Renderer->CuboidRootSignatureBuffer, 0);
-        CommandList->SetGraphicsRootConstantBufferView(1, Renderer->LightEnvironmentConstantBuffer.Buffer.Handle->GetGPUVirtualAddress());
+        CommandList->SetGraphicsRoot32BitConstants(0, sizeof(cuboid_root_signature_constant_buffer) / 4, &Renderer->RenderData.CuboidRootSignatureBuffer, 0);
+        CommandList->SetGraphicsRootConstantBufferView(1, Renderer->LightEnvironmentConstantBuffers[CurrentBackBufferIndex].Buffer.Handle->GetGPUVirtualAddress());
 
         // Bind cuboid vertex with normals
         local_persist D3D12_VERTEX_BUFFER_VIEW VertexBufferView;
@@ -864,47 +787,10 @@ internal void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
         CommandList->DrawIndexedInstanced(Renderer->QuadedCuboidIndexCount, 1, 0, 0, 0);
     }
 
-    // Render fast instanced cuboids
-    if (Renderer->FastCuboidInstanceCount > 0)
-    {
-        CommandList->SetPipelineState(Renderer->FastCuboidPipeline.Handle);
-
-        CommandList->SetGraphicsRoot32BitConstants(0, sizeof(Renderer->CuboidRootSignatureBuffer) / 4, &Renderer->CuboidRootSignatureBuffer, 0);
-        CommandList->SetGraphicsRootConstantBufferView(1, Renderer->LightEnvironmentConstantBuffer.Buffer.Handle->GetGPUVirtualAddress());
-
-        // Bind vertex positions
-        local_persist D3D12_VERTEX_BUFFER_VIEW FastCuboidVertexBufferView;
-        FastCuboidVertexBufferView.BufferLocation = Renderer->FastCuboidVertexBufferPositions.Buffer.Handle->GetGPUVirtualAddress();
-        FastCuboidVertexBufferView.SizeInBytes = (u32)Renderer->FastCuboidVertexBufferPositions.Buffer.Size;
-        FastCuboidVertexBufferView.StrideInBytes = sizeof(v4);
-
-        // Bind transforms
-        local_persist D3D12_VERTEX_BUFFER_VIEW TransformVertexBufferView;
-        TransformVertexBufferView.BufferLocation = Renderer->FastCuboidTransformVertexBuffers[CurrentBackBufferIndex].Buffer.Handle->GetGPUVirtualAddress();
-        TransformVertexBufferView.SizeInBytes = Renderer->FastCuboidInstanceCount * sizeof(fast_cuboid_transform_vertex_data);
-        TransformVertexBufferView.StrideInBytes = sizeof(fast_cuboid_transform_vertex_data);
-
-        D3D12_VERTEX_BUFFER_VIEW VertexBufferViews[] = { FastCuboidVertexBufferView, TransformVertexBufferView };
-        CommandList->IASetVertexBuffers(0, 2, VertexBufferViews);
-
-        // Bind index buffer
-        local_persist D3D12_INDEX_BUFFER_VIEW IndexBufferView;
-        IndexBufferView.BufferLocation = Renderer->QuadIndexBuffer.Buffer.Handle->GetGPUVirtualAddress();
-        IndexBufferView.SizeInBytes = 36 * sizeof(u32);
-        IndexBufferView.Format = DXGI_FORMAT_R32_UINT;
-        CommandList->IASetIndexBuffer(&IndexBufferView);
-
-        // Issue draw call
-        CommandList->DrawIndexedInstanced(36, Renderer->FastCuboidInstanceCount, 0, 0, 0);
-    }
-
     // Render quads
     if (Renderer->QuadIndexCount > 0)
     {
         CommandList->SetPipelineState(Renderer->QuadPipeline.Handle);
-
-        // Do not share depth
-        CommandList->ClearDepthStencilView(DSV, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
         // Bind vertex buffer
         local_persist D3D12_VERTEX_BUFFER_VIEW QuadVertexBufferView;
@@ -921,7 +807,7 @@ internal void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
         CommandList->IASetIndexBuffer(&QuadIndexBufferView);
 
         // TODO: For now just share the first half of the signature buffer, this needs some sort of distinction between HUD and Game stuff
-        CommandList->SetGraphicsRoot32BitConstants(0, 16, &Renderer->CuboidRootSignatureBuffer.ViewProjection, 0);
+        CommandList->SetGraphicsRoot32BitConstants(0, 16, &Renderer->RenderData.CuboidRootSignatureBuffer.ViewProjection, 0);
 
         // Issue draw call
         CommandList->DrawIndexedInstanced(Renderer->QuadIndexCount, 1, 0, 0, 0);
@@ -931,9 +817,6 @@ internal void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
     if (Renderer->HUDQuadIndexCount > 0)
     {
         CommandList->SetPipelineState(Renderer->HUDQuadPipeline.Handle);
-
-        // Do not share depth
-        CommandList->ClearDepthStencilView(DSV, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
         // Bind vertex buffer
         local_persist D3D12_VERTEX_BUFFER_VIEW HUDQuadVertexBufferView;
@@ -949,7 +832,7 @@ internal void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
         HUDQuadIndexBufferView.SizeInBytes = Renderer->HUDQuadIndexCount * sizeof(u32);
         CommandList->IASetIndexBuffer(&HUDQuadIndexBufferView);
 
-        CommandList->SetGraphicsRoot32BitConstants(0, 16, &Renderer->HUDRootSignatureBuffer.Projection, 0);
+        CommandList->SetGraphicsRoot32BitConstants(0, 16, &Renderer->RenderData.HUDRootSignatureBuffer.Projection, 0);
 
         // Issue draw call
         CommandList->DrawIndexedInstanced(Renderer->HUDQuadIndexCount, 1, 0, 0, 0);
@@ -963,15 +846,20 @@ internal void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
     }
 
     // Finalize the command list
-    CommandList->Close();
+    DxAssert(CommandList->Close());
 
     Renderer->DirectCommandQueue->ExecuteCommandLists(1, (ID3D12CommandList* const*)&CommandList);
 
-    Renderer->SwapChain->Present(Renderer->VSync, 0);
+    DxAssert(Renderer->SwapChain->Present(Renderer->VSync, 0));
 
     // Wait for GPU to finish presenting
     FrameFenceValue = GameRendererSignal(Renderer->DirectCommandQueue, Renderer->Fence, &Renderer->FenceValue);
     GameRendererWaitForFenceValue(Renderer->Fence, FrameFenceValue, Renderer->DirectFenceEvent);
+
+    // Reset rendered scene state
+
+    // Reset light environment
+    Renderer->LightEnvironment.Clear();
 
     // Reset indices
     Renderer->QuadIndexCount = 0;
@@ -986,7 +874,6 @@ internal void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height)
 
     // Reset Cuboid indices
     Renderer->CuboidInstanceCount = 0;
-    Renderer->FastCuboidInstanceCount = 0;
 
     // Reset textures
     Renderer->CurrentTextureStackIndex = 1;
@@ -1030,10 +917,12 @@ internal void GameRendererFlush(game_renderer* Renderer)
 //                                                   RENDERER API                                               
 // ===============================================================================================================
 
-internal void GameRendererSetViewProjection(game_renderer* Renderer, const m4& ViewProjection, const m4& InverseView)
+internal void GameRendererSetRenderData(game_renderer* Renderer, const m4& View, const m4& Projection, const m4& InverseView, const m4& HUDProjection)
 {
-    Renderer->CuboidRootSignatureBuffer.ViewProjection = ViewProjection;
-    Renderer->CuboidRootSignatureBuffer.InverseView = InverseView;
+    auto& RenderData = Renderer->RenderData;
+    RenderData.CuboidRootSignatureBuffer.View = View;
+    RenderData.CuboidRootSignatureBuffer.ViewProjection = Projection * View;
+    RenderData.HUDRootSignatureBuffer.Projection = HUDProjection;
 }
 
 internal void GameRendererSubmitQuad(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v2& Scale, const v4& Color)
@@ -1106,6 +995,22 @@ internal void GameRendererSubmitQuad(game_renderer* Renderer, const v3& Translat
     }
 
     Renderer->QuadIndexCount += 6;
+}
+
+internal void GameRendererSubmitBillboardQuad(game_renderer* Renderer, const v3& Translation, const v2& Scale, const texture& Texture, const v4& Color)
+{
+    m4& CameraView = Renderer->RenderData.CuboidRootSignatureBuffer.View;
+
+    v3 CamRightWS(CameraView[0][0], CameraView[1][0], CameraView[2][0]);
+    v3 CamUpWS(CameraView[0][1], CameraView[1][1], CameraView[2][1]);
+
+    v3 Positions[4];
+    Positions[0] = Translation + CamRightWS * (c_QuadVertexPositions[0].x) * Scale.x + CamUpWS * c_QuadVertexPositions[0].y * Scale.y;
+    Positions[1] = Translation + CamRightWS * c_QuadVertexPositions[1].x * Scale.x + CamUpWS * c_QuadVertexPositions[1].y * Scale.y;
+    Positions[2] = Translation + CamRightWS * c_QuadVertexPositions[2].x * Scale.x + CamUpWS * c_QuadVertexPositions[2].y * Scale.y;
+    Positions[3] = Translation + CamRightWS * c_QuadVertexPositions[3].x * Scale.x + CamUpWS * c_QuadVertexPositions[3].y * Scale.y;
+
+    GameRendererSubmitQuadCustom(Renderer, Positions, Texture, Color);
 }
 
 internal void GameRendererSubmitQuadCustom(game_renderer* Renderer, v3 VertexPositions[4], const texture& Texture, const v4& Color)
@@ -1226,7 +1131,7 @@ internal void GameRendererSubmitCuboid(game_renderer* Renderer, const v3& Transl
 #endif
 }
 
-internal void GameRendererSubmitCuboidNoRotScale(game_renderer* Renderer, const v3& Translation, const texture& Texture, const v4& Color)
+internal void GameRendererSubmitCuboid(game_renderer* Renderer, const v3& Translation, const texture& Texture, const v4& Color)
 {
     Assert(Renderer->CuboidInstanceCount < c_MaxCubePerBatch, "Renderer->CuboidInstanceCount < c_MaxCuboidsPerBatch");
 
@@ -1265,7 +1170,7 @@ internal void GameRendererSubmitCuboidNoRotScale(game_renderer* Renderer, const 
 #endif
 }
 
-internal void GameRendererSubmitCuboidNoRotScale(game_renderer* Renderer, const v3& Translation, const v4& Color)
+internal void GameRendererSubmitCuboid(game_renderer* Renderer, const v3& Translation, const v4& Color)
 {
     Assert(Renderer->CuboidInstanceCount < c_MaxCubePerBatch, "Renderer->CuboidInstanceCount < c_MaxCuboidsPerBatch");
 
@@ -1282,98 +1187,6 @@ internal void GameRendererSubmitCuboidNoRotScale(game_renderer* Renderer, const 
     Cuboid.TextureIndex = 0;
     Renderer->CuboidInstanceCount++;
 #endif
-}
-
-internal void GameRendererSubmitCustomCuboid(game_renderer* Renderer, const m4& Transform, const texture& Texture, texture_coords TextureCoords[6], const v4& Color)
-{
-    Assert(Renderer->FastCuboidInstanceCount < c_MaxCubePerBatch, "Renderer->FastCuboidInstanceCount < c_MaxCuboidsPerBatch");
-
-    u32 TextureIndex = 0;
-    for (u32 i = 1; i < Renderer->CurrentTextureStackIndex; i++)
-    {
-        if (Renderer->TextureStack[i].ptr == Texture.SRVDescriptor.ptr)
-        {
-            TextureIndex = i;
-            break;
-        }
-    }
-
-    if (TextureIndex == 0)
-    {
-        Assert(Renderer->CurrentTextureStackIndex < c_MaxTexturesPerDrawCall, "Renderer->TextureStackIndex < c_MaxTexturesPerDrawCall");
-        TextureIndex = Renderer->CurrentTextureStackIndex;
-        Renderer->TextureStack[TextureIndex] = Texture.SRVDescriptor;
-        Renderer->CurrentTextureStackIndex++;
-    }
-
-    auto& Cuboid = Renderer->FastCuboidInstanceData[Renderer->FastCuboidInstanceCount];
-    Cuboid.Color = Color;
-    Cuboid.Transform = Transform;
-    Cuboid.TextureIndex = TextureIndex;
-
-    // Copy texture coords
-    for (i32 i = 0; i < 6; i++)
-    {
-        Cuboid.TextureCoords.TextureCoords[i] = TextureCoords[i];
-    }
-
-    Renderer->FastCuboidInstanceCount++;
-}
-
-internal void GameRendererSubmitCustomCuboid(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale, const texture& Texture, texture_coords TextureCoords[6], const v4& Color)
-{
-    Assert(Renderer->FastCuboidInstanceCount < c_MaxCubePerBatch, "Renderer->FastCuboidInstanceCount < c_MaxCuboidsPerBatch");
-    auto& Cuboid = Renderer->FastCuboidInstanceData[Renderer->FastCuboidInstanceCount];
-
-    // TODO: Better lookup?
-    // Hashtables are overkill, we can have a table indexed with enums and simply say that:
-    //  - Index 0 is a white texture
-    //  - Index 1 is a sprite-sheet texture for blocks
-    //  - Index 2 is a sprite-sheet texture for alive entities
-    // Something like that so we can avoid this 
-    u32 TextureIndex = 0;
-    for (u32 i = 1; i < Renderer->CurrentTextureStackIndex; i++)
-    {
-        if (Renderer->TextureStack[i].ptr == Texture.SRVDescriptor.ptr)
-        {
-            TextureIndex = i;
-            break;
-        }
-    }
-
-    if (TextureIndex == 0)
-    {
-        Assert(Renderer->CurrentTextureStackIndex < c_MaxTexturesPerDrawCall, "Renderer->TextureStackIndex < c_MaxTexturesPerDrawCall");
-        TextureIndex = Renderer->CurrentTextureStackIndex;
-        Renderer->TextureStack[TextureIndex] = Texture.SRVDescriptor;
-        Renderer->CurrentTextureStackIndex++;
-    }
-
-    Cuboid.Color = Color;
-    Cuboid.TextureIndex = TextureIndex;
-
-    // Copy texture coords
-    // TODO: Remove this
-    for (i32 i = 0; i < 6; i++)
-    {
-        Cuboid.TextureCoords.TextureCoords[i] = TextureCoords[i];
-    }
-
-#if ENABLE_SIMD
-    XMMATRIX XmmScale = XMMatrixScalingFromVector(XMVectorSet(Scale.x, Scale.y, Scale.z, 0.0f));
-    XMMATRIX XmmRot = XMMatrixRotationQuaternion(XMQuaternionRotationRollPitchYaw(Rotation.x, Rotation.y, Rotation.z));
-    XMMATRIX XmmTrans = XMMatrixTranslationFromVector(XMVectorSet(Translation.x, Translation.y, Translation.z, 0.0f));
-
-    XMMATRIX XmmTransform = XmmScale * XmmRot * XmmTrans;
-#else
-    Cuboid.Transform =
-        bkm::Translate(m4(1.0f), Translation)
-        * bkm::ToM4(qtn(Rotation))
-        * bkm::Scale(m4(1.0f), Scale);
-#endif
-    Cuboid.XmmTransform = /*XMMatrixTranspose*/(XmmTransform); // Avoid doing it on the GPU multiple times
-
-    Renderer->FastCuboidInstanceCount++;
 }
 
 internal void GameRendererSubmitQuadedCuboid(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale, const texture& Texture, const texture_block_coords& TextureCoords, const v4& Color)
@@ -1431,14 +1244,27 @@ internal void GameRendererSubmitQuadedCuboid(game_renderer* Renderer, const m4& 
     Renderer->QuadedCuboidIndexCount += 36;
 }
 
+internal void GameRendererSubmitDirectionalLight(game_renderer* Renderer, const v3& Direction, f32 Intensity, const v3& Radiance)
+{
+    directional_light& DirLight = Renderer->LightEnvironment.EmplaceDirectionalLight();
+    DirLight.Direction = Direction;
+    DirLight.Intensity = Intensity;
+    DirLight.Radiance = Radiance;
+}
+
+internal void GameRendererSubmitPointLight(game_renderer* Renderer, const v3& Position, f32 Radius, f32 FallOff, const v3& Radiance, f32 Intensity)
+{
+    point_light& Light = Renderer->LightEnvironment.EmplacePointLight();
+    Light.Position = Position;
+    Light.Radius = Radius;
+    Light.FallOff = FallOff;
+    Light.Radiance = Radiance;
+    Light.Intensity = Intensity;
+}
+
 // ===============================================================================================================
 //                                             RENDERER API - HUD                                             
 // ===============================================================================================================
-
-internal void GameRendererHUDSetViewProjection(game_renderer* Renderer, const m4& Projection)
-{
-    Renderer->HUDRootSignatureBuffer.Projection = Projection;
-}
 
 internal void GameRendererHUDSubmitQuad(game_renderer* Renderer, v3 VertexPositions[4], const texture& Texture, const texture_coords& Coords, const v4& Color)
 {

@@ -72,6 +72,8 @@ internal game GameCreate(game_renderer* Renderer)
 
     Game.CowTexture = TextureCreate(Renderer->Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, "Resources/Textures/MC/cow.png");
 
+    Game.PointLightIconTexture = TextureCreate(Renderer->Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, "Resources/Textures/PointLight.png");
+
     Game.Registry = EntityRegistryCreate(100);
 
     entity_model CowModel = EntityModelCreate();
@@ -272,27 +274,24 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
         GamePhysicsSimulationUpdateEntities(Game, TimeStep);
     }
 
+    // Count time
+    Game->Time += TimeStep;
+
+    // Update camera and HUD
+    {
+        m4 InverseView = bkm::Translate(m4(1.0f), Game->Player.Position + Game->CameraOffset) * bkm::ToM4(qtn(Game->Player.Rotation));
+        Game->Camera.View = bkm::Inverse(InverseView);
+        Game->Camera.RecalculateProjectionPerspective(ClientAreaWidth, ClientAreaHeight);
+
+        m4 HUDProjection = bkm::Ortho(0, (f32)ClientAreaWidth, (f32)ClientAreaHeight, 0, -1, 1);
+        GameRendererSetRenderData(Renderer, Game->Camera.View, Game->Camera.Projection, InverseView, HUDProjection);
+    }
+
     // Render
     if (1)
     {
         GameRenderEntities(Game, Renderer, TimeStep);
     }
-
-
-    // Update camera
-    {
-        Game->Camera.View = bkm::Translate(m4(1.0f), Game->Player.Position + Game->CameraOffset)
-            * bkm::ToM4(qtn(Game->Player.Rotation));
-
-        Game->Camera.View = bkm::Inverse(Game->Camera.View);
-        Game->Camera.RecalculateProjectionPerspective(ClientAreaWidth, ClientAreaHeight);
-    }
-
-    // Count time
-    Game->Time += TimeStep;
-
-    // Set view projection to render player's view
-    GameRendererSetViewProjection(Renderer, Game->Camera.GetViewProjection(), bkm::Inverse(Game->Camera.View));
 
     // Render blocks
     if (1)
@@ -306,17 +305,25 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
             if (!Block.Placed())
                 continue;
 
-            GameRendererSubmitCuboidNoRotScale(Renderer, Block.Position, Game->BlockTextures[(u32)Block.Type], Block.Color);
+            GameRendererSubmitCuboid(Renderer, Block.Position, Game->BlockTextures[(u32)Block.Type], Block.Color);
         }
     }
 
-    GameRendererSubmitQuad(Renderer, v3(10, 20, 10), v3(0.0f), v2(1), v4(1.0f));
+    // Lights
+    GameRendererSubmitPointLight(Renderer, v3(14, 20, 10), 10.0, 1.0f, v3(1.0f), 2.0f);
+    GameRendererSubmitDirectionalLight(Renderer, v3(1.0, -1.0, 1.0), 0.5f, v3(1.0f));
+
+    if (Game->RenderDebugUI)
+    {
+        // For each point lights so we know that its there
+        GameRendererSubmitBillboardQuad(Renderer, v3(14, 20, 10), v2(0.5), Game->PointLightIconTexture, v4(1.0f));
+    }
+
 
     // Render HUD
     if (Game->RenderHUD)
     {
         m4 Projection = bkm::Ortho(0, (f32)ClientAreaWidth, (f32)ClientAreaHeight, 0, -1.0f, 1.0f);
-        GameRendererHUDSetViewProjection(Renderer, Projection);
 
         // Build crosshair vertices
         f32 CrosshairSize = 15.0f * 2.0f;
@@ -861,10 +868,9 @@ internal void GameRenderEntities(game* Game, game_renderer* Renderer, f32 TimeSt
             entity_part& Part = Render.Model.Parts[i];
 
             // TODO: SIMD STUFF, we can take advantage in matrix multiplication
-            m4 M = bkm::Translate(m4(1.0f), Part.LocalPosition) * bkm::Scale(m4(1.0f), Part.Size);
-            m4 TransformMatrix = Transform.Matrix() * M;
+            m4 Local = bkm::Translate(m4(1.0f), Part.LocalPosition) * bkm::Scale(m4(1.0f), Part.Size);
+            m4 TransformMatrix = Transform.Matrix() * Local;
 
-            //GameRendererSubmitCustomCuboid(Renderer, TransformMatrix, Render.Texture, Part.Coords.TextureCoords, Render.Color);
             GameRendererSubmitQuadedCuboid(Renderer, TransformMatrix, Render.Texture, Part.Coords, Render.Color);
         }
     }

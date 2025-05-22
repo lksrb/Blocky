@@ -25,7 +25,6 @@ workspace "Blocky"
 		"Resources/Quad.hlsl",
 		"Resources/Cuboid.hlsl",
 		"Resources/QuadedCuboid.hlsl",
-		"Resources/FastCuboid.hlsl",
 		"Blocky/Blocky.lua",
 		"Blocky-ResourcePacker/Blocky-ResourcePacker.lua",
 		"Resources/Light.hlsl",

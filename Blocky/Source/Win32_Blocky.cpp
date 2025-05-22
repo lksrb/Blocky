@@ -593,7 +593,7 @@ int main(int argc, char** argv)
         {
             //ScopedTimer timer("Game render");
 
-            GameRendererRender(&GameRenderer, g_ClientWidth, g_ClientHeight);
+            GameRendererRender(&GameRenderer);
         }
 
         DWORD64 EndCycleCount = __rdtsc();

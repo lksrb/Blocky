@@ -4,7 +4,7 @@ cbuffer root_constants : register(b0)
 {
     column_major float4x4 c_ViewProjection;
     //column_major float4x4 Inversec_ViewProjection;
-    row_major float4x4 c_InverseViewMatrix;
+    row_major float4x4 c_ViewMatrix;
 };
 
 struct vertex_shader_input
@@ -34,7 +34,7 @@ pixel_shader_input VSMain(vertex_shader_input In)
     Out.Position = mul(c_ViewProjection, In.Position);
     Out.WorldPosition = In.Position;
     Out.Normal = In.Normal;
-    Out.ViewPosition = mul(c_InverseViewMatrix, float4(Out.WorldPosition, 1.0)).xyz;
+    Out.ViewPosition = mul(c_ViewMatrix, float4(Out.WorldPosition, 1.0)).xyz;
     Out.Color = In.Color;
     Out.TexCoord = In.TexCoord;
     Out.TexIndex = In.TexIndex;
@@ -75,6 +75,30 @@ float4 PSMain(pixel_shader_input In) : SV_TARGET
     {
         Result += CalculatePointLight(u_PointLights[j], Normal, ViewDir, Shininess, In.WorldPosition.xyz, TextureColor * In.Color.rgb);
     }
+    
+    #if 0
+    //float4 Result = In.Color;
+    //float4 Result = float4(In.TexCoord, 0.0f, 1.0f);
+    
+    float2 atlasSize; // size in pixels
+    g_Texture[In.TexIndex].GetDimensions(atlasSize.x, atlasSize.y);
+
+    float2 texelSize = 1.0 / atlasSize;
+    float2 uv = In.TexCoord;
+
+    // Tile size in UVs
+    float2 tileSize = float2(1.0 / 64.0, 1.0 / 32.0);
+
+    // Get tile offset (can be passed as a constant or precalculated)
+    float2 tileOffset = floor(uv / tileSize) * tileSize;
+
+    // Clamp within tile with half-texel margin
+    float2 clampedUV = clamp(
+        uv,
+        tileOffset + texelSize * 0.5,
+        tileOffset + tileSize - texelSize * 0.5
+    );
+#endif
     
     //if (Result.a == 0.0f)
     //    discard;

@@ -2,9 +2,9 @@
 
 cbuffer root_constants : register(b0)
 {
-    column_major float4x4 ViewProjection;
+    column_major float4x4 ViewProjectionMatrix;
     //column_major float4x4 InverseViewProjection;
-    row_major float4x4 InverseViewMatrix;
+    row_major float4x4 c_ViewMatrix;
 };
 
 struct vertex_shader_input
@@ -39,10 +39,10 @@ pixel_shader_input VSMain(vertex_shader_input In)
     
     float4x4 Transform = float4x4(In.TransformRow0, In.TransformRow1, In.TransformRow2, In.TransformRow3);
     
-    Out.Position = mul(ViewProjection, mul(transpose(Transform), In.VertexPosition));
+    Out.Position = mul(ViewProjectionMatrix, mul(transpose(Transform), In.VertexPosition));
     Out.WorldPosition = mul(transpose(Transform), In.VertexPosition);
     Out.Normal = In.Normal; // There is no need for transforming normals since blocks are axis-aligned
-    Out.ViewPosition = mul(InverseViewMatrix, Out.WorldPosition).xyz;
+    Out.ViewPosition = mul(c_ViewMatrix, Out.WorldPosition).xyz;
     Out.Color = In.Color;
     Out.TexCoord = In.TexCoord;
     Out.TexIndex = In.TexIndex;

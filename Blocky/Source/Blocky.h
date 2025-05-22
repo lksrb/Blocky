@@ -106,10 +106,13 @@ struct game
 
     texture CowTexture;
 
+    texture PointLightIconTexture;
+
     f32 Time;
 
     entity_registry Registry;
 
+    bool RenderDebugUI = true;
     bool RenderHUD = true;
 };
 

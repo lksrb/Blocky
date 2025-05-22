@@ -131,11 +131,6 @@ struct fast_cuboid_transform_vertex_data
 // Basically a push constant
 // TODO: Look up standardized push constant minimum value
 // I think its 256 bytes
-struct quad_root_signature_constant_buffer
-{
-    m4 ViewProjection;
-};
-
 struct hud_quad_root_signature_constant_buffer
 {
     m4 Projection;
@@ -144,7 +139,7 @@ struct hud_quad_root_signature_constant_buffer
 struct cuboid_root_signature_constant_buffer
 {
     m4 ViewProjection;
-    m4 InverseView;
+    m4 View;
 };
 
 struct point_light
@@ -180,6 +175,12 @@ struct light_environment
     inline void Clear() { DirectionalLightCount = PointLightCount = 0; };
     inline auto& EmplaceDirectionalLight() { Assert(DirectionalLightCount < MaxDirectionalLights, "Too many directional lights!"); return DirectionalLight[DirectionalLightCount++]; }
     inline auto& EmplacePointLight() { Assert(PointLightCount < MaxPointLights, "Too many point lights!"); return PointLights[PointLightCount++]; }
+};
+
+struct render_data
+{
+    hud_quad_root_signature_constant_buffer HUDRootSignatureBuffer;
+    cuboid_root_signature_constant_buffer CuboidRootSignatureBuffer;
 };
 
 // API-agnostic type definition
@@ -247,7 +248,6 @@ struct game_renderer
     dx12_vertex_buffer CuboidTransformVertexBuffers[FIF] = {};
     dx12_vertex_buffer CuboidPositionsVertexBuffer = {};
     cuboid_transform_vertex_data* CuboidInstanceData = nullptr;
-    cuboid_root_signature_constant_buffer CuboidRootSignatureBuffer;
 
     // Quaded cuboid
     dx12_pipeline QuadedCuboidPipeline = {};
@@ -256,17 +256,12 @@ struct game_renderer
     quaded_cuboid_vertex* QuadedCuboidVertexDataPtr;
     u32 QuadedCuboidIndexCount = 0;
 
-    // FAST Custom Cuboid
-    dx12_pipeline FastCuboidPipeline = {};
-    fast_cuboid_transform_vertex_data* FastCuboidInstanceData = nullptr;
-    u32 FastCuboidInstanceCount = 0;
-    dx12_vertex_buffer FastCuboidTransformVertexBuffers[FIF] = {};
-
-    dx12_vertex_buffer FastCuboidVertexBufferPositions;
+    // All possible data the renderer needs
+    render_data RenderData;
 
     // Light stuff
     light_environment LightEnvironment;
-    dx12_constant_buffer LightEnvironmentConstantBuffer;
+    dx12_constant_buffer LightEnvironmentConstantBuffers[FIF];
 
     // HUD stuff
     hud_quad_vertex* HUDQuadVertexDataPtr;
@@ -274,7 +269,6 @@ struct game_renderer
     dx12_vertex_buffer HUDQuadVertexBuffers[FIF];
     u32 HUDQuadIndexCount = 0;
     dx12_pipeline HUDQuadPipeline;
-    hud_quad_root_signature_constant_buffer HUDRootSignatureBuffer;
 };
 
 // ===============================================================================================================
@@ -288,7 +282,7 @@ internal void GameRendererInitD3D(game_renderer* Renderer, const game_window& Wi
 internal void GameRendererInitD3DPipeline(game_renderer* Renderer);
 
 internal void GameRendererResizeSwapChain(game_renderer* Renderer, u32 RequestWidth, u32 RequestHeight);
-internal void GameRendererRender(game_renderer* Renderer, u32 Width, u32 Height);
+internal void GameRendererRender(game_renderer* Renderer);
 internal u64 GameRendererSignal(ID3D12CommandQueue* CommandQueue, ID3D12Fence* Fence, u64* FenceValue);
 internal void GameRendererWaitForFenceValue(ID3D12Fence* Fence, u64 FenceValue, HANDLE FenceEvent, u32 Duration = UINT32_MAX);
 internal void GameRendererFlush(game_renderer* Renderer);
@@ -297,28 +291,32 @@ internal void GameRendererFlush(game_renderer* Renderer);
 //                                                   RENDERER API                                               
 // ===============================================================================================================
 
-internal void GameRendererSetViewProjection(game_renderer* Renderer, const m4& ViewProjection, const m4& InverseView);
+// Set all possible needed state here
+internal void GameRendererSetRenderData(game_renderer* Renderer, const m4& View, const m4& Projection, const m4& InverseView, const m4& HUDProjection);
 
-// Render commands
+// Quad render commands
 internal void GameRendererSubmitQuad(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v2& Scale, const v4& Color);
 internal void GameRendererSubmitQuad(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v2& Scale, const texture& Texture, const v4& Color);
 internal void GameRendererSubmitQuadCustom(game_renderer* Renderer, v3 VertexPositions[4], const texture& Texture, const v4& Color);
-internal void GameRendererSubmitCuboid(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale, const texture& Texture, const v4& Color);
+internal void GameRendererSubmitBillboardQuad(game_renderer* Renderer, const v3& Translation, const v2& Scale, const texture& Texture, const v4& Color);
+
+// Cuboid first single unique texture - good for most of the blocks
+internal void GameRendererSubmitCuboid(game_renderer* Renderer, const v3& Translation, const v4& Color);
 internal void GameRendererSubmitCuboid(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale, const v4& Color);
-internal void GameRendererSubmitCuboidNoRotScale(game_renderer* Renderer, const v3& Translation, const v4& Color);
-internal void GameRendererSubmitCuboidNoRotScale(game_renderer* Renderer, const v3& Translation, const texture& Texture, const v4& Color);
+internal void GameRendererSubmitCuboid(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale, const texture& Texture, const v4& Color);
+internal void GameRendererSubmitCuboid(game_renderer* Renderer, const v3& Translation, const texture& Texture, const v4& Color);
 
-internal void GameRendererSubmitCustomCuboid(game_renderer* Renderer, const m4& Transform, const texture& Texture, texture_coords TextureCoords[6], const v4& Color);
-
-internal void GameRendererSubmitCustomCuboid(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale, const texture& Texture, texture_coords TextureCoords[6], const v4& Color);
-
+// Quaded cuboids - slower than cuboids but each quad can have its own unique texture
 internal void GameRendererSubmitQuadedCuboid(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale, const texture& Texture, const texture_block_coords& TextureCoords, const v4& Color);
 internal void GameRendererSubmitQuadedCuboid(game_renderer* Renderer, const m4& Transform, const texture& Texture, const texture_block_coords& TextureCoords, const v4& Color);
+
+// Lights
+internal void GameRendererSubmitDirectionalLight(game_renderer* Renderer, const v3& Direction, f32 Intensity, const v3& Radiance);
+internal void GameRendererSubmitPointLight(game_renderer* Renderer, const v3& Position, f32 Radius, f32 FallOff, const v3& Radiance, f32 Intensity);
 
 // ===============================================================================================================
 //                                             RENDERER API - HUD                                             
 // ===============================================================================================================
-internal void GameRendererHUDSetViewProjection(game_renderer* Renderer, const m4& Projection);
 internal void GameRendererHUDSubmitQuad(game_renderer* Renderer, v3 VertexPositions[4], const texture& Texture, const texture_coords& Coords = texture_coords(), const v4& Color = v4(1.0f));
 
 // Each face has to have a normal vector, so unfortunately we cannot encode Cuboid as 8 vertices
