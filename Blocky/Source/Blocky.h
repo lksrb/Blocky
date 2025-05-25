@@ -111,7 +111,7 @@ struct game
     texture SunTexture;
     //texture MoonTexture;
 
-    f32 Time;
+    f32 TimeSinceStart;
 
     entity_registry Registry;
 

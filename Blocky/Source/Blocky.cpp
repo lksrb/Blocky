@@ -279,16 +279,18 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
     }
 
     // Count time
-    Game->Time += TimeStep;
+    Game->TimeSinceStart += TimeStep;
 
     // Update camera and HUD
     {
-        m4 InverseView = bkm::Translate(m4(1.0f), Game->Player.Position + Game->CameraOffset) * bkm::ToM4(qtn(Game->Player.Rotation));
+        v3 CameraPosition = Game->Player.Position + Game->CameraOffset;
+
+        m4 InverseView = bkm::Translate(m4(1.0f), CameraPosition) * bkm::ToM4(qtn(Game->Player.Rotation));
         Game->Camera.View = bkm::Inverse(InverseView);
         Game->Camera.RecalculateProjectionPerspective(ClientAreaWidth, ClientAreaHeight);
 
         m4 HUDProjection = bkm::Ortho(0, (f32)ClientAreaWidth, (f32)ClientAreaHeight, 0, -1, 1);
-        GameRendererSetRenderData(Renderer, Game->Camera.View, Game->Camera.Projection, InverseView, HUDProjection);
+        GameRendererSetRenderData(Renderer, CameraPosition, Game->Camera.View, Game->Camera.Projection, InverseView, HUDProjection, Game->TimeSinceStart);
     }
 
     // Render
@@ -315,7 +317,29 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
 
     // Lights
     GameRendererSubmitPointLight(Renderer, v3(14, 20, 10), 10.0, 1.0f, v3(1.0f), 2.0f);
-    GameRendererSubmitDirectionalLight(Renderer, v3(-1.0, -1.0, 1.0), 0.5f, v3(1.0f));
+    GameRendererSubmitDirectionalLight(Renderer, v3(-1.0, -1.0, 1.0), 0.1f, v3(1.0f));
+
+    // Render sun
+    {
+        f32 Distance = 10.0f;
+        f32 Angle = Game->TimeSinceStart * 0.1; // speed of day-night cycle (radians per second)
+        v3 baseDir = v3(0.0f, 1.0f, 0.0f);
+
+        // Rotate baseDir around X axis to simulate sun path
+        f32 cosA = bkm::Cos(Angle);
+        f32 sinA = bkm::Sin(Angle);
+        v3 SunDirection = v3(
+            baseDir.x,
+            baseDir.y * cosA - baseDir.z * sinA,
+            baseDir.y * sinA + baseDir.z * cosA
+        );
+
+        SunDirection = bkm::Normalize(SunDirection);
+        v3 SunPosition = SunDirection * Distance;
+
+        v3 SunRotation(bkm::PI_HALF + Angle, 0, 0);
+        GameRendererSubmitDistantQuad(Renderer, SunPosition, SunRotation, v2(1), texture(), v4(1));
+    }
 
     // Render Debug UI
     if (Game->RenderDebugUI)

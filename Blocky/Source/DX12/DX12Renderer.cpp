@@ -309,6 +309,7 @@ internal void GameRendererInitD3DPipeline(game_renderer* Renderer)
         Parameters[0].Constants.RegisterSpace = 0;
         Parameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
 
+        // Light environment
         Parameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
         Parameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
         Parameters[1].Descriptor.ShaderRegister = 1; // b1
@@ -494,26 +495,72 @@ internal void GameRendererInitD3DPipeline(game_renderer* Renderer)
 
     // Skybox
     {
+        // Skybox Root Signature
+        {
+            D3D12_ROOT_PARAMETER Parameters[1] = {};
+            Parameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
+            Parameters[0].Constants.Num32BitValues = sizeof(skybox_quad_root_signature_constant_buffer) / 4;
+            Parameters[0].Constants.ShaderRegister = 0;  // b0
+            Parameters[0].Constants.RegisterSpace = 0;
+            Parameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+
+            D3D12_ROOT_SIGNATURE_DESC Desc = {};
+            Desc.NumParameters = CountOf(Parameters);
+            Desc.pParameters = Parameters;
+            Desc.NumStaticSamplers = 0;
+            Desc.pStaticSamplers = nullptr;
+            Desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
+
+            // Root signature
+            ID3DBlob* Error;
+            ID3DBlob* Signature;
+            DxAssert(D3D12SerializeRootSignature(&Desc, D3D_ROOT_SIGNATURE_VERSION_1, &Signature, &Error));
+            DxAssert(Device->CreateRootSignature(0, Signature->GetBufferPointer(), Signature->GetBufferSize(), IID_PPV_ARGS(&Renderer->Skybox.RootSignature)));
+        }
+
         D3D12_INPUT_ELEMENT_DESC InputElementDescs[] =
         {
             { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
         };
 
-        Renderer->SkyboxPipeline = DX12GraphicsPipelineCreate(Device, Renderer->RootSignature, InputElementDescs, CountOf(InputElementDescs), L"Resources/Skybox.hlsl", D3D12_CULL_MODE_NONE, false);
-        Renderer->SkyboxVertexBuffer = DX12VertexBufferCreate(Device, sizeof(c_SkyboxVertices));
+        Renderer->Skybox.Pipeline = DX12GraphicsPipelineCreate(Device, Renderer->Skybox.RootSignature, InputElementDescs, CountOf(InputElementDescs), L"Resources/Skybox.hlsl", D3D12_CULL_MODE_BACK, false);
+        Renderer->Skybox.VertexBuffer = DX12VertexBufferCreate(Device, sizeof(c_SkyboxVertices));
 
         DX12SubmitToQueueImmidiate(Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, [Renderer](ID3D12GraphicsCommandList* CommandList)
         {
-            DX12VertexBufferSendData(&Renderer->SkyboxVertexBuffer, CommandList, c_SkyboxVertices, sizeof(c_SkyboxVertices));
+            DX12VertexBufferSendData(&Renderer->Skybox.VertexBuffer, CommandList, c_SkyboxVertices, sizeof(c_SkyboxVertices));
         });
-        Renderer->SkyboxIndexBuffer = DX12IndexBufferCreate(Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, c_SkyboxIndices, CountOf(c_SkyboxIndices));
+        Renderer->Skybox.IndexBuffer = DX12IndexBufferCreate(Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, c_SkyboxIndices, CountOf(c_SkyboxIndices));
+    }
+
+    // Distant quads
+    {
+        // Define the vertex input layout.
+        D3D12_INPUT_ELEMENT_DESC InputElementDescs[] =
+        {
+            { "POSITION", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+        };
+
+        Renderer->DistantQuad.Pipeline = DX12GraphicsPipelineCreate(Device, Renderer->Skybox.RootSignature, InputElementDescs, CountOf(InputElementDescs), L"Resources/DistantQuad.hlsl", D3D12_CULL_MODE_NONE, false);
+
+        for (u32 i = 0; i < FIF; i++)
+        {
+            Renderer->DistantQuad.VertexBuffers[i] = DX12VertexBufferCreate(Device, sizeof(distant_quad_vertex) * c_MaxHUDQuadVertices);
+        }
+
+        Renderer->DistantQuad.VertexDataBase = VmAllocArray(distant_quad_vertex, c_MaxHUDQuadVertices);
+        Renderer->DistantQuad.VertexDataPtr = Renderer->DistantQuad.VertexDataBase;
+
+        // For better debugging
+        // TODO: Remove
+        memset(Renderer->DistantQuad.VertexDataBase, 0, sizeof(distant_quad_vertex) * c_MaxHUDQuadVertices);
     }
 
     // Create white texture
     {
         u32 WhiteColor = 0xffffffff;
         buffer Buffer = { &WhiteColor, sizeof(u32) };
-        Renderer->WhiteTexture = TextureCreate(Renderer->Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, Buffer, 1, 1, DXGI_FORMAT_R8G8B8A8_UNORM);
+        Renderer->WhiteTexture = TextureCreate(Renderer->Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, Buffer, 1, 1, DXGI_FORMAT_R8G8B8A8_UNORM_SRGB);
 
         // First element of the texture stack will be the white texture
         Renderer->TextureStack[0] = Renderer->WhiteTexture.SRVDescriptor;
@@ -536,7 +583,7 @@ internal void GameRendererInitD3DPipeline(game_renderer* Renderer)
     {
         D3D12_SHADER_RESOURCE_VIEW_DESC Desc = {};
         Desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-        Desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        Desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
         Desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
         Desc.Texture2D.MipLevels = 1;
         Desc.Texture2D.MostDetailedMip = 0;
@@ -704,11 +751,17 @@ internal void GameRendererRender(game_renderer* Renderer)
 
     // Copy vertex data to gpu buffer
     {
+        // Quads - general purpose
         DX12VertexBufferSendData(&Renderer->QuadVertexBuffers[CurrentBackBufferIndex], Renderer->DirectCommandList, Renderer->QuadVertexDataBase, sizeof(quad_vertex) * Renderer->QuadIndexCount);
 
+        // Cuboid made out of quads - alive entities
         DX12VertexBufferSendData(&Renderer->QuadedCuboidVertexBuffers[CurrentBackBufferIndex], Renderer->DirectCommandList, Renderer->QuadedCuboidVertexDataBase, sizeof(quaded_cuboid_vertex) * Renderer->QuadedCuboidIndexCount);
 
+        // Cuboid - used for blocks
         DX12VertexBufferSendData(&Renderer->CuboidTransformVertexBuffers[CurrentBackBufferIndex], Renderer->DirectCommandList, Renderer->CuboidInstanceData, Renderer->CuboidInstanceCount * sizeof(cuboid_transform_vertex_data));
+
+        // Distant quads - sun, moon, starts, etc
+        DX12VertexBufferSendData(&Renderer->DistantQuad.VertexBuffers[CurrentBackBufferIndex], Renderer->DirectCommandList, Renderer->DistantQuad.VertexDataBase, Renderer->DistantQuad.IndexCount * sizeof(distant_quad_vertex));
 
         // HUD
         DX12VertexBufferSendData(&Renderer->HUDQuadVertexBuffers[CurrentBackBufferIndex], Renderer->DirectCommandList, Renderer->HUDQuadVertexDataBase, sizeof(hud_quad_vertex) * Renderer->HUDQuadIndexCount);
@@ -736,36 +789,62 @@ internal void GameRendererRender(game_renderer* Renderer)
     ScissorRect.bottom = SwapChainDesc.BufferDesc.Height;
     CommandList->RSSetScissorRects(1, &ScissorRect);
 
-    // Set root constants
-    // Number of 32 bit values - 16 floats in 4x4 matrix
-    CommandList->SetGraphicsRootSignature(Renderer->RootSignature);
-    CommandList->SetDescriptorHeaps(1, (ID3D12DescriptorHeap* const*)&Renderer->SRVDescriptorHeap);
-    CommandList->SetGraphicsRootDescriptorTable(2, Renderer->SRVDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
     CommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
     // Render a skybox
     {
-        CommandList->SetPipelineState(Renderer->SkyboxPipeline.Handle);
+        CommandList->SetGraphicsRootSignature(Renderer->Skybox.RootSignature);
+        CommandList->SetPipelineState(Renderer->Skybox.Pipeline.Handle);
 
-        // There is a singular version of a call
-        CommandList->SetGraphicsRoot32BitConstants(0, 16, &Renderer->RenderData.SkyboxRootSignatureBuffer, 0);
+        CommandList->SetGraphicsRoot32BitConstants(0, sizeof(Renderer->RenderData.SkyboxRootSignatureBuffer) / 4, &Renderer->RenderData.SkyboxRootSignatureBuffer, 0);
 
         // Bind vertex positions
         local_persist D3D12_VERTEX_BUFFER_VIEW SkyboxVertexBufferView;
-        SkyboxVertexBufferView.BufferLocation = Renderer->SkyboxVertexBuffer.Buffer.Handle->GetGPUVirtualAddress();
-        SkyboxVertexBufferView.SizeInBytes = (u32)Renderer->SkyboxVertexBuffer.Buffer.Size;
+        SkyboxVertexBufferView.BufferLocation = Renderer->Skybox.VertexBuffer.Buffer.Handle->GetGPUVirtualAddress();
+        SkyboxVertexBufferView.SizeInBytes = (u32)Renderer->Skybox.VertexBuffer.Buffer.Size;
         SkyboxVertexBufferView.StrideInBytes = sizeof(v3);
         CommandList->IASetVertexBuffers(0, 1, &SkyboxVertexBufferView);
 
         // Bind index buffer
         local_persist D3D12_INDEX_BUFFER_VIEW SkyboxIndexBufferView;
-        SkyboxIndexBufferView.BufferLocation = Renderer->SkyboxIndexBuffer.Buffer.Handle->GetGPUVirtualAddress();
+        SkyboxIndexBufferView.BufferLocation = Renderer->Skybox.IndexBuffer.Buffer.Handle->GetGPUVirtualAddress();
         SkyboxIndexBufferView.SizeInBytes = sizeof(c_SkyboxIndices);
         SkyboxIndexBufferView.Format = DXGI_FORMAT_R32_UINT;
         CommandList->IASetIndexBuffer(&SkyboxIndexBufferView);
 
         CommandList->DrawIndexedInstanced(36, 1, 0, 0, 0);
     }
+
+    // Render distant objects
+    if (Renderer->DistantQuad.IndexCount > 0)
+    {
+        CommandList->SetGraphicsRootSignature(Renderer->Skybox.RootSignature);
+        CommandList->SetPipelineState(Renderer->DistantQuad.Pipeline.Handle);
+
+        CommandList->SetGraphicsRoot32BitConstants(0, sizeof(distant_quad_root_signature_constant_buffer) / 4, &Renderer->RenderData.DistantObjectRootSignatureBuffer, 0);
+
+        // Bind vertex positions
+        local_persist D3D12_VERTEX_BUFFER_VIEW VertexBufferView;
+        VertexBufferView.BufferLocation = Renderer->DistantQuad.VertexBuffers[CurrentBackBufferIndex].Buffer.Handle->GetGPUVirtualAddress();
+        VertexBufferView.SizeInBytes = Renderer->QuadIndexCount * sizeof(distant_quad_vertex);
+        VertexBufferView.StrideInBytes = sizeof(distant_quad_vertex);
+        CommandList->IASetVertexBuffers(0, 1, &VertexBufferView);
+
+        // Bind index buffer
+        local_persist D3D12_INDEX_BUFFER_VIEW IndexBufferView;
+        IndexBufferView.BufferLocation = Renderer->QuadIndexBuffer.Buffer.Handle->GetGPUVirtualAddress();
+        IndexBufferView.SizeInBytes = Renderer->DistantQuad.IndexCount * sizeof(u32);
+        IndexBufferView.Format = DXGI_FORMAT_R32_UINT;
+        CommandList->IASetIndexBuffer(&IndexBufferView);
+
+        CommandList->DrawIndexedInstanced(Renderer->DistantQuad.IndexCount, 1, 0, 0, 0);
+    }
+
+    // Set root constants
+    // Number of 32 bit values - 16 floats in 4x4 matrix
+    CommandList->SetGraphicsRootSignature(Renderer->RootSignature);
+    CommandList->SetDescriptorHeaps(1, (ID3D12DescriptorHeap* const*)&Renderer->SRVDescriptorHeap);
+    CommandList->SetGraphicsRootDescriptorTable(2, Renderer->SRVDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
 
     // Render instanced cuboids
     if (Renderer->CuboidInstanceCount > 0)
@@ -913,6 +992,10 @@ internal void GameRendererRender(game_renderer* Renderer)
     Renderer->QuadedCuboidVertexDataPtr = Renderer->QuadedCuboidVertexDataBase;
     Renderer->QuadedCuboidIndexCount = 0;
 
+    // Distant quads
+    Renderer->DistantQuad.IndexCount = 0;
+    Renderer->DistantQuad.VertexDataPtr = Renderer->DistantQuad.VertexDataBase;
+
     // Reset Cuboid indices
     Renderer->CuboidInstanceCount = 0;
 
@@ -958,18 +1041,24 @@ internal void GameRendererFlush(game_renderer* Renderer)
 //                                                   RENDERER API                                               
 // ===============================================================================================================
 
-internal void GameRendererSetRenderData(game_renderer* Renderer, const m4& View, const m4& Projection, const m4& InverseView, const m4& HUDProjection)
+internal void GameRendererSetRenderData(game_renderer* Renderer, const v3& CameraPosition, const m4& View, const m4& Projection, const m4& InverseView, const m4& HUDProjection, f32 Time)
 {
     auto& RenderData = Renderer->RenderData;
     RenderData.CuboidRootSignatureBuffer.View = View;
     RenderData.CuboidRootSignatureBuffer.ViewProjection = Projection * View;
+    RenderData.Projection = Projection;
+    RenderData.CameraPosition = CameraPosition;
     RenderData.HUDRootSignatureBuffer.Projection = HUDProjection;
     RenderData.SkyboxRootSignatureBuffer.InverseViewProjection = bkm::Inverse(RenderData.CuboidRootSignatureBuffer.ViewProjection);
+    RenderData.SkyboxRootSignatureBuffer.Time = Time;
+
+    // Distants quads
+    RenderData.DistantObjectRootSignatureBuffer.ViewProjectionNoTranslation = Projection * m4(m3(View)); // Remove translation
 }
 
 internal void GameRendererSubmitQuad(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v2& Scale, const v4& Color)
 {
-    Assert(Renderer->QuadIndexCount < c_MaxQuadIndices, "DrawLayer.IndexCount < c_MaxQuadIndices");
+    Assert(Renderer->QuadIndexCount < c_MaxQuadIndices, "Renderer->QuadIndexCount < c_MaxQuadIndices");
 
     m4 Transform = bkm::Translate(m4(1.0f), Translation)
         * bkm::ToM4(qtn(Rotation))
@@ -1039,6 +1128,74 @@ internal void GameRendererSubmitQuad(game_renderer* Renderer, const v3& Translat
     Renderer->QuadIndexCount += 6;
 }
 
+internal void GameRendererSubmitDistantQuad(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v2& Scale, const texture& Texture, const v4& Color)
+{
+#if 1
+    m4 Transform = bkm::Translate(m4(1.0f), Translation) * bkm::ToM4(qtn(Rotation));
+#else
+    local_persist f32 MadeUpTime = 0.0f;
+    m4& CameraView = Renderer->RenderData.CuboidRootSignatureBuffer.View;
+    v3 CameraPosition = Renderer->RenderData.CameraPosition;
+
+    f32 Distance = 100.0f;
+    float angle = MadeUpTime; // speed of day-night cycle (radians per second)
+    v3 baseDir = v3(0.0f, 1.0f, 0.0f);
+
+    // Rotate baseDir around X axis to simulate sun path
+    float cosA = bkm::Cos(angle);
+    float sinA = bkm::Sin(angle);
+    v3 SunDirection = v3(
+        baseDir.x,
+        baseDir.y * cosA - baseDir.z * sinA,
+        baseDir.y * sinA + baseDir.z * cosA
+    );
+
+    //TraceV3(SunDirection);
+
+    SunDirection = bkm::Normalize(SunDirection);
+    v3 SunPosition = SunDirection * Distance;
+
+    // Direction from sun to camera
+    v3 dirToCamera = bkm::Normalize(CameraPosition - SunPosition);
+
+    TraceV3(dirToCamera);
+
+    // World up vector
+    v3 up = v3(0.0f, 1.0f, 0.0f);
+
+    // Compute right vector
+    v3 right = bkm::Normalize(bkm::Cross(up, dirToCamera));
+    v3 correctedUp = bkm::Cross(dirToCamera, right);
+
+    // Build rotation matrix for quad facing camera
+    m4 rotation(1.0f);
+    rotation[0] = v4(right, 0.0f);
+    rotation[1] = v4(correctedUp, 0.0f);
+    rotation[2] = v4(-dirToCamera, 0.0f);
+    rotation[3] = v4(0, 0, 0, 1);
+
+    // Final model matrix
+    m4 Transform = bkm::Translate(m4(1.0f), SunPosition) * rotation * bkm::Scale(m4(1.0), v3(10));
+
+    MadeUpTime += TimeStep;
+#endif
+
+    v2 Coords[4];
+    Coords[0] = { 0.0f, 0.0f };
+    Coords[1] = { 1.0f, 0.0f };
+    Coords[2] = { 1.0f, 1.0f };
+    Coords[3] = { 0.0f, 1.0f };
+
+    for (u32 i = 0; i < CountOf(c_QuadVertexPositions); i++)
+    {
+        Renderer->DistantQuad.VertexDataPtr->Position = Transform * c_QuadVertexPositions[i];
+        Renderer->DistantQuad.VertexDataPtr++;
+    }
+
+    Renderer->DistantQuad.IndexCount += 6;
+
+}
+
 internal void GameRendererSubmitBillboardQuad(game_renderer* Renderer, const v3& Translation, const v2& Scale, const texture& Texture, const v4& Color)
 {
     m4& CameraView = Renderer->RenderData.CuboidRootSignatureBuffer.View;
@@ -1047,7 +1204,7 @@ internal void GameRendererSubmitBillboardQuad(game_renderer* Renderer, const v3&
     v3 CamUpWS(CameraView[0][1], CameraView[1][1], CameraView[2][1]);
 
     v3 Positions[4];
-    Positions[0] = Translation + CamRightWS * (c_QuadVertexPositions[0].x) * Scale.x + CamUpWS * c_QuadVertexPositions[0].y * Scale.y;
+    Positions[0] = Translation + CamRightWS * c_QuadVertexPositions[0].x * Scale.x + CamUpWS * c_QuadVertexPositions[0].y * Scale.y;
     Positions[1] = Translation + CamRightWS * c_QuadVertexPositions[1].x * Scale.x + CamUpWS * c_QuadVertexPositions[1].y * Scale.y;
     Positions[2] = Translation + CamRightWS * c_QuadVertexPositions[2].x * Scale.x + CamUpWS * c_QuadVertexPositions[2].y * Scale.y;
     Positions[3] = Translation + CamRightWS * c_QuadVertexPositions[3].x * Scale.x + CamUpWS * c_QuadVertexPositions[3].y * Scale.y;

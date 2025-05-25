@@ -8,6 +8,8 @@ internal texture TextureCreate(ID3D12Device* Device, ID3D12CommandAllocator* Com
     Assert(Pixels.Data && Pixels.Size, "Cannot create texture from empty buffer!");
     Assert(Pixels.Size <= Width * Height * 4, "Buffer is larger than Width * Height * FormatChannels!"); // TODO: Support more formats
 
+    Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+
     texture Texture = {};
     Texture.Width = Width;
     Texture.Height = Height;

@@ -1,5 +1,11 @@
 #include "Light.hlsl"
 
+float3 GammaCorrect(float3 color, float gamma)
+{
+    float OneOverGamma = 1.0f / gamma;
+    return pow(color, float3(OneOverGamma, OneOverGamma, OneOverGamma));
+}
+
 cbuffer root_constants : register(b0)
 {
     column_major float4x4 c_ViewProjection;
@@ -26,6 +32,8 @@ struct pixel_shader_input
     float2 TexCoord : TEXCOORD;
     uint TexIndex : TEXINDEX;
 };
+
+
 
 pixel_shader_input VSMain(vertex_shader_input In)
 {
@@ -58,7 +66,7 @@ SamplerState g_Sampler : register(s0);
 float4 PSMain(pixel_shader_input In) : SV_TARGET
 {
     float3 Normal = normalize(In.Normal);
-    float3 ViewDir = normalize(In.ViewPosition - In.WorldPosition.xyz);
+    float3 ViewDir = normalize(In.ViewPosition - In.WorldPosition);
     float Shininess = 32.0;
 
     float3 TextureColor = g_Texture[In.TexIndex].Sample(g_Sampler, In.TexCoord);
@@ -73,7 +81,7 @@ float4 PSMain(pixel_shader_input In) : SV_TARGET
     // Phase 2: Point lights
     for (int j = 0; j < u_PointLightCount; j++)
     {
-        Result += CalculatePointLight(u_PointLights[j], Normal, ViewDir, Shininess, In.WorldPosition.xyz, TextureColor * In.Color.rgb);
+        Result += CalculatePointLight(u_PointLights[j], Normal, ViewDir, Shininess, In.WorldPosition, TextureColor * In.Color.rgb);
     }
     
     #if 0

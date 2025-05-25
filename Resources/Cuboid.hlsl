@@ -1,5 +1,11 @@
 #include "Light.hlsl"
 
+float3 GammaCorrect(float3 Color, float Gamma)
+{
+    float OneOverGamma = 1.0f / Gamma;
+    return pow(Color, float3(OneOverGamma, OneOverGamma, OneOverGamma));
+}
+
 cbuffer root_constants : register(b0)
 {
     column_major float4x4 ViewProjectionMatrix;
@@ -49,7 +55,6 @@ pixel_shader_input VSMain(vertex_shader_input In)
 
     return Out;
 }
-
 
 // TODO: Reduce the amount of active point lights by calculating which light is visible and which is not
 cbuffer light_environment : register(b1)

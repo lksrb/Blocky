@@ -77,6 +77,11 @@ struct quad_vertex
     u32 TexIndex;
 };
 
+struct distant_quad_vertex
+{
+    v4 Position;
+};
+
 // Same as quad_vertex for now
 struct hud_quad_vertex
 {
@@ -140,12 +145,18 @@ struct hud_quad_root_signature_constant_buffer
 struct skybox_quad_root_signature_constant_buffer
 {
     m4 InverseViewProjection;
+    f32 Time;
 };
 
 struct cuboid_root_signature_constant_buffer
 {
     m4 ViewProjection;
     m4 View;
+};
+
+struct distant_quad_root_signature_constant_buffer
+{
+    m4 ViewProjectionNoTranslation;
 };
 
 struct point_light
@@ -188,6 +199,11 @@ struct render_data
     hud_quad_root_signature_constant_buffer HUDRootSignatureBuffer;
     cuboid_root_signature_constant_buffer CuboidRootSignatureBuffer;
     skybox_quad_root_signature_constant_buffer SkyboxRootSignatureBuffer;
+
+    distant_quad_root_signature_constant_buffer DistantObjectRootSignatureBuffer;
+
+    m4 Projection;
+    v3 CameraPosition;
 };
 
 // API-agnostic type definition
@@ -264,9 +280,25 @@ struct game_renderer
     u32 QuadedCuboidIndexCount = 0;
 
     // Skybox
-    dx12_pipeline SkyboxPipeline;
-    dx12_vertex_buffer SkyboxVertexBuffer;
-    dx12_index_buffer SkyboxIndexBuffer;
+    struct
+    {
+        dx12_pipeline Pipeline;
+        dx12_vertex_buffer VertexBuffer;
+        dx12_index_buffer IndexBuffer;
+        ID3D12RootSignature* RootSignature;
+    } Skybox;
+    
+    // Distant quads (sun, moon, stars, ...)
+    struct
+    {
+        dx12_pipeline Pipeline;
+        dx12_vertex_buffer VertexBuffers[FIF];
+        distant_quad_vertex* VertexDataBase;
+        distant_quad_vertex* VertexDataPtr;
+        u32 IndexCount = 0;
+        //ID3D12RootSignature* DistantQuadsRootSignature;
+    } DistantQuad;
+
 
     // All possible data the renderer needs
     render_data RenderData;
@@ -304,13 +336,14 @@ internal void GameRendererFlush(game_renderer* Renderer);
 // ===============================================================================================================
 
 // Set all possible needed state here
-internal void GameRendererSetRenderData(game_renderer* Renderer, const m4& View, const m4& Projection, const m4& InverseView, const m4& HUDProjection);
+internal void GameRendererSetRenderData(game_renderer* Renderer, const v3& CameraPosition, const m4& View, const m4& Projection, const m4& InverseView, const m4& HUDProjection, f32 Time);
 
 // Quad render commands
 internal void GameRendererSubmitQuad(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v2& Scale, const v4& Color);
 internal void GameRendererSubmitQuad(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v2& Scale, const texture& Texture, const v4& Color);
 internal void GameRendererSubmitQuadCustom(game_renderer* Renderer, v3 VertexPositions[4], const texture& Texture, const v4& Color);
 internal void GameRendererSubmitBillboardQuad(game_renderer* Renderer, const v3& Translation, const v2& Scale, const texture& Texture, const v4& Color);
+internal void GameRendererSubmitDistantQuad(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v2& Scale, const texture& Texture, const v4& Color);
 
 // Cuboid first single unique texture - good for most of the blocks
 internal void GameRendererSubmitCuboid(game_renderer* Renderer, const v3& Translation, const v4& Color);
@@ -331,7 +364,7 @@ internal void GameRendererSubmitPointLight(game_renderer* Renderer, const v3& Po
 // ===============================================================================================================
 internal void GameRendererHUDSubmitQuad(game_renderer* Renderer, v3 VertexPositions[4], const texture& Texture, const texture_coords& Coords = texture_coords(), const v4& Color = v4(1.0f));
 
-internal constexpr v3 c_SkyboxVertices[8] = 
+internal constexpr v3 c_SkyboxVertices[8] =
 {
     {-1.0f, -1.0f, -1.0f}, // 0: Left  Bottom Back
     { 1.0f, -1.0f, -1.0f}, // 1: Right Bottom Back
@@ -343,7 +376,7 @@ internal constexpr v3 c_SkyboxVertices[8] =
     {-1.0f,  1.0f,  1.0f}  // 7: Left  Top    Front
 };
 
-internal constexpr u32 c_SkyboxIndices[36] = 
+internal constexpr u32 c_SkyboxIndices[36] =
 {
     // Back face
     0, 1, 2,  2, 3, 0,
@@ -360,7 +393,7 @@ internal constexpr u32 c_SkyboxIndices[36] =
 };
 
 // Each face has to have a normal vector, so unfortunately we cannot encode Cuboid as 8 vertices
-internal constexpr v4 c_CuboidVerticesPositions[24] = 
+internal constexpr v4 c_CuboidVerticesPositions[24] =
 {
     // Front face (+Z)
     { -0.5f, -0.5f,  0.5f, 1.0f },

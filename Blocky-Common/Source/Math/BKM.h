@@ -592,6 +592,21 @@ namespace bkm {
         return v3(x, y, z);
     }
 
+    qtn AngleAxis(f32 angle, const v3& axis)
+    {
+        v3 normAxis = Normalize(axis);
+        f32 halfAngle = angle * 0.5f;
+        f32 sinHalf = Sin(halfAngle);
+        f32 cosHalf = Cos(halfAngle);
+
+        return qtn(
+            normAxis.x * sinHalf,
+            normAxis.y * sinHalf,
+            normAxis.z * sinHalf,
+            cosHalf
+        );
+    }
+
     template<typename T>
     inline T Min(T a, T b)
     {
