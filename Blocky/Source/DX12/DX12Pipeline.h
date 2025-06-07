@@ -37,7 +37,8 @@ internal dx12_pipeline DX12GraphicsPipelineCreate(ID3D12Device* Device, ID3D12Ro
 #else
         LPCWSTR Arguments[] = {
             L"-T", L"vs_6_0",  // Shader profile
-            L"-E", L"VSMain", // Entry point
+            L"-E", L"VSMain", 
+             L"-IResources" // Entry point
             //L"-Zi",            // Debug info
             //L"-Qembed_debug",  // Embed debug info
         };
@@ -85,6 +86,7 @@ internal dx12_pipeline DX12GraphicsPipelineCreate(ID3D12Device* Device, ID3D12Ro
         LPCWSTR Arguments[] = {
            L"-T", L"ps_6_0",  // Shader profile
            L"-E", L"PSMain", // Entry point
+           L"-IResources"
            //L"-Zi",            // Debug info
            //L"-Qembed_debug",  // Embed debug info
         };

@@ -1,11 +1,5 @@
 #include "Light.hlsl"
 
-float3 GammaCorrect(float3 color, float gamma)
-{
-    float OneOverGamma = 1.0f / gamma;
-    return pow(color, float3(OneOverGamma, OneOverGamma, OneOverGamma));
-}
-
 cbuffer root_constants : register(b0)
 {
     column_major float4x4 c_ViewProjection;
@@ -32,8 +26,6 @@ struct pixel_shader_input
     float2 TexCoord : TEXCOORD;
     uint TexIndex : TEXINDEX;
 };
-
-
 
 pixel_shader_input VSMain(vertex_shader_input In)
 {

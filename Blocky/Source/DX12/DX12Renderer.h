@@ -12,7 +12,7 @@
 
 internal constexpr u32 c_MaxTexturesPerDrawCall = 32; // TODO: Get this from the driver
 
-internal constexpr u32 c_MaxCubePerBatch = 1 << 16;
+internal constexpr u32 c_MaxCubePerBatch = 1 << 18;
 
 internal constexpr u32 c_MaxQuadsPerBatch = 1 << 4;
 internal constexpr u32 c_MaxQuadVertices = c_MaxQuadsPerBatch * 4;
@@ -343,7 +343,7 @@ internal void GameRendererSubmitQuad(game_renderer* Renderer, const v3& Translat
 internal void GameRendererSubmitQuad(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v2& Scale, const texture& Texture, const v4& Color);
 internal void GameRendererSubmitQuadCustom(game_renderer* Renderer, v3 VertexPositions[4], const texture& Texture, const v4& Color);
 internal void GameRendererSubmitBillboardQuad(game_renderer* Renderer, const v3& Translation, const v2& Scale, const texture& Texture, const v4& Color);
-internal void GameRendererSubmitDistantQuad(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v2& Scale, const texture& Texture, const v4& Color);
+internal void GameRendererSubmitDistantQuad(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const texture& Texture, const v4& Color);
 
 // Cuboid first single unique texture - good for most of the blocks
 internal void GameRendererSubmitCuboid(game_renderer* Renderer, const v3& Translation, const v4& Color);

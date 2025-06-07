@@ -106,6 +106,11 @@ namespace bkm {
         return (value - min) / (max - min);
     }
 
+    inline f32 Normalize01(f32 value)
+    {
+        return Normalize(value, 0, 1);
+    }
+
     // Goniometric functions
     inline f32 Cos(f32 x) noexcept
     {
@@ -510,9 +515,9 @@ namespace bkm {
         return v2(Lerp(v0.x, v1.x, maxDistanceDelta), Lerp(v0.y, v1.y, maxDistanceDelta));
     }
 
-    inline v3 Lerp(v3 v1, v3 v2, f32 maxDistanceDelta)
+    inline v3 Lerp(v3 v0, v3 v1, f32 maxDistanceDelta)
     {
-        return v3(Lerp(v1.x, v2.x, maxDistanceDelta), Lerp(v1.y, v2.y, maxDistanceDelta), Lerp(v1.z, v2.z, maxDistanceDelta));
+        return v3(Lerp(v0.x, v1.x, maxDistanceDelta), Lerp(v0.y, v1.y, maxDistanceDelta), Lerp(v0.z, v1.z, maxDistanceDelta));
     }
 
     inline f32 Dot(qtn q1, qtn q2)

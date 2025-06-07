@@ -527,7 +527,7 @@ int main(int argc, char** argv)
     Trace("Hello, Blocky!");
 
     // If the application is not DPI aware, Windows will automatically scale the pixels to a DPI scale value (150% for example)
-    // So if the resolution is 3840×2160, the applicaton window client area would be 2560×1440, so Windows scales that defaultly.
+    // So if the resolution is 3840×2160, the application window client area would be 2560×1440, so Windows scales that defaultly.
     // By settings this, Windows will no longer be able to scale pixels resulting in sharper image.
     // Note that DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 is for Windows build version > 1607,
     // so we need to add something if this failes

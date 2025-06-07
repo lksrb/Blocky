@@ -1128,57 +1128,9 @@ internal void GameRendererSubmitQuad(game_renderer* Renderer, const v3& Translat
     Renderer->QuadIndexCount += 6;
 }
 
-internal void GameRendererSubmitDistantQuad(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v2& Scale, const texture& Texture, const v4& Color)
+internal void GameRendererSubmitDistantQuad(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const texture& Texture, const v4& Color)
 {
-#if 1
     m4 Transform = bkm::Translate(m4(1.0f), Translation) * bkm::ToM4(qtn(Rotation));
-#else
-    local_persist f32 MadeUpTime = 0.0f;
-    m4& CameraView = Renderer->RenderData.CuboidRootSignatureBuffer.View;
-    v3 CameraPosition = Renderer->RenderData.CameraPosition;
-
-    f32 Distance = 100.0f;
-    float angle = MadeUpTime; // speed of day-night cycle (radians per second)
-    v3 baseDir = v3(0.0f, 1.0f, 0.0f);
-
-    // Rotate baseDir around X axis to simulate sun path
-    float cosA = bkm::Cos(angle);
-    float sinA = bkm::Sin(angle);
-    v3 SunDirection = v3(
-        baseDir.x,
-        baseDir.y * cosA - baseDir.z * sinA,
-        baseDir.y * sinA + baseDir.z * cosA
-    );
-
-    //TraceV3(SunDirection);
-
-    SunDirection = bkm::Normalize(SunDirection);
-    v3 SunPosition = SunDirection * Distance;
-
-    // Direction from sun to camera
-    v3 dirToCamera = bkm::Normalize(CameraPosition - SunPosition);
-
-    TraceV3(dirToCamera);
-
-    // World up vector
-    v3 up = v3(0.0f, 1.0f, 0.0f);
-
-    // Compute right vector
-    v3 right = bkm::Normalize(bkm::Cross(up, dirToCamera));
-    v3 correctedUp = bkm::Cross(dirToCamera, right);
-
-    // Build rotation matrix for quad facing camera
-    m4 rotation(1.0f);
-    rotation[0] = v4(right, 0.0f);
-    rotation[1] = v4(correctedUp, 0.0f);
-    rotation[2] = v4(-dirToCamera, 0.0f);
-    rotation[3] = v4(0, 0, 0, 1);
-
-    // Final model matrix
-    m4 Transform = bkm::Translate(m4(1.0f), SunPosition) * rotation * bkm::Scale(m4(1.0), v3(10));
-
-    MadeUpTime += TimeStep;
-#endif
 
     v2 Coords[4];
     Coords[0] = { 0.0f, 0.0f };
@@ -1193,7 +1145,6 @@ internal void GameRendererSubmitDistantQuad(game_renderer* Renderer, const v3& T
     }
 
     Renderer->DistantQuad.IndexCount += 6;
-
 }
 
 internal void GameRendererSubmitBillboardQuad(game_renderer* Renderer, const v3& Translation, const v2& Scale, const texture& Texture, const v4& Color)

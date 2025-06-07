@@ -25,56 +25,54 @@ pixel_shader_input VSMain(vertex_shader_input In)
     return Out;
 }
 
-float3 dawnColor(float t, float2 uv)
+// Plot a line on Y using a value between 0.0-1.0
+float plot(float2 st)
 {
-    // Define key dawn sky colors
-    float3 night = float3(0.05, 0.05, 0.2); // dark blue
-    float3 horizon = float3(1.0, 0.4, 0.2); // orange-pink
-    float3 zenith = float3(0.2, 0.4, 0.8); // light blue
-
-    // Vertical gradient factor (Y from bottom to top)
-    float f = saturate(uv.y);
-
-    // Blend horizon and zenith
-    float3 sky = lerp(zenith, horizon, f);
-
-    // Dawn transition blend factor
-    float transition = smoothstep(0.20, 0.30, t); // fades in between 0.20 and 0.30 (dawn)
-    
-    // Mix night and dawn gradient
-    return lerp(night, sky, transition);
+    return smoothstep(0.02, 0.0, abs(st.y - st.x));
 }
 
 float4 PSMain(pixel_shader_input In) : SV_Target
 {
-    float3 st = (In.WorldPosition.xyz + float3(1.0, 1.0, 1.0)) / 2;
-    //saturate((In.WorldPosition + float3(1.0, 1.0, 1.0)) / 2.0);
+    // In.Position - screen coords in pixels
     
-    float2 resolution = float2(1600, 900);
+    float2 UV = (In.WorldPosition.xy + float2(1.0, 1.0)) / 2;
+    float T = sin(c_Time * 0.1);
+    float2 Resolution = float2(2160, 1185);
     
-    float3 skyColor = float3(0.2, 0.3, 0.8);
+    // Normalized and flipped
+    float2 ST = In.Position.xy / Resolution;
+    ST.y = 1.0 - ST.y;
     
-    //float2 st = In.Position.xy / resolution;
+     // Define key colors
+    float3 Night = float3(0.05, 0.05, 0.2); // dark blue
+    float3 Horizon = float3(1.0, 0.4, 0.2); // orange-pink (dawn)
+    float3 DawnZenith = float3(0.2, 0.4, 0.8); // light blue (early morning)
+    float3 DayZenith = float3(0.4, 0.6, 1.0); // bright daytime blue
+
+    // Vertical gradient factor
+    float Gradient = saturate(UV.y);
+
+    // Dawn gradient (zenith to horizon)
+    float3 DawnSky = lerp(DawnZenith, Horizon, Gradient);
+
+    // Day gradient (brighter blue sky)
+    float3 DaySky = lerp(DayZenith, float3(1.0, 1.0, 1.0), Gradient * 0.1); // Slight gradient toward white at horizon
+
+    // Night Dawn transition
+    float DawnBlend = smoothstep(0.10, 0.20, T);
+
+    // Dawn Day transition
+    float DayBlend = smoothstep(0.30, 0.50, T);
+
+    // Blend night and dawn
+    float3 SkyColor = lerp(Night, DawnSky, DawnBlend);
+
+    // Blend dawn and day sky
+    SkyColor = lerp(SkyColor, DaySky, DayBlend);
     
-    float3 nightColor = float3(0.05, 0.05, 0.1);
+     // Plot a line
+    float PCT = plot(ST.xy);
+    //SkyColor = (1.0 - PCT) * SkyColor + PCT * float3(1.0, 1.0, 0.0);
     
-    //float3 dawnColor = float3(1.0, 0.4, 0.3);
-    float3 dayColor = float3(0.5, 0.7, 1.0);
-    float3 duskColor = float3(1.0, 0.3, 0.2);
-    
-    float y = st.x;
-    
-    float3 color = float3(y, y, y);
-    
-    color = lerp(color, skyColor, st.z);
-    
-    // top-right
-    // vec2 tr = step(vec2(0.1),1.0-st);
-    // pct *= tr.x * tr.y;
-    
-    float t = sin(c_Time * 0.5);
-    
-    color = dawnColor(t, st.xy);
-    
-    return float4(color, 1.0);
+    return float4(SkyColor, 1.0);
 }

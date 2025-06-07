@@ -44,7 +44,8 @@ float3 CalculateDirectionalLight(directional_light Light, float3 Normal, float3 
     // Combine results
     float3 Ambient = Light.Intensity * LightAmbient * Light.Radiance * TextureColor;
     float3 Diffuse = Light.Intensity * LightDiffuse * Light.Radiance * DiffuseAngle * TextureColor;
-    float3 Specular = Light.Intensity * LightSpecular * Light.Radiance * Spec * TextureColor;
+    //float3 Specular = Light.Intensity * LightSpecular * Light.Radiance * Spec * TextureColor;
+    float3 Specular = float3(0.0, 0.0, 0.0);
     Result += (Ambient + Diffuse + Specular);
 
     return Result;

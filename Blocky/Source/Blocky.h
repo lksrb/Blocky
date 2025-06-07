@@ -84,9 +84,9 @@ struct block
     //i32 Left = INT_MAX, Right = INT_MAX, Front = INT_MAX, Back = INT_MAX, Up = INT_MAX, Down = INT_MAX; // Neighbours
 };
 
-internal const i64 RowCount = 16;
-internal const i64 ColumnCount = 16;
-internal const i64 LayerCount = 256;
+internal const i64 RowCount = 64;
+internal const i64 ColumnCount = 64;
+internal const i64 LayerCount = 32;
 internal const i32 MaxAliveEntitiesCount = 16;
 internal const f32 c_TexelSize = 1 / 16.0f; // Global scale for entity models. 1m block is exactly 16x16 texels.
 
@@ -171,7 +171,7 @@ internal block* BlockGetSafe(game* Game, i32 C, i32 R, i32 L)
 {
     if (C >= 0 && C < ColumnCount &&
        R >= 0 && R < RowCount &&
-       L > 0 && L < LayerCount)
+       L >= 0 && L < LayerCount)
     {
         return &Game->Blocks[(L * RowCount * ColumnCount) + (R * RowCount) + C];
     }

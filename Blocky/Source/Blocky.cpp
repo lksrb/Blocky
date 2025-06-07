@@ -169,7 +169,7 @@ internal game GameCreate(game_renderer* Renderer)
 internal void GameGenerateWorld(game* Game)
 {
     Game->BlocksCount = RowCount * ColumnCount * LayerCount;
-    Game->Blocks = new block[Game->BlocksCount];
+    Game->Blocks = VmAllocArray(block, Game->BlocksCount);
 
     v3 StartPos = { 0, 0, 0, };
 
@@ -188,12 +188,13 @@ internal void GameGenerateWorld(game* Game)
             {
                 // Establish a "Block"
                 auto& Block = Game->Blocks[(L * RowCount * ColumnCount) + (R * RowCount) + C];
+                Block.Color = (CikCak & 1) ? v4(0.2f, 0.2f, 0.2f, 1.0f) : v4(1.0f);
 
-                if (L < 16)
+                if (L < 1)
                 {
                     Block.Position = v3(StartPos.x, StartPos.y, StartPos.z);
                     Block.Type = block_type::Dirt;
-                    Block.Color = (CikCak & 1) ? v4(0.2f, 0.2f, 0.2f, 1.0f) : v4(1.0f);
+                    Block.Color = v4(1.0f);
                 }
                 else
                 {
@@ -254,6 +255,50 @@ internal void GameGenerateWorld(game* Game)
         StartPos.y++;
     }
 
+    random_series Series = RandomSeriesCreate();
+
+    for (i32 L = 0; L < LayerCount; L++)
+    {
+        for (i32 R = 0; R < RowCount; R++)
+        {
+            for (i32 C = 0; C < ColumnCount; C++)
+            {
+                i32 Index = (L * RowCount * ColumnCount) + (R * RowCount) + C;
+                auto& Block = Game->Blocks[Index];
+
+                if (!Block.Placed())
+                {
+                    f32 A = 5.0f;
+                    f32 F = 0.5f;
+                    f32 Threshold = 2.0f; // max distance to sine curve for intersection
+
+                    // Compute block center position in world space
+                    v3 BlockPos(C, L, R);
+
+                    // Use block's x as parameter t along sine curve
+                    f32 T0 = BlockPos.x;
+                    f32 T1 = BlockPos.z;
+
+                    // Calculate sine curve center at t
+                    v3 CursePosition;
+                    CursePosition.x = T0;
+                    CursePosition.y = A * (bkm::Sin(F * T0) + bkm::Sin(F * T1));
+                    CursePosition.z = BlockPos.z; // or fixed z if needed
+
+                    // Calculate distance from block to sine curve point
+                    f32 Distance = bkm::Length(BlockPos - CursePosition);
+
+                    // If distance less than threshold, block intersects sine wave region
+                    if (Distance < Threshold)
+                    {
+                        Block.Type = block_type::Dirt;
+                        // This empty block intersects the sine curve area
+                        // Do whatever you want here (e.g. mark it, fill it, etc)
+                    }
+                }
+            }
+        }
+    }
 }
 
 internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* Input, f32 TimeStep, u32 ClientAreaWidth, u32 ClientAreaHeight)
@@ -316,29 +361,44 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
     }
 
     // Lights
-    GameRendererSubmitPointLight(Renderer, v3(14, 20, 10), 10.0, 1.0f, v3(1.0f), 2.0f);
-    GameRendererSubmitDirectionalLight(Renderer, v3(-1.0, -1.0, 1.0), 0.1f, v3(1.0f));
+    GameRendererSubmitPointLight(Renderer, v3(14, 20, 10), 10.0, 1.0f, v3(1.0f), 1.0f);
+
+    f32 GameTime = Game->TimeSinceStart * 0.1f;
+    //Trace("%.3f", GameTime);
 
     // Render sun
     {
         f32 Distance = 10.0f;
-        f32 Angle = Game->TimeSinceStart * 0.1; // speed of day-night cycle (radians per second)
-        v3 baseDir = v3(0.0f, 1.0f, 0.0f);
-
+        f32 Angle = bkm::PI_HALF - GameTime; // speed of day-night cycle (radians per second)
         // Rotate baseDir around X axis to simulate sun path
-        f32 cosA = bkm::Cos(Angle);
-        f32 sinA = bkm::Sin(Angle);
+        f32 CosA = bkm::Cos(Angle);
+        f32 SinA = bkm::Sin(Angle);
+        v3 BaseDir = v3(0.0f, 1.0f, 0.0f);
         v3 SunDirection = v3(
-            baseDir.x,
-            baseDir.y * cosA - baseDir.z * sinA,
-            baseDir.y * sinA + baseDir.z * cosA
+            BaseDir.x,
+            BaseDir.y * CosA - BaseDir.z * SinA,
+            BaseDir.y * SinA + BaseDir.z * CosA
         );
 
         SunDirection = bkm::Normalize(SunDirection);
         v3 SunPosition = SunDirection * Distance;
-
         v3 SunRotation(bkm::PI_HALF + Angle, 0, 0);
-        GameRendererSubmitDistantQuad(Renderer, SunPosition, SunRotation, v2(1), texture(), v4(1));
+        GameRendererSubmitDistantQuad(Renderer, SunPosition, SunRotation, texture(), v4(1));
+
+        // TODO: On sunset and sunrise, tweak directional light color to "reflect" the sky color
+        local_persist v3 FinalColor = v3(0.8f, 0.5f, 0.3);
+        if (GameTime > bkm::PI_HALF)
+        {
+            FinalColor = bkm::Lerp(FinalColor, v3(0.8f, 0.5f, 0.3), TimeStep * 0.3f);
+        }
+        else
+        {
+            FinalColor = bkm::Lerp(FinalColor, v3(1.0f), TimeStep * 0.3f);
+        }
+
+        //TraceV3(FinalColor);
+
+        GameRendererSubmitDirectionalLight(Renderer, -SunDirection, 1.5f, v3(1.0f));
     }
 
     // Render Debug UI
