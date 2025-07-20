@@ -273,7 +273,7 @@ internal void GameGenerateWorld(game* Game)
                     f32 Threshold = 2.0f; // max distance to sine curve for intersection
 
                     // Compute block center position in world space
-                    v3 BlockPos(C, L, R);
+                    v3 BlockPos((f32)C, (f32)L, (f32)R);
 
                     // Use block's x as parameter t along sine curve
                     f32 T0 = BlockPos.x;

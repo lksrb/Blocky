@@ -161,7 +161,6 @@ internal ecs_entity_type SparseSetAdd(sparse_set* Set, ecs_entity_type Entity)
     Set->Dense[Set->DenseCount] = Entity;
     Set->Sparse[Entity] = Set->DenseCount;
 
-    // Get the actual transform
     return Set->DenseCount++;
 }
 

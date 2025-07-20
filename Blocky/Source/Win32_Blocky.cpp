@@ -487,7 +487,7 @@ internal game_window CreateGameWindow()
     WindowClass.hIcon = LoadIcon(WindowClass.hInstance, nullptr);
     WindowClass.hbrBackground = nullptr;
     RegisterClassEx(&WindowClass);
-
+    
     // NOTE: Also this means that there will be no glitch when opening the game
     // NOTE: When using Vulkan, WS_EX_NOREDIRECTIONBITMAP does not work on Intel GPUs (even when they just pass data)
     DWORD ExStyle = WS_EX_APPWINDOW | WS_EX_NOREDIRECTIONBITMAP;
@@ -507,14 +507,15 @@ internal game_window CreateGameWindow()
 
     // Register mouse device for raw input
     {
-        RAWINPUTDEVICE rid[1];
+        RAWINPUTDEVICE RawInputDevice[1];
 
         // Register mouse
-        rid[0].usUsagePage = HID_USAGE_PAGE_GENERIC; // Generic desktop controls
-        rid[0].usUsage = HID_USAGE_GENERIC_MOUSE;
-        rid[0].dwFlags = RIDEV_INPUTSINK;            // Receive input even if not in focus
-        rid[0].hwndTarget = Window.Handle;
-        BOOL success = RegisterRawInputDevices(rid, CountOf(rid), sizeof(RAWINPUTDEVICE));
+        RawInputDevice[0].usUsagePage = HID_USAGE_PAGE_GENERIC; // Generic desktop controls
+        RawInputDevice[0].usUsage = HID_USAGE_GENERIC_MOUSE;
+        RawInputDevice[0].dwFlags = RIDEV_INPUTSINK;            // Receive input even if not in focus
+        RawInputDevice[0].hwndTarget = Window.Handle;
+        BOOL success = RegisterRawInputDevices(RawInputDevice, CountOf(RawInputDevice), sizeof(RAWINPUTDEVICE));
+
         // TODO: Fallback to default input
         Assert(success, "Failed to register raw input device!");
     }
@@ -574,6 +575,7 @@ int main(int argc, char** argv)
         // Process events
         Win32ProcessEvents(&Input, Window);
 
+        // Only reliable way of knowing if we are minimized or not
         IsMinimized = IsIconic(Window.Handle);
 
         if (g_DoResize)
