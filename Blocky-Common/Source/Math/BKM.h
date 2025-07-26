@@ -294,6 +294,21 @@ namespace bkm {
         return result;
     }
 
+    inline m4 OrthoD3D(f32 left, f32 right, f32 bottom, f32 top, f32 zNear, f32 zFar)
+    {
+        m4 result(1.0f);
+        result[0][0] = 2.0f / (right - left);
+        result[1][1] = 2.0f / (top - bottom);
+        result[2][2] = 1.0f / (zFar - zNear);               // ✔ No negation
+        result[3][0] = -(right + left) / (right - left);
+        result[3][1] = -(top + bottom) / (top - bottom);
+        result[3][2] = -zNear / (zFar - zNear);             // ✔ Note: no -1 offset
+        result[3][3] = 1.0f;
+
+        return result;
+    }
+
+
     inline m3 Translate(m3 m, v2 v)
     {
         m3 result(m);
@@ -479,6 +494,31 @@ namespace bkm {
         result[3][1] = -Dot(u, eye);
         result[3][2] = Dot(f, eye);
 
+        return result;
+    }
+
+    inline m4 LookAtD3D(v3 eye, v3 center, v3 up)
+    {
+        m4 result(1.0f);
+
+        const v3 f = Normalize(center - eye);          // Forward (no negate)
+        const v3 s = Normalize(Cross(up, f));          // Right
+        const v3 u = Cross(f, s);                      // Recomputed Up
+
+        result[0][0] = s.x;
+        result[1][0] = s.y;
+        result[2][0] = s.z;
+        result[0][1] = u.x;
+        result[1][1] = u.y;
+        result[2][1] = u.z;
+        result[0][2] = f.x;
+        result[1][2] = f.y;
+        result[2][2] = f.z;
+
+        result[3][0] = -Dot(s, eye);
+        result[3][1] = -Dot(u, eye);
+        result[3][2] = -Dot(f, eye);
+        result[3][3] = 1.0f;
         return result;
     }
 

@@ -3,6 +3,77 @@
 internal ID3D12DescriptorHeap* g_OfflineTextureHeap = nullptr;
 internal u32 g_OfflineTextureHeapIndex = 0; // Simply increment every time a texture is created. TODO: Freelist allocator
 
+internal texture TextureCreate(ID3D12Device* Device, u32 Width, u32 Height, DXGI_FORMAT Format, D3D12_RESOURCE_STATES InitialState, const wchar_t* DebugName = L"DX12Texture")
+{
+    texture Texture = {};
+    Texture.Width = Width;
+    Texture.Height = Height;
+    Texture.Format = Format;
+
+    // Describe and create a Texture2D.
+    D3D12_RESOURCE_DESC TextureDesc = {};
+    TextureDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+    TextureDesc.MipLevels = 1;
+    TextureDesc.Format = Texture.Format;
+    TextureDesc.Width = Texture.Width;
+    TextureDesc.Height = Texture.Height;
+    TextureDesc.DepthOrArraySize = 1;
+    TextureDesc.SampleDesc.Count = 1;
+    TextureDesc.SampleDesc.Quality = 0;
+    TextureDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+    TextureDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
+
+    D3D12_HEAP_PROPERTIES HeapProperties = {};
+    HeapProperties.Type = D3D12_HEAP_TYPE_DEFAULT;
+    HeapProperties.CreationNodeMask = 1;
+    HeapProperties.VisibleNodeMask = 1;
+    HeapProperties.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+    HeapProperties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+
+    DxAssert(Device->CreateCommittedResource(
+        &HeapProperties,
+        D3D12_HEAP_FLAG_NONE,
+        &TextureDesc,
+        InitialState,
+        nullptr,
+        IID_PPV_ARGS(&Texture.Handle)));
+
+    Texture.Handle->SetName(DebugName);
+
+    // TODO: Hacky but will work for some time
+    if (!g_OfflineTextureHeap)
+    {
+        D3D12_DESCRIPTOR_HEAP_DESC Desc = {};
+        Desc.NumDescriptors = 1024; // TODO: Some sufficient number
+        Desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+        Desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE; // Invisible to shaders
+        Desc.NodeMask = 0;
+        DxAssert(Device->CreateDescriptorHeap(&Desc, IID_PPV_ARGS(&g_OfflineTextureHeap)));
+    }
+
+    Assert(g_OfflineTextureHeapIndex < 1024, "Descriptor heap reached maximum capacity!");
+
+    // Describe and create a SRV for the white texture.
+    Texture.SRVDescriptor = g_OfflineTextureHeap->GetCPUDescriptorHandleForHeapStart();
+    auto DescriptorSize = Device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+    {
+        D3D12_SHADER_RESOURCE_VIEW_DESC Desc = {};
+        Desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+        Desc.Format = Texture.Format;
+        Desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+        Desc.Texture2D.MipLevels = 1;
+        Desc.Texture2D.MostDetailedMip = 0;
+        Desc.Texture2D.PlaneSlice = 0;
+        Desc.Texture2D.ResourceMinLODClamp = 0.0f;
+        Texture.SRVDescriptor.ptr += g_OfflineTextureHeapIndex * DescriptorSize; // Free slot
+        Device->CreateShaderResourceView(Texture.Handle, &Desc, Texture.SRVDescriptor);
+
+        g_OfflineTextureHeapIndex++;
+    }
+
+    return Texture;
+}
+
 internal texture TextureCreate(ID3D12Device* Device, ID3D12CommandAllocator* CommandAllocator, ID3D12GraphicsCommandList* CommandList, ID3D12CommandQueue* CommandQueue, buffer Pixels, u32 Width, u32 Height, DXGI_FORMAT Format)
 {
     Assert(Pixels.Data && Pixels.Size, "Cannot create texture from empty buffer!");
@@ -49,6 +120,7 @@ internal texture TextureCreate(ID3D12Device* Device, ID3D12CommandAllocator* Com
         Texture.Width = Width;
         Texture.Height = Height;
         Texture.Handle->SetName(L"DX12Texture");
+        //Texture = TextureCreate(Device, Width, Height, Format, D3D12_RESOURCE_STATE_COPY_DEST, "
     }
 
     // Create the GPU upload buffer.
@@ -118,9 +190,10 @@ internal texture TextureCreate(ID3D12Device* Device, ID3D12CommandAllocator* Com
         DX12SubmitToQueueImmidiate(Device, CommandAllocator, CommandList, CommandQueue, [&](ID3D12GraphicsCommandList* CommandList)
         {
             CommandList->CopyTextureRegion(&Dst, 0, 0, 0, &Src, nullptr);
-            auto Barrier = DX12Transition(Texture.Handle, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-            CommandList->ResourceBarrier(1, &Barrier);
+            DX12CmdTransition(CommandList, Texture.Handle, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
         });
+
+        UploadBuffer->Release();
     }
 
     // Hacky but will work for some time
@@ -153,6 +226,7 @@ internal texture TextureCreate(ID3D12Device* Device, ID3D12CommandAllocator* Com
 
         g_OfflineTextureHeapIndex++;
     }
+
 
     return Texture;
 }

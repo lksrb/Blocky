@@ -1,6 +1,6 @@
 #include "DX12Buffer.h"
 
-internal dx12_buffer DX12BufferCreate(ID3D12Device* Device, D3D12_RESOURCE_STATES ResourceState, D3D12_HEAP_TYPE HeapType, u64 Size)
+internal dx12_buffer DX12BufferCreate(ID3D12Device* Device, D3D12_RESOURCE_STATES ResourceState, D3D12_HEAP_TYPE HeapType, u32 Size)
 {
     dx12_buffer Buffer = {};
 
@@ -44,7 +44,7 @@ internal void DX12BufferDestroy(dx12_buffer* Buffer)
     Buffer->Size = 0;
 }
 
-internal dx12_vertex_buffer DX12VertexBufferCreate(ID3D12Device* Device, u64 Size)
+internal dx12_vertex_buffer DX12VertexBufferCreate(ID3D12Device* Device, u32 Size)
 {
     dx12_vertex_buffer VertexBuffer = {};
     VertexBuffer.Buffer = DX12BufferCreate(Device, D3D12_RESOURCE_STATE_COMMON, D3D12_HEAP_TYPE_DEFAULT, Size);
@@ -62,7 +62,7 @@ internal void DX12VertexBufferDestroy(dx12_vertex_buffer* VertexBuffer)
     DX12BufferDestroy(&VertexBuffer->IntermediateBuffer);
 }
 
-internal void DX12VertexBufferSendData(dx12_vertex_buffer* VertexBuffer, ID3D12GraphicsCommandList* CommandList, const void* Data, u64 DataSize)
+internal void DX12VertexBufferSendData(dx12_vertex_buffer* VertexBuffer, ID3D12GraphicsCommandList* CommandList, const void* Data, u32 DataSize)
 {
     Assert(VertexBuffer->Buffer.Size >= DataSize, "Buffer overload!");
 
@@ -71,13 +71,9 @@ internal void DX12VertexBufferSendData(dx12_vertex_buffer* VertexBuffer, ID3D12G
 
     memcpy(VertexBuffer->MappedIntermediateData, Data, DataSize);
 
-    auto Barrier = DX12Transition(VertexBuffer->Buffer.Handle, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER, D3D12_RESOURCE_STATE_COPY_DEST);
-    CommandList->ResourceBarrier(1, &Barrier);
-
+    DX12CmdTransition(CommandList, VertexBuffer->Buffer.Handle, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER, D3D12_RESOURCE_STATE_COPY_DEST);
     CommandList->CopyBufferRegion(VertexBuffer->Buffer.Handle, 0, VertexBuffer->IntermediateBuffer.Handle, 0, DataSize);
-
-    Barrier = DX12Transition(VertexBuffer->Buffer.Handle, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
-    CommandList->ResourceBarrier(1, &Barrier);
+    DX12CmdTransition(CommandList, VertexBuffer->Buffer.Handle, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
 }
 
 internal dx12_index_buffer DX12IndexBufferCreate(ID3D12Device* Device, ID3D12CommandAllocator* CommandAllocator, ID3D12GraphicsCommandList* CommandList, ID3D12CommandQueue* CommandQueue, const u32* Data, u32 Count)
@@ -106,7 +102,7 @@ internal void DX12IndexBufferDestroy(dx12_index_buffer* IndexBuffer)
     DX12BufferDestroy(&IndexBuffer->Buffer);
 }
 
-internal dx12_constant_buffer DX12ConstantBufferCreate(ID3D12Device* Device, u64 Size)
+internal dx12_constant_buffer DX12ConstantBufferCreate(ID3D12Device* Device, u32 Size)
 {
     dx12_constant_buffer ConstantBuffer = {};
     ConstantBuffer.Buffer = DX12BufferCreate(Device, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_HEAP_TYPE_UPLOAD, Size);
@@ -120,7 +116,7 @@ internal void DX12ConstantBufferDestroy(dx12_constant_buffer* ConstantBuffer)
     DX12BufferDestroy(&ConstantBuffer->Buffer);
 }
 
-internal void DX12ConstantBufferSetData(dx12_constant_buffer* ConstantBuffer, const void* Data, u64 Size)
+internal void DX12ConstantBufferSetData(dx12_constant_buffer* ConstantBuffer, const void* Data, u32 Size)
 {
     Assert(ConstantBuffer->Buffer.Size >= Size, "Buffer overload!");
     memcpy(ConstantBuffer->MappedData, Data, Size);

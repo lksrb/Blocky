@@ -1,4 +1,4 @@
-#include "Blocky.h"
+#include "Game.h"
 
 #include "Cow.h"
 
@@ -171,38 +171,40 @@ internal void GameGenerateWorld(game* Game)
     Game->BlocksCount = RowCount * ColumnCount * LayerCount;
     Game->Blocks = VmAllocArray(block, Game->BlocksCount);
 
-    v3 StartPos = { 0, 0, 0, };
+    const v3 StartPos = { 0, 0, 0 };
 
     i32 CikCak = 0;
     i32 GlobalIndex = 0;
 
+    v3 CurrentPosition = StartPos;
+
     for (i32 L = 0; L < LayerCount; L++)
     {
-        StartPos.z = 0;
+        CurrentPosition.z = StartPos.z;
 
         for (i32 R = 0; R < RowCount; R++)
         {
-            StartPos.x = 0;
+            CurrentPosition.x = StartPos.x;
 
             for (i32 C = 0; C < ColumnCount; C++)
             {
                 // Establish a "Block"
                 auto& Block = Game->Blocks[(L * RowCount * ColumnCount) + (R * RowCount) + C];
-                Block.Color = (CikCak & 1) ? v4(0.2f, 0.2f, 0.2f, 1.0f) : v4(1.0f);
-
+                //Block.Color = (CikCak & 1) ? v4(0.2f, 0.2f, 0.2f, 1.0f) : v4(1.0f);
+                Block.Color = v4(1.0f);
                 if (L < 1)
                 {
-                    Block.Position = v3(StartPos.x, StartPos.y, StartPos.z);
+                    Block.Position = v3(CurrentPosition.x, CurrentPosition.y, CurrentPosition.z);
                     Block.Type = block_type::Dirt;
                     Block.Color = v4(1.0f);
                 }
                 else
                 {
-                    Block.Position = v3(StartPos.x, StartPos.y, StartPos.z);
+                    Block.Position = v3(CurrentPosition.x, CurrentPosition.y, CurrentPosition.z);
                     Block.Type = block_type::Air;
                 }
 
-                StartPos.x++;
+                CurrentPosition.x++;
 
                 CikCak++;
 #if 0
@@ -247,14 +249,27 @@ internal void GameGenerateWorld(game* Game)
             }
             CikCak++;
 
-            StartPos.z++;
+            CurrentPosition.z++;
         }
 
         CikCak++;
 
-        StartPos.y++;
+        CurrentPosition.y++;
     }
 
+    /*
+    // Place a block
+    i32 X = 0, Y = 3, Z = 0;
+    if (auto Block = BlockGetSafe(Game, X, Y, Z))
+    {
+        Block->Type = block_type::Dirt;
+        Block->Position = { (f32)X, (f32)Y, (f32)Z };
+        Block->Color = v4(1.0f);
+    }
+
+    */
+    return;
+    // Disable Sin-like world for now
     random_series Series = RandomSeriesCreate();
 
     for (i32 L = 0; L < LayerCount; L++)
@@ -326,18 +341,6 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
     // Count time
     Game->TimeSinceStart += TimeStep;
 
-    // Update camera and HUD
-    {
-        v3 CameraPosition = Game->Player.Position + Game->CameraOffset;
-
-        m4 InverseView = bkm::Translate(m4(1.0f), CameraPosition) * bkm::ToM4(qtn(Game->Player.Rotation));
-        Game->Camera.View = bkm::Inverse(InverseView);
-        Game->Camera.RecalculateProjectionPerspective(ClientAreaWidth, ClientAreaHeight);
-
-        m4 HUDProjection = bkm::Ortho(0, (f32)ClientAreaWidth, (f32)ClientAreaHeight, 0, -1, 1);
-        GameRendererSetRenderData(Renderer, CameraPosition, Game->Camera.View, Game->Camera.Projection, InverseView, HUDProjection, Game->TimeSinceStart);
-    }
-
     // Render
     if (1)
     {
@@ -361,27 +364,33 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
     }
 
     // Lights
-    GameRendererSubmitPointLight(Renderer, v3(14, 20, 10), 10.0, 1.0f, v3(1.0f), 1.0f);
+    v3 TestLightPos = v3(10, 5, 10);
+    //GameRendererSubmitPointLight(Renderer, TestLightPos, 10.0, 1.0f, v3(1.0f), 2.0f);
+
+    //GameRendererSubmitDirectionalLight(Renderer, )
 
     f32 GameTime = Game->TimeSinceStart * 0.1f;
     //Trace("%.3f", GameTime);
 
     // Render sun
+    v3 SunDirection;
+    v3 SunPosition;
     {
+        GameTime = bkm::PI_HALF;
         f32 Distance = 10.0f;
         f32 Angle = bkm::PI_HALF - GameTime; // speed of day-night cycle (radians per second)
         // Rotate baseDir around X axis to simulate sun path
         f32 CosA = bkm::Cos(Angle);
         f32 SinA = bkm::Sin(Angle);
         v3 BaseDir = v3(0.0f, 1.0f, 0.0f);
-        v3 SunDirection = v3(
+        SunDirection = v3(
             BaseDir.x,
             BaseDir.y * CosA - BaseDir.z * SinA,
             BaseDir.y * SinA + BaseDir.z * CosA
         );
 
         SunDirection = bkm::Normalize(SunDirection);
-        v3 SunPosition = SunDirection * Distance;
+        SunPosition = SunDirection * Distance;
         v3 SunRotation(bkm::PI_HALF + Angle, 0, 0);
         GameRendererSubmitDistantQuad(Renderer, SunPosition, SunRotation, texture(), v4(1));
 
@@ -398,14 +407,40 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
 
         //TraceV3(FinalColor);
 
-        GameRendererSubmitDirectionalLight(Renderer, -SunDirection, 1.5f, v3(1.0f));
+        //GameRendererSubmitDirectionalLight(Renderer, -SunDirection, 1.5f, v3(1.0f));
+    }
+
+    // Update camera and HUD
+    {
+        m4 LightSpaceMatrix;
+        v3 LightDirection = bkm::Normalize(v3(0, -1.0f, 0));
+        v3 LightPosition(2, -10, 0);
+
+        {
+            m4 LightProjection = bkm::Ortho(-25.0f, 25.0f, -25.0f, 25.0f, 0.1f, 40.0f);
+            m4 LightView = bkm::LookAt(LightPosition, v3(ColumnCount / 2, 0, RowCount / 2), v3(0.0f, 1.0f, 0.0f));
+            //m4 LightView = bkm::LookAt(v3(-SunDirection), v3(0, 0, 0), v3(0.0f, 1.0f, 0.0f));
+
+            LightSpaceMatrix = LightProjection * m4(m3(LightView)); // Remove translation
+        }
+
+        v3 CameraPosition = Game->Player.Position + Game->CameraOffset;
+
+        m4 InverseView = bkm::Translate(m4(1.0f), CameraPosition) * bkm::ToM4(qtn(Game->Player.Rotation));
+        Game->Camera.View = bkm::Inverse(InverseView);
+        Game->Camera.RecalculateProjectionPerspective(ClientAreaWidth, ClientAreaHeight);
+
+        m4 HUDProjection = bkm::Ortho(0, (f32)ClientAreaWidth, (f32)ClientAreaHeight, 0, -1, 1);
+        GameRendererSetRenderData(Renderer, CameraPosition, Game->Camera.View, Game->Camera.Projection, InverseView, HUDProjection, Game->TimeSinceStart, LightSpaceMatrix);
+
+        GameRendererSubmitDirectionalLight(Renderer, LightDirection, 1.5f, v3(1.0f));
     }
 
     // Render Debug UI
     if (Game->RenderDebugUI)
     {
         // For each point lights so we know that its there
-        GameRendererSubmitBillboardQuad(Renderer, v3(14, 20, 10), v2(0.5), Game->PointLightIconTexture, v4(1.0f));
+        //GameRendererSubmitBillboardQuad(Renderer, TestLightPos, v2(0.5), Game->PointLightIconTexture, v4(1.0f));
     }
 
     // Render HUD

@@ -6,7 +6,7 @@ struct dx12_pipeline
 };
 
 // TODO: Make more generic 
-internal dx12_pipeline DX12GraphicsPipelineCreate(ID3D12Device* Device, ID3D12RootSignature* RootSignature, D3D12_INPUT_ELEMENT_DESC Inputs[], u32 InputsCount, const wchar_t* ShaderPath, D3D12_CULL_MODE CullMode = D3D12_CULL_MODE_BACK, bool DepthTesting = true)
+internal dx12_pipeline DX12GraphicsPipelineCreate(ID3D12Device* Device, ID3D12RootSignature* RootSignature, D3D12_INPUT_ELEMENT_DESC Inputs[], u32 InputsCount, const wchar_t* ShaderPath, D3D12_CULL_MODE CullMode = D3D12_CULL_MODE_BACK, bool DepthTesting = true, u32 NumRenderTargets = 1)
 {
     dx12_pipeline Pipeline = {};
 
@@ -37,10 +37,10 @@ internal dx12_pipeline DX12GraphicsPipelineCreate(ID3D12Device* Device, ID3D12Ro
 #else
         LPCWSTR Arguments[] = {
             L"-T", L"vs_6_0",  // Shader profile
-            L"-E", L"VSMain", 
+            L"-E", L"VSMain",
              L"-IResources" // Entry point
-            //L"-Zi",            // Debug info
-            //L"-Qembed_debug",  // Embed debug info
+             //L"-Zi",            // Debug info
+             //L"-Qembed_debug",  // Embed debug info
         };
 #endif
 
@@ -165,8 +165,13 @@ internal dx12_pipeline DX12GraphicsPipelineCreate(ID3D12Device* Device, ID3D12Ro
     PipelineDesc.PS = { PixelShader->GetBufferPointer(), PixelShader->GetBufferSize() };
     PipelineDesc.SampleMask = UINT_MAX;
     PipelineDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-    PipelineDesc.NumRenderTargets = 1;
-    PipelineDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+
+    if (NumRenderTargets > 0)
+    {
+        PipelineDesc.NumRenderTargets = NumRenderTargets;
+        PipelineDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+    }
+
     PipelineDesc.SampleDesc.Count = 1;
     DxAssert(Device->CreateGraphicsPipelineState(&PipelineDesc, IID_PPV_ARGS(&Pipeline.Handle)));
 

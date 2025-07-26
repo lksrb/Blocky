@@ -36,6 +36,7 @@ internal void DX12DumpInfoQueue(ID3D12InfoQueue* InfoQueue);
 #pragma comment(lib, "dxguid.lib")
 #endif
 
+#if OBSOLETE
 internal D3D12_RESOURCE_BARRIER DX12Transition(ID3D12Resource* Resource, D3D12_RESOURCE_STATES StateBefore, D3D12_RESOURCE_STATES StateAfter, UINT Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_BARRIER_FLAGS Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE)
 {
     D3D12_RESOURCE_BARRIER Result;
@@ -47,6 +48,78 @@ internal D3D12_RESOURCE_BARRIER DX12Transition(ID3D12Resource* Resource, D3D12_R
     Result.Transition.Subresource = Subresource;
     return Result;
 };
+#endif
+
+internal D3D12_RESOURCE_BARRIER DX12CmdTransition(ID3D12GraphicsCommandList* CommandList, ID3D12Resource* Resource, D3D12_RESOURCE_STATES StateBefore, D3D12_RESOURCE_STATES StateAfter, UINT Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_BARRIER_FLAGS Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE)
+{
+    D3D12_RESOURCE_BARRIER Result;
+    Result.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    Result.Flags = Flags;
+    Result.Transition.pResource = Resource;
+    Result.Transition.StateBefore = StateBefore;
+    Result.Transition.StateAfter = StateAfter;
+    Result.Transition.Subresource = Subresource;
+
+    CommandList->ResourceBarrier(1, &Result);
+    return Result;
+};
+
+internal void DX12CmdSetViewport(ID3D12GraphicsCommandList* CommandList, f32 TopLeftX, f32 TopLeftY, f32 Width, f32 Height, f32 MinDepth = D3D12_MIN_DEPTH, f32 MaxDepth = D3D12_MAX_DEPTH)
+{
+    D3D12_VIEWPORT Viewport;
+    Viewport.TopLeftX = TopLeftX;
+    Viewport.TopLeftY = TopLeftY;
+    Viewport.Width = Width;
+    Viewport.Height = Height;
+    Viewport.MinDepth = MinDepth;
+    Viewport.MaxDepth = MaxDepth;
+    CommandList->RSSetViewports(1, &Viewport);
+}
+
+internal void DX12CmdSetScissorRect(ID3D12GraphicsCommandList* CommandList, i32 Left, i32 Top, i32 Right, i32 Bottom)
+{
+    D3D12_RECT ScissorRect;
+    ScissorRect.left = Left;
+    ScissorRect.top = Top;
+    ScissorRect.right = Right;
+    ScissorRect.bottom = Bottom;
+    CommandList->RSSetScissorRects(1, &ScissorRect);
+}
+
+internal void DX12CmdSetIndexBuffer(ID3D12GraphicsCommandList* CommandList, ID3D12Resource* BufferHandle, u32 SizeInBytes, DXGI_FORMAT Format)
+{
+    // Bind index buffer
+    local_persist D3D12_INDEX_BUFFER_VIEW IndexBufferView;
+    IndexBufferView.BufferLocation = BufferHandle->GetGPUVirtualAddress();
+    IndexBufferView.SizeInBytes = SizeInBytes;
+    IndexBufferView.Format = Format;
+    CommandList->IASetIndexBuffer(&IndexBufferView);
+}
+
+internal void DX12CmdSetVertexBuffer(ID3D12GraphicsCommandList* CommandList, u32 StartSlot, ID3D12Resource* BufferHandle, u32 SizeInBytes, u32 StrideInBytes)
+{
+    local_persist D3D12_VERTEX_BUFFER_VIEW VertexBufferView;
+    VertexBufferView.BufferLocation = BufferHandle->GetGPUVirtualAddress();
+    VertexBufferView.SizeInBytes = SizeInBytes;
+    VertexBufferView.StrideInBytes = StrideInBytes;
+    CommandList->IASetVertexBuffers(StartSlot, 1, &VertexBufferView);
+}
+
+internal void DX12CmdSetVertexBuffers2(ID3D12GraphicsCommandList* CommandList, u32 StartSlot, ID3D12Resource* BufferHandle0, u32 SizeInBytes0, u32 StrideInBytes0, ID3D12Resource* BufferHandle1, u32 SizeInBytes1, u32 StrideInBytes1)
+{
+    // Bind vertex positions
+    local_persist D3D12_VERTEX_BUFFER_VIEW VertexBufferViews[2];
+    VertexBufferViews[0].BufferLocation = BufferHandle0->GetGPUVirtualAddress();
+    VertexBufferViews[0].SizeInBytes = SizeInBytes0;
+    VertexBufferViews[0].StrideInBytes = StrideInBytes0;
+
+    // Bind transforms
+    VertexBufferViews[1].BufferLocation = BufferHandle1->GetGPUVirtualAddress();
+    VertexBufferViews[1].SizeInBytes = SizeInBytes1;
+    VertexBufferViews[1].StrideInBytes = StrideInBytes1;
+
+    CommandList->IASetVertexBuffers(0, 2, VertexBufferViews);
+}
 
 // Blocking API for submitting stuff to GPU
 // NOTE: Inefficient

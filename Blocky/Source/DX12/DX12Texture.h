@@ -14,6 +14,8 @@ struct texture
     D3D12_CPU_DESCRIPTOR_HANDLE SRVDescriptor;
 };
 
+internal texture TextureCreate(ID3D12Device* Device, u32 Width, u32 Height, DXGI_FORMAT Format, D3D12_RESOURCE_STATES InitialState, const wchar_t* DebugName);
+
 internal texture TextureCreate(ID3D12Device* Device, ID3D12CommandAllocator* CommandAllocator, ID3D12GraphicsCommandList* CommandList, ID3D12CommandQueue* CommandQueue, buffer Pixels, u32 Width, u32 Height, DXGI_FORMAT Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB);
 
 internal texture TextureCreate(ID3D12Device* Device, ID3D12CommandAllocator* CommandAllocator, ID3D12GraphicsCommandList* CommandList, ID3D12CommandQueue* CommandQueue, const char* Path);

@@ -43,7 +43,7 @@ project "Blocky"
 
 	-- List of files to build
 	local includedFiles = {
-	    "Source/Win32_Blocky.cpp"
+	    "Source/Win32_Game.cpp"
 	}
 
 	-- Simply iterate over them and remove the set flag

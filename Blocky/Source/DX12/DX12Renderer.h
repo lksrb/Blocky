@@ -12,6 +12,8 @@
 
 internal constexpr u32 c_MaxTexturesPerDrawCall = 32; // TODO: Get this from the driver
 
+internal constexpr u32 c_MaxIndicesPerDrawCall = 1 << 4;
+
 internal constexpr u32 c_MaxCubePerBatch = 1 << 18;
 
 internal constexpr u32 c_MaxQuadsPerBatch = 1 << 4;
@@ -119,20 +121,6 @@ struct cuboid_transform_vertex_data
     u32 TextureIndex;
 };
 
-struct fast_cuboid_transform_vertex_data
-{
-    union
-    {
-        m4 Transform;
-        XMMATRIX XmmTransform;
-    };
-
-    texture_block_coords TextureCoords;
-
-    v4 Color;
-    u32 TextureIndex;
-};
-
 // Basically a push constant
 // TODO: Look up standardized push constant minimum value
 // I think its 256 bytes
@@ -152,6 +140,12 @@ struct cuboid_root_signature_constant_buffer
 {
     m4 ViewProjection;
     m4 View;
+    m4 LightSpaceMatrix;
+};
+
+struct shadow_pass_root_signature_constant_buffer
+{
+    m4 LightSpaceMatrix;
 };
 
 struct distant_quad_root_signature_constant_buffer
@@ -200,169 +194,13 @@ struct render_data
     cuboid_root_signature_constant_buffer CuboidRootSignatureBuffer;
     skybox_quad_root_signature_constant_buffer SkyboxRootSignatureBuffer;
 
+    shadow_pass_root_signature_constant_buffer ShadowPassRootSignatureBuffer;
+
     distant_quad_root_signature_constant_buffer DistantObjectRootSignatureBuffer;
 
     m4 Projection;
     v3 CameraPosition;
 };
-
-// API-agnostic type definition
-// There is a potential problem with navigating stuff if we would have multiple platforms
-struct game_renderer
-{
-    ID3D12Device2* Device;
-    IDXGIFactory4* Factory;
-
-    ID3D12Debug3* DebugInterface; // 3 is maximum for Windows 10 build 19045
-
-    // This is not defined in release mode
-#if BK_DEBUG
-    IDXGIDebug1* DxgiDebugInterface;
-#endif
-
-    ID3D12CommandAllocator* DirectCommandAllocators[FIF];
-    ID3D12GraphicsCommandList2* DirectCommandList;
-    ID3D12CommandQueue* DirectCommandQueue;
-
-    IDXGISwapChain4* SwapChain;
-    ID3D12Resource* BackBuffers[FIF];
-    ID3D12DescriptorHeap* RTVDescriptorHeap;
-    D3D12_CPU_DESCRIPTOR_HANDLE RTVHandles[FIF];
-
-    u32 CurrentBackBufferIndex;
-
-    ID3D12Resource* DepthBuffers[FIF];
-    ID3D12DescriptorHeap* DSVDescriptorHeap;
-    D3D12_CPU_DESCRIPTOR_HANDLE DSVHandles[FIF];
-
-    bool DepthTesting = true;
-
-    bool VSync = true;
-
-    // Fence
-    ID3D12Fence* Fence;
-    u64 FenceValue;
-    u64 FrameFenceValues[FIF];
-    HANDLE DirectFenceEvent;
-
-    // Describes resources used in the shader
-    ID3D12RootSignature* RootSignature;
-
-    D3D12_VIEWPORT Viewport;
-    D3D12_RECT ScissorRect;
-
-    // Textures
-    ID3D12DescriptorHeap* SRVDescriptorHeap;
-    texture WhiteTexture;
-    u32 CurrentTextureStackIndex = 1;
-    D3D12_CPU_DESCRIPTOR_HANDLE TextureStack[c_MaxTexturesPerDrawCall];
-
-    // Quad
-    dx12_pipeline QuadPipeline;
-    dx12_index_buffer QuadIndexBuffer;
-    dx12_vertex_buffer QuadVertexBuffers[FIF];
-    quad_vertex* QuadVertexDataBase;
-    quad_vertex* QuadVertexDataPtr;
-    u32 QuadIndexCount = 0;
-
-    // Basic Cuboid - Has same texture for every quad
-    u32 CuboidInstanceCount = 0;
-    dx12_pipeline CuboidPipeline = {};
-    dx12_vertex_buffer CuboidTransformVertexBuffers[FIF] = {};
-    dx12_vertex_buffer CuboidPositionsVertexBuffer = {};
-    cuboid_transform_vertex_data* CuboidInstanceData = nullptr;
-
-    // Quaded cuboid
-    dx12_pipeline QuadedCuboidPipeline = {};
-    dx12_vertex_buffer QuadedCuboidVertexBuffers[FIF];
-    quaded_cuboid_vertex* QuadedCuboidVertexDataBase;
-    quaded_cuboid_vertex* QuadedCuboidVertexDataPtr;
-    u32 QuadedCuboidIndexCount = 0;
-
-    // Skybox
-    struct
-    {
-        dx12_pipeline Pipeline;
-        dx12_vertex_buffer VertexBuffer;
-        dx12_index_buffer IndexBuffer;
-        ID3D12RootSignature* RootSignature;
-    } Skybox;
-    
-    // Distant quads (sun, moon, stars, ...)
-    struct
-    {
-        dx12_pipeline Pipeline;
-        dx12_vertex_buffer VertexBuffers[FIF];
-        distant_quad_vertex* VertexDataBase;
-        distant_quad_vertex* VertexDataPtr;
-        u32 IndexCount = 0;
-        //ID3D12RootSignature* DistantQuadsRootSignature;
-    } DistantQuad;
-
-
-    // All possible data the renderer needs
-    render_data RenderData;
-
-    // Light stuff
-    light_environment LightEnvironment;
-    dx12_constant_buffer LightEnvironmentConstantBuffers[FIF];
-
-    // HUD stuff
-    hud_quad_vertex* HUDQuadVertexDataPtr;
-    hud_quad_vertex* HUDQuadVertexDataBase;
-    dx12_vertex_buffer HUDQuadVertexBuffers[FIF];
-    u32 HUDQuadIndexCount = 0;
-    dx12_pipeline HUDQuadPipeline;
-};
-
-// ===============================================================================================================
-//                                              RENDERER INTERNAL API                                               
-// ===============================================================================================================
-
-internal game_renderer GameRendererCreate(const game_window& Window);
-internal void GameRendererDestroy(game_renderer* Renderer);
-
-internal void GameRendererInitD3D(game_renderer* Renderer, const game_window& Window);
-internal void GameRendererInitD3DPipeline(game_renderer* Renderer);
-
-internal void GameRendererResizeSwapChain(game_renderer* Renderer, u32 RequestWidth, u32 RequestHeight);
-internal void GameRendererRender(game_renderer* Renderer);
-internal u64 GameRendererSignal(ID3D12CommandQueue* CommandQueue, ID3D12Fence* Fence, u64* FenceValue);
-internal void GameRendererWaitForFenceValue(ID3D12Fence* Fence, u64 FenceValue, HANDLE FenceEvent, u32 Duration = UINT32_MAX);
-internal void GameRendererFlush(game_renderer* Renderer);
-
-// ===============================================================================================================
-//                                                   RENDERER API                                               
-// ===============================================================================================================
-
-// Set all possible needed state here
-internal void GameRendererSetRenderData(game_renderer* Renderer, const v3& CameraPosition, const m4& View, const m4& Projection, const m4& InverseView, const m4& HUDProjection, f32 Time);
-
-// Quad render commands
-internal void GameRendererSubmitQuad(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v2& Scale, const v4& Color);
-internal void GameRendererSubmitQuad(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v2& Scale, const texture& Texture, const v4& Color);
-internal void GameRendererSubmitQuadCustom(game_renderer* Renderer, v3 VertexPositions[4], const texture& Texture, const v4& Color);
-internal void GameRendererSubmitBillboardQuad(game_renderer* Renderer, const v3& Translation, const v2& Scale, const texture& Texture, const v4& Color);
-internal void GameRendererSubmitDistantQuad(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const texture& Texture, const v4& Color);
-
-// Cuboid first single unique texture - good for most of the blocks
-internal void GameRendererSubmitCuboid(game_renderer* Renderer, const v3& Translation, const v4& Color);
-internal void GameRendererSubmitCuboid(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale, const v4& Color);
-internal void GameRendererSubmitCuboid(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale, const texture& Texture, const v4& Color);
-internal void GameRendererSubmitCuboid(game_renderer* Renderer, const v3& Translation, const texture& Texture, const v4& Color);
-
-// Quaded cuboids - slower than cuboids but each quad can have its own unique texture
-internal void GameRendererSubmitQuadedCuboid(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale, const texture& Texture, const texture_block_coords& TextureCoords, const v4& Color);
-internal void GameRendererSubmitQuadedCuboid(game_renderer* Renderer, const m4& Transform, const texture& Texture, const texture_block_coords& TextureCoords, const v4& Color);
-
-// Lights
-internal void GameRendererSubmitDirectionalLight(game_renderer* Renderer, const v3& Direction, f32 Intensity, const v3& Radiance);
-internal void GameRendererSubmitPointLight(game_renderer* Renderer, const v3& Position, f32 Radius, f32 FallOff, const v3& Radiance, f32 Intensity);
-
-// ===============================================================================================================
-//                                             RENDERER API - HUD                                             
-// ===============================================================================================================
-internal void GameRendererHUDSubmitQuad(game_renderer* Renderer, v3 VertexPositions[4], const texture& Texture, const texture_coords& Coords = texture_coords(), const v4& Color = v4(1.0f));
 
 internal constexpr v3 c_SkyboxVertices[8] =
 {
@@ -478,3 +316,186 @@ internal constexpr v4 c_QuadVertexPositions[4]
     {  0.5f,  0.5f, 0.0f, 1.0f },
     { -0.5f,  0.5f, 0.0f, 1.0f }
 };
+
+// API-agnostic type definition
+// There is a potential problem with navigating stuff if we would have multiple platforms
+struct game_renderer
+{
+    ID3D12Device2* Device;
+    IDXGIFactory4* Factory;
+
+    ID3D12Debug3* DebugInterface; // 3 is maximum for Windows 10 build 19045
+
+    // This is not defined in release mode
+#if BK_DEBUG
+    IDXGIDebug1* DxgiDebugInterface;
+#endif
+
+    ID3D12CommandAllocator* DirectCommandAllocators[FIF];
+    ID3D12GraphicsCommandList2* DirectCommandList;
+    ID3D12CommandQueue* DirectCommandQueue;
+
+    IDXGISwapChain4* SwapChain;
+    ID3D12Resource* BackBuffers[FIF];
+    ID3D12DescriptorHeap* RTVDescriptorHeap;
+    D3D12_CPU_DESCRIPTOR_HANDLE RTVHandles[FIF];
+
+    u32 CurrentBackBufferIndex;
+
+    ID3D12Resource* DepthBuffers[FIF];
+    ID3D12DescriptorHeap* DSVDescriptorHeap;
+    D3D12_CPU_DESCRIPTOR_HANDLE DSVHandles[FIF];
+
+    bool DepthTesting = true;
+
+    bool VSync = true;
+
+    // Fence
+    ID3D12Fence* Fence;
+    u64 FenceValue;
+    u64 FrameFenceValues[FIF];
+    HANDLE DirectFenceEvent;
+
+    // Describes resources used in the shader
+    ID3D12RootSignature* RootSignature;
+
+    D3D12_VIEWPORT Viewport;
+    D3D12_RECT ScissorRect;
+
+    // Textures
+    ID3D12DescriptorHeap* SRVDescriptorHeap;
+    texture WhiteTexture;
+    u32 CurrentTextureStackIndex = 1;
+    D3D12_CPU_DESCRIPTOR_HANDLE TextureStack[c_MaxTexturesPerDrawCall];
+
+    // Quad
+    struct  
+    {
+        dx12_pipeline Pipeline;
+        dx12_index_buffer IndexBuffer;
+        dx12_vertex_buffer VertexBuffers[FIF];
+        quad_vertex* VertexDataBase;
+        quad_vertex* VertexDataPtr;
+        u32 IndexCount;
+        ID3D12RootSignature* RootSignature;
+    } Quad;
+
+    // Basic Cuboid - Has the same texture for each face
+    struct  
+    {
+        u32 InstanceCount = 0;
+        dx12_pipeline Pipeline = {};
+        dx12_vertex_buffer TransformVertexBuffers[FIF] = {};
+        dx12_vertex_buffer PositionsVertexBuffer = {};
+        cuboid_transform_vertex_data* InstanceData = nullptr;
+        ID3D12RootSignature* RootSignature;
+    } Cuboid;
+
+    // Quaded Cuboid - Can have unique texture for each face
+    struct
+    {
+        dx12_pipeline Pipeline = {};
+        dx12_vertex_buffer VertexBuffers[FIF];
+        quaded_cuboid_vertex* VertexDataBase;
+        quaded_cuboid_vertex* VertexDataPtr;
+        u32 IndexCount;
+    } QuadedCuboid;
+
+    // Skybox
+    struct
+    {
+        dx12_pipeline Pipeline;
+        dx12_vertex_buffer VertexBuffer;
+        dx12_index_buffer IndexBuffer;
+        ID3D12RootSignature* RootSignature;
+    } Skybox; 
+    
+    // Distant quads (sun, moon, stars, ...)
+    struct
+    {
+        dx12_pipeline Pipeline;
+        dx12_vertex_buffer VertexBuffers[FIF];
+        distant_quad_vertex* VertexDataBase;
+        distant_quad_vertex* VertexDataPtr;
+        u32 IndexCount = 0;
+    } DistantQuad;
+
+    // Shadows
+    struct
+    {
+        ID3D12Resource* ShadowMaps[FIF];
+        D3D12_CPU_DESCRIPTOR_HANDLE DSVHandles[FIF];
+        D3D12_CPU_DESCRIPTOR_HANDLE SRVHandles[FIF];
+        dx12_pipeline Pipeline;
+        ID3D12RootSignature* RootSignature;
+        ID3D12DescriptorHeap* DSVDescriptorHeap;
+        ID3D12DescriptorHeap* SRVDescriptorHeap;
+    } ShadowPass;
+
+    // HUD stuff
+    struct  
+    {
+        hud_quad_vertex* VertexDataPtr;
+        hud_quad_vertex* VertexDataBase;
+        dx12_vertex_buffer VertexBuffers[FIF];
+        u32 IndexCount = 0;
+        dx12_pipeline Pipeline;
+    } HUD;
+
+    // All possible data the renderer needs
+    render_data RenderData;
+
+    // Light stuff
+    light_environment LightEnvironment;
+    dx12_constant_buffer LightEnvironmentConstantBuffers[FIF];
+};
+
+// ===============================================================================================================
+//                                              RENDERER INTERNAL API                                               
+// ===============================================================================================================
+
+internal game_renderer GameRendererCreate(const game_window& Window);
+internal void GameRendererDestroy(game_renderer* Renderer);
+
+internal void GameRendererInitD3D(game_renderer* Renderer, const game_window& Window);
+internal void GameRendererInitD3DPipeline(game_renderer* Renderer);
+
+internal void GameRendererResizeSwapChain(game_renderer* Renderer, u32 RequestWidth, u32 RequestHeight);
+internal void GameRendererRender(game_renderer* Renderer);
+internal u64 GameRendererSignal(ID3D12CommandQueue* CommandQueue, ID3D12Fence* Fence, u64* FenceValue);
+internal void GameRendererWaitForFenceValue(ID3D12Fence* Fence, u64 FenceValue, HANDLE FenceEvent, u32 Duration = UINT32_MAX);
+internal void GameRendererFlush(game_renderer* Renderer);
+internal void GameRendererResetState(game_renderer* Renderer);
+
+// ===============================================================================================================
+//                                                   RENDERER API                                               
+// ===============================================================================================================
+
+// Set all possible needed state here
+internal void GameRendererSetRenderData(game_renderer* Renderer, const v3& CameraPosition, const m4& View, const m4& Projection, const m4& InverseView, const m4& HUDProjection, f32 Time, m4 LightSpaceMatrixTemp);
+
+// Quad render commands
+internal void GameRendererSubmitQuad(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v2& Scale, const v4& Color);
+internal void GameRendererSubmitQuad(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v2& Scale, const texture& Texture, const v4& Color);
+internal void GameRendererSubmitQuadCustom(game_renderer* Renderer, v3 VertexPositions[4], const texture& Texture, const v4& Color);
+internal void GameRendererSubmitBillboardQuad(game_renderer* Renderer, const v3& Translation, const v2& Scale, const texture& Texture, const v4& Color);
+internal void GameRendererSubmitDistantQuad(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const texture& Texture, const v4& Color);
+
+// Cuboid first single unique texture - good for most of the blocks
+internal void GameRendererSubmitCuboid(game_renderer* Renderer, const v3& Translation, const v4& Color);
+internal void GameRendererSubmitCuboid(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale, const v4& Color);
+internal void GameRendererSubmitCuboid(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale, const texture& Texture, const v4& Color);
+internal void GameRendererSubmitCuboid(game_renderer* Renderer, const v3& Translation, const texture& Texture, const v4& Color);
+
+// Quaded cuboids - slower than cuboids but each quad can have its own unique texture
+internal void GameRendererSubmitQuadedCuboid(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale, const texture& Texture, const texture_block_coords& TextureCoords, const v4& Color);
+internal void GameRendererSubmitQuadedCuboid(game_renderer* Renderer, const m4& Transform, const texture& Texture, const texture_block_coords& TextureCoords, const v4& Color);
+
+// Lights
+internal void GameRendererSubmitDirectionalLight(game_renderer* Renderer, const v3& Direction, f32 Intensity, const v3& Radiance);
+internal void GameRendererSubmitPointLight(game_renderer* Renderer, const v3& Position, f32 Radius, f32 FallOff, const v3& Radiance, f32 Intensity);
+
+// ===============================================================================================================
+//                                             RENDERER API - HUD                                             
+// ===============================================================================================================
+internal void GameRendererHUDSubmitQuad(game_renderer* Renderer, v3 VertexPositions[4], const texture& Texture, const texture_coords& Coords = texture_coords(), const v4& Color = v4(1.0f));

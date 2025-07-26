@@ -93,10 +93,10 @@ struct game_input
 
 // Headers
 #include "DX12/DX12Renderer.h"
-#include "Blocky.h"
+#include "Game.h"
 
 // Source files
-#include "Blocky.cpp"
+#include "Game.cpp"
 #include "DX12/DX12Renderer.cpp"
 
 internal u32 g_ClientWidth = 0;

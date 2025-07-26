@@ -31,6 +31,7 @@ workspace "Blocky"
 		"Resources/HUD.hlsl",
 		"Resources/Skybox.hlsl",
 		"Resources/DistantQuad.hlsl",
+		"Resources/Shadow.hlsl"
 	}
 
 	flags {
