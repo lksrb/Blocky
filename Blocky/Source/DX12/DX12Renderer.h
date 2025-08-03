@@ -319,7 +319,7 @@ internal constexpr v4 c_QuadVertexPositions[4]
 
 // API-agnostic type definition
 // There is a potential problem with navigating stuff if we would have multiple platforms
-struct game_renderer
+struct d3d12_render_backend
 {
     ID3D12Device2* Device;
     IDXGIFactory4* Factory;
@@ -358,9 +358,6 @@ struct game_renderer
 
     // Describes resources used in the shader
     ID3D12RootSignature* RootSignature;
-
-    D3D12_VIEWPORT Viewport;
-    D3D12_RECT ScissorRect;
 
     // Textures
     ID3D12DescriptorHeap* SRVDescriptorHeap;
@@ -454,48 +451,48 @@ struct game_renderer
 //                                              RENDERER INTERNAL API                                               
 // ===============================================================================================================
 
-internal game_renderer GameRendererCreate(const game_window& Window);
-internal void GameRendererDestroy(game_renderer* Renderer);
+internal d3d12_render_backend* d3d12_render_backend_create(arena* Arena, const win32_window& Window);
+internal void d3d12_render_backend_destroy(d3d12_render_backend* Renderer);
 
-internal void GameRendererInitD3D(game_renderer* Renderer, const game_window& Window);
-internal void GameRendererInitD3DPipeline(game_renderer* Renderer);
+internal void GameRendererInitD3D(d3d12_render_backend* Renderer, const win32_window& Window);
+internal void GameRendererInitD3DPipeline(d3d12_render_backend* Renderer);
 
-internal void GameRendererResizeSwapChain(game_renderer* Renderer, u32 RequestWidth, u32 RequestHeight);
-internal void GameRendererRender(game_renderer* Renderer);
+internal void d3d12_render_backend_resize_swapchain(d3d12_render_backend* Renderer, u32 RequestWidth, u32 RequestHeight);
+internal void d3d12_render_backend_render(d3d12_render_backend* Renderer);
 internal u64 GameRendererSignal(ID3D12CommandQueue* CommandQueue, ID3D12Fence* Fence, u64* FenceValue);
 internal void GameRendererWaitForFenceValue(ID3D12Fence* Fence, u64 FenceValue, HANDLE FenceEvent, u32 Duration = UINT32_MAX);
-internal void GameRendererFlush(game_renderer* Renderer);
-internal void GameRendererResetState(game_renderer* Renderer);
+internal void GameRendererFlush(d3d12_render_backend* Renderer);
+internal void GameRendererResetState(d3d12_render_backend* Renderer);
 
 // ===============================================================================================================
 //                                                   RENDERER API                                               
 // ===============================================================================================================
 
 // Set all possible needed state here
-internal void GameRendererSetRenderData(game_renderer* Renderer, const v3& CameraPosition, const m4& View, const m4& Projection, const m4& InverseView, const m4& HUDProjection, f32 Time, m4 LightSpaceMatrixTemp);
+internal void GameRendererSetRenderData(d3d12_render_backend* Renderer, const v3& CameraPosition, const m4& View, const m4& Projection, const m4& InverseView, const m4& HUDProjection, f32 Time, m4 LightSpaceMatrixTemp);
 
 // Quad render commands
-internal void GameRendererSubmitQuad(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v2& Scale, const v4& Color);
-internal void GameRendererSubmitQuad(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v2& Scale, const texture& Texture, const v4& Color);
-internal void GameRendererSubmitQuadCustom(game_renderer* Renderer, v3 VertexPositions[4], const texture& Texture, const v4& Color);
-internal void GameRendererSubmitBillboardQuad(game_renderer* Renderer, const v3& Translation, const v2& Scale, const texture& Texture, const v4& Color);
-internal void GameRendererSubmitDistantQuad(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const texture& Texture, const v4& Color);
+internal void GameRendererSubmitQuad(d3d12_render_backend* Renderer, const v3& Translation, const v3& Rotation, const v2& Scale, const v4& Color);
+internal void GameRendererSubmitQuad(d3d12_render_backend* Renderer, const v3& Translation, const v3& Rotation, const v2& Scale, const texture& Texture, const v4& Color);
+internal void GameRendererSubmitQuadCustom(d3d12_render_backend* Renderer, v3 VertexPositions[4], const texture& Texture, const v4& Color);
+internal void GameRendererSubmitBillboardQuad(d3d12_render_backend* Renderer, const v3& Translation, const v2& Scale, const texture& Texture, const v4& Color);
+internal void GameRendererSubmitDistantQuad(d3d12_render_backend* Renderer, const v3& Translation, const v3& Rotation, const texture& Texture, const v4& Color);
 
 // Cuboid first single unique texture - good for most of the blocks
-internal void GameRendererSubmitCuboid(game_renderer* Renderer, const v3& Translation, const v4& Color);
-internal void GameRendererSubmitCuboid(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale, const v4& Color);
-internal void GameRendererSubmitCuboid(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale, const texture& Texture, const v4& Color);
-internal void GameRendererSubmitCuboid(game_renderer* Renderer, const v3& Translation, const texture& Texture, const v4& Color);
+internal void GameRendererSubmitCuboid(d3d12_render_backend* Renderer, const v3& Translation, const v4& Color);
+internal void GameRendererSubmitCuboid(d3d12_render_backend* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale, const v4& Color);
+internal void GameRendererSubmitCuboid(d3d12_render_backend* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale, const texture& Texture, const v4& Color);
+internal void GameRendererSubmitCuboid(d3d12_render_backend* Renderer, const v3& Translation, const texture& Texture, const v4& Color);
 
 // Quaded cuboids - slower than cuboids but each quad can have its own unique texture
-internal void GameRendererSubmitQuadedCuboid(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale, const texture& Texture, const texture_block_coords& TextureCoords, const v4& Color);
-internal void GameRendererSubmitQuadedCuboid(game_renderer* Renderer, const m4& Transform, const texture& Texture, const texture_block_coords& TextureCoords, const v4& Color);
+internal void GameRendererSubmitQuadedCuboid(d3d12_render_backend* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale, const texture& Texture, const texture_block_coords& TextureCoords, const v4& Color);
+internal void GameRendererSubmitQuadedCuboid(d3d12_render_backend* Renderer, const m4& Transform, const texture& Texture, const texture_block_coords& TextureCoords, const v4& Color);
 
 // Lights
-internal void GameRendererSubmitDirectionalLight(game_renderer* Renderer, const v3& Direction, f32 Intensity, const v3& Radiance);
-internal void GameRendererSubmitPointLight(game_renderer* Renderer, const v3& Position, f32 Radius, f32 FallOff, const v3& Radiance, f32 Intensity);
+internal void GameRendererSubmitDirectionalLight(d3d12_render_backend* Renderer, const v3& Direction, f32 Intensity, const v3& Radiance);
+internal void GameRendererSubmitPointLight(d3d12_render_backend* Renderer, const v3& Position, f32 Radius, f32 FallOff, const v3& Radiance, f32 Intensity);
 
 // ===============================================================================================================
 //                                             RENDERER API - HUD                                             
 // ===============================================================================================================
-internal void GameRendererHUDSubmitQuad(game_renderer* Renderer, v3 VertexPositions[4], const texture& Texture, const texture_coords& Coords = texture_coords(), const v4& Color = v4(1.0f));
+internal void GameRendererHUDSubmitQuad(d3d12_render_backend* Renderer, v3 VertexPositions[4], const texture& Texture, const texture_coords& Coords = texture_coords(), const v4& Color = v4(1.0f));

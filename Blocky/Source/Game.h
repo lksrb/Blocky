@@ -119,14 +119,14 @@ struct game
     bool RenderHUD = true;
 };
 
-internal game GameCreate(game_renderer* Renderer);
-internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* Input, f32 TimeStep, u32 ClientAreaWidth, u32 ClientAreaHeight);
-internal void GamePlayerUpdate(game* Game, const game_input* Input, game_renderer* Renderer, f32 TimeStep);
+internal game* game_create(arena* Arena, d3d12_render_backend* Backend);
+internal void game_update(game* Game, d3d12_render_backend* Backend, const game_input* Input, f32 TimeStep, u32 ClientAreaWidth, u32 ClientAreaHeight);
+internal void game_player_update(game* Game, const game_input* Input, d3d12_render_backend* Backend, f32 TimeStep);
 internal void GameGenerateWorld(game* Game);
 
 internal void GameUpdateEntities(game* Game, f32 TimeStep);
 internal void GamePhysicsSimulationUpdateEntities(game* Game, f32 TimeStep);
-internal void GameRenderEntities(game* Game, game_renderer* Renderer, f32 TimeStep);
+internal void GameRenderEntities(game* Game, d3d12_render_backend* Backend, f32 TimeStep);
 
 internal bool FindFirstHit(const ray& Ray, const block* Blocks, u64 BlocksCount, v3* HitPoint, v3* HitNormal, block* HitBlock, u64* HitIndex)
 {
@@ -232,4 +232,4 @@ internal block_pos GetWorldToBlockPos(const v3& WorldPos)
 }
 
 // TODO: Move somewhere
-internal buffer ReadBinary(const char* Path);
+internal buffer win32_read_buffer(const char* Path);

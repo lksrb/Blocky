@@ -3,17 +3,15 @@
 #include "DX12Texture.cpp"
 #include "DX12Buffer.cpp"
 
-internal game_renderer GameRendererCreate(const game_window& Window)
+internal d3d12_render_backend* d3d12_render_backend_create(arena* Arena, const win32_window& Window)
 {
-    game_renderer Renderer = {};
-
-    GameRendererInitD3D(&Renderer, Window);
-    GameRendererInitD3DPipeline(&Renderer);
-
-    return Renderer;
+    d3d12_render_backend* Backend = arena_new(Arena, d3d12_render_backend);
+    GameRendererInitD3D(Backend, Window);
+    GameRendererInitD3DPipeline(Backend);
+    return Backend;
 }
 
-internal void GameRendererDestroy(game_renderer* Renderer)
+internal void d3d12_render_backend_destroy(d3d12_render_backend* Renderer)
 {
     // Wait for GPU to finish
     GameRendererFlush(Renderer);
@@ -51,10 +49,10 @@ internal void GameRendererDestroy(game_renderer* Renderer)
 #endif
 
     // Zero everything to make sure nothing can reference this
-    memset(Renderer, 0, sizeof(game_renderer));
+    memset(Renderer, 0, sizeof(d3d12_render_backend));
 }
 
-internal void GameRendererInitD3D(game_renderer* Renderer, const game_window& Window)
+internal void GameRendererInitD3D(d3d12_render_backend* Renderer, const win32_window& Window)
 {
     // Enable debug layer
     if (DX12_ENABLE_DEBUG_LAYER)
@@ -271,7 +269,7 @@ internal void GameRendererInitD3D(game_renderer* Renderer, const game_window& Wi
     }
 }
 
-internal void GameRendererInitD3DPipeline(game_renderer* Renderer)
+internal void GameRendererInitD3DPipeline(d3d12_render_backend* Renderer)
 {
     auto Device = Renderer->Device;
 
@@ -668,7 +666,7 @@ internal void GameRendererInitD3DPipeline(game_renderer* Renderer)
             DxAssert(Device->CreateRootSignature(0, Signature->GetBufferPointer(), Signature->GetBufferSize(), IID_PPV_ARGS(&Renderer->ShadowPass.RootSignature)));
         }
 
-        Renderer->ShadowPass.Pipeline = DX12GraphicsPipelineCreate(Device, Renderer->ShadowPass.RootSignature, InputElementDescs, CountOf(InputElementDescs), L"Resources/Shadow.hlsl", D3D12_CULL_MODE_BACK, true, 0);
+        Renderer->ShadowPass.Pipeline = DX12GraphicsPipelineCreate(Device, Renderer->ShadowPass.RootSignature, InputElementDescs, CountOf(InputElementDescs), L"Resources/Shadow.hlsl", D3D12_CULL_MODE_FRONT, true, 0);
 
         // Create resources
         // Create resources
@@ -766,7 +764,7 @@ internal void GameRendererInitD3DPipeline(game_renderer* Renderer)
     }
 }
 
-internal void GameRendererRender(game_renderer* Renderer)
+internal void d3d12_render_backend_render(d3d12_render_backend* Renderer)
 {
     // Get current frame stuff
     auto CommandList = Renderer->DirectCommandList;
@@ -907,7 +905,7 @@ internal void GameRendererRender(game_renderer* Renderer)
         CommandList->SetGraphicsRootSignature(Renderer->Cuboid.RootSignature);
         CommandList->SetDescriptorHeaps(1, (ID3D12DescriptorHeap* const*)&Renderer->ShadowPass.SRVDescriptorHeap);
         auto SRVPTR = Renderer->ShadowPass.SRVDescriptorHeap->GetGPUDescriptorHandleForHeapStart();
-        SRVPTR.ptr += CurrentBackBufferIndex * Renderer->Device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+        //SRVPTR.ptr += CurrentBackBufferIndex * Renderer->Device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
         CommandList->SetGraphicsRootDescriptorTable(2, SRVPTR);
 
@@ -1031,11 +1029,14 @@ internal void GameRendererRender(game_renderer* Renderer)
     // Reset rendered state
     GameRendererResetState(Renderer);
 
+    // Move to another back buffer
+    Renderer->CurrentBackBufferIndex = Renderer->SwapChain->GetCurrentBackBufferIndex();
+
     // Log dx12 stuff
     DumpInfoQueue();
 }
 
-internal void GameRendererResizeSwapChain(game_renderer* Renderer, u32 RequestWidth, u32 RequestHeight)
+internal void d3d12_render_backend_resize_swapchain(d3d12_render_backend* Renderer, u32 RequestWidth, u32 RequestHeight)
 {
     // Flush the GPU queue to make sure the swap chain's back buffers are not being referenced by an in-flight command list.
     GameRendererFlush(Renderer);
@@ -1139,13 +1140,13 @@ internal void GameRendererWaitForFenceValue(ID3D12Fence* Fence, u64 FenceValue, 
     }
 }
 
-internal void GameRendererFlush(game_renderer* Renderer)
+internal void GameRendererFlush(d3d12_render_backend* Renderer)
 {
     u64 FenceValueForSignal = GameRendererSignal(Renderer->DirectCommandQueue, Renderer->Fence, &Renderer->FenceValue);
     GameRendererWaitForFenceValue(Renderer->Fence, FenceValueForSignal, Renderer->DirectFenceEvent);
 }
 
-internal void GameRendererResetState(game_renderer* Renderer)
+internal void GameRendererResetState(d3d12_render_backend* Renderer)
 {
     // Reset light environment
     Renderer->LightEnvironment.Clear();
@@ -1175,16 +1176,13 @@ internal void GameRendererResetState(game_renderer* Renderer)
     {
         Renderer->TextureStack[i] = {};
     }
-
-    // Move to another back buffer
-    Renderer->CurrentBackBufferIndex = Renderer->SwapChain->GetCurrentBackBufferIndex();
 }
 
 // ===============================================================================================================
 //                                                   RENDERER API                                               
 // ===============================================================================================================
 
-internal void GameRendererSetRenderData(game_renderer* Renderer, const v3& CameraPosition, const m4& View, const m4& Projection, const m4& InverseView, const m4& HUDProjection, f32 Time, m4 LightSpaceMatrixTemp)
+internal void GameRendererSetRenderData(d3d12_render_backend* Renderer, const v3& CameraPosition, const m4& View, const m4& Projection, const m4& InverseView, const m4& HUDProjection, f32 Time, m4 LightSpaceMatrixTemp)
 {
     auto& RenderData = Renderer->RenderData;
     RenderData.CuboidRootSignatureBuffer.View = View;
@@ -1203,7 +1201,7 @@ internal void GameRendererSetRenderData(game_renderer* Renderer, const v3& Camer
     RenderData.ShadowPassRootSignatureBuffer.LightSpaceMatrix = LightSpaceMatrixTemp;
 }
 
-internal void GameRendererSubmitQuad(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v2& Scale, const v4& Color)
+internal void GameRendererSubmitQuad(d3d12_render_backend* Renderer, const v3& Translation, const v3& Rotation, const v2& Scale, const v4& Color)
 {
     Assert(Renderer->Quad.IndexCount < c_MaxQuadIndices, "Renderer->QuadIndexCount < c_MaxQuadIndices");
 
@@ -1229,7 +1227,7 @@ internal void GameRendererSubmitQuad(game_renderer* Renderer, const v3& Translat
     Renderer->Quad.IndexCount += 6;
 }
 
-internal void GameRendererSubmitQuad(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v2& Scale, const texture& Texture, const v4& Color)
+internal void GameRendererSubmitQuad(d3d12_render_backend* Renderer, const v3& Translation, const v3& Rotation, const v2& Scale, const texture& Texture, const v4& Color)
 {
     Assert(Renderer->Quad.IndexCount < c_MaxQuadIndices, "Renderer->QuadIndexCount < c_MaxQuadIndices");
     Assert(Texture.Handle != nullptr, "Texture is invalid!");
@@ -1275,7 +1273,7 @@ internal void GameRendererSubmitQuad(game_renderer* Renderer, const v3& Translat
     Renderer->Quad.IndexCount += 6;
 }
 
-internal void GameRendererSubmitDistantQuad(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const texture& Texture, const v4& Color)
+internal void GameRendererSubmitDistantQuad(d3d12_render_backend* Renderer, const v3& Translation, const v3& Rotation, const texture& Texture, const v4& Color)
 {
     m4 Transform = bkm::Translate(m4(1.0f), Translation) * bkm::ToM4(qtn(Rotation));
 
@@ -1294,7 +1292,7 @@ internal void GameRendererSubmitDistantQuad(game_renderer* Renderer, const v3& T
     Renderer->DistantQuad.IndexCount += 6;
 }
 
-internal void GameRendererSubmitBillboardQuad(game_renderer* Renderer, const v3& Translation, const v2& Scale, const texture& Texture, const v4& Color)
+internal void GameRendererSubmitBillboardQuad(d3d12_render_backend* Renderer, const v3& Translation, const v2& Scale, const texture& Texture, const v4& Color)
 {
     m4& CameraView = Renderer->RenderData.CuboidRootSignatureBuffer.View;
 
@@ -1310,7 +1308,7 @@ internal void GameRendererSubmitBillboardQuad(game_renderer* Renderer, const v3&
     GameRendererSubmitQuadCustom(Renderer, Positions, Texture, Color);
 }
 
-internal void GameRendererSubmitQuadCustom(game_renderer* Renderer, v3 VertexPositions[4], const texture& Texture, const v4& Color)
+internal void GameRendererSubmitQuadCustom(d3d12_render_backend* Renderer, v3 VertexPositions[4], const texture& Texture, const v4& Color)
 {
     Assert(Renderer->Quad.IndexCount < c_MaxQuadIndices, "Renderer->QuadIndexCount < c_MaxQuadIndices");
     Assert(Texture.Handle != nullptr, "Texture handle is nullptr!");
@@ -1352,7 +1350,7 @@ internal void GameRendererSubmitQuadCustom(game_renderer* Renderer, v3 VertexPos
     Renderer->Quad.IndexCount += 6;
 }
 
-internal void GameRendererSubmitCuboid(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale, const texture& Texture, const v4& Color)
+internal void GameRendererSubmitCuboid(d3d12_render_backend* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale, const texture& Texture, const v4& Color)
 {
     Assert(Renderer->Cuboid.InstanceCount < c_MaxCubePerBatch, "Renderer->CuboidInstanceCount < c_MaxCuboidsPerBatch");
 
@@ -1399,7 +1397,7 @@ internal void GameRendererSubmitCuboid(game_renderer* Renderer, const v3& Transl
 #endif
 }
 
-internal void GameRendererSubmitCuboid(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale, const v4& Color)
+internal void GameRendererSubmitCuboid(d3d12_render_backend* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale, const v4& Color)
 {
     Assert(Renderer->Cuboid.InstanceCount < c_MaxCubePerBatch, "Renderer->CuboidInstanceCount < c_MaxCuboidsPerBatch");
 
@@ -1428,7 +1426,7 @@ internal void GameRendererSubmitCuboid(game_renderer* Renderer, const v3& Transl
 #endif
 }
 
-internal void GameRendererSubmitCuboid(game_renderer* Renderer, const v3& Translation, const texture& Texture, const v4& Color)
+internal void GameRendererSubmitCuboid(d3d12_render_backend* Renderer, const v3& Translation, const texture& Texture, const v4& Color)
 {
     Assert(Renderer->Cuboid.InstanceCount < c_MaxCubePerBatch, "Renderer->CuboidInstanceCount < c_MaxCuboidsPerBatch");
 
@@ -1467,7 +1465,7 @@ internal void GameRendererSubmitCuboid(game_renderer* Renderer, const v3& Transl
 #endif
 }
 
-internal void GameRendererSubmitCuboid(game_renderer* Renderer, const v3& Translation, const v4& Color)
+internal void GameRendererSubmitCuboid(d3d12_render_backend* Renderer, const v3& Translation, const v4& Color)
 {
     Assert(Renderer->Cuboid.InstanceCount < c_MaxCubePerBatch, "Renderer->CuboidInstanceCount < c_MaxCuboidsPerBatch");
 
@@ -1486,7 +1484,7 @@ internal void GameRendererSubmitCuboid(game_renderer* Renderer, const v3& Transl
 #endif
 }
 
-internal void GameRendererSubmitQuadedCuboid(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale, const texture& Texture, const texture_block_coords& TextureCoords, const v4& Color)
+internal void GameRendererSubmitQuadedCuboid(d3d12_render_backend* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale, const texture& Texture, const texture_block_coords& TextureCoords, const v4& Color)
 {
     m4 Transform = bkm::Translate(m4(1.0f), Translation)
         * bkm::ToM4(qtn(Rotation))
@@ -1495,7 +1493,7 @@ internal void GameRendererSubmitQuadedCuboid(game_renderer* Renderer, const v3& 
     GameRendererSubmitQuadedCuboid(Renderer, Transform, Texture, TextureCoords, Color);
 }
 
-internal void GameRendererSubmitQuadedCuboid(game_renderer* Renderer, const m4& Transform, const texture& Texture, const texture_block_coords& TextureCoords, const v4& Color)
+internal void GameRendererSubmitQuadedCuboid(d3d12_render_backend* Renderer, const m4& Transform, const texture& Texture, const texture_block_coords& TextureCoords, const v4& Color)
 {
     Assert(Renderer->QuadedCuboid.IndexCount < bkm::Max(c_MaxQuadIndices, c_MaxQuadedCuboidIndices), "Renderer->QuadedCuboidIndexCount < bkm::Max(c_MaxQuadIndices, c_MaxQuadedCuboidIndices)");
     Assert(Texture.Handle != nullptr, "Texture is invalid!");
@@ -1541,7 +1539,7 @@ internal void GameRendererSubmitQuadedCuboid(game_renderer* Renderer, const m4& 
     Renderer->QuadedCuboid.IndexCount += 36;
 }
 
-internal void GameRendererSubmitDirectionalLight(game_renderer* Renderer, const v3& Direction, f32 Intensity, const v3& Radiance)
+internal void GameRendererSubmitDirectionalLight(d3d12_render_backend* Renderer, const v3& Direction, f32 Intensity, const v3& Radiance)
 {
     directional_light& DirLight = Renderer->LightEnvironment.EmplaceDirectionalLight();
     DirLight.Direction = Direction;
@@ -1549,7 +1547,7 @@ internal void GameRendererSubmitDirectionalLight(game_renderer* Renderer, const 
     DirLight.Radiance = Radiance;
 }
 
-internal void GameRendererSubmitPointLight(game_renderer* Renderer, const v3& Position, f32 Radius, f32 FallOff, const v3& Radiance, f32 Intensity)
+internal void GameRendererSubmitPointLight(d3d12_render_backend* Renderer, const v3& Position, f32 Radius, f32 FallOff, const v3& Radiance, f32 Intensity)
 {
     point_light& Light = Renderer->LightEnvironment.EmplacePointLight();
     Light.Position = Position;
@@ -1563,7 +1561,7 @@ internal void GameRendererSubmitPointLight(game_renderer* Renderer, const v3& Po
 //                                             RENDERER API - HUD                                             
 // ===============================================================================================================
 
-internal void GameRendererHUDSubmitQuad(game_renderer* Renderer, v3 VertexPositions[4], const texture& Texture, const texture_coords& Coords, const v4& Color)
+internal void GameRendererHUDSubmitQuad(d3d12_render_backend* Renderer, v3 VertexPositions[4], const texture& Texture, const texture_coords& Coords, const v4& Color)
 {
     Assert(Renderer->HUD.IndexCount < c_MaxHUDQuadIndices, "Renderer->HUDQuadIndexCount < c_MaxHUDQuadIndices");
     Assert(Texture.Handle != nullptr, "Texture is invalid!");

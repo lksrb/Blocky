@@ -1,6 +1,6 @@
 #include "ResourcePacker.h"
 
-static buffer ReadBinary(const char* path)
+static buffer win32_read_buffer(const char* path)
 {
     buffer Buffer;
 
@@ -54,7 +54,7 @@ int main()
     {
         loaded_mesh Mesh;
 
-        buffer Buffer = ReadBinary(PackedPath);
+        buffer Buffer = win32_read_buffer(PackedPath);
         u8* Pointer = (u8*)Buffer.Data;
 
         // Get tag

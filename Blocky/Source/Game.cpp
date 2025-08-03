@@ -58,27 +58,27 @@ internal void AddModelPart(entity_model* Model, v3 LocalPosition, v3 Size, textu
     Part.Size = Size * c_TexelSize;
 }
 
-internal game GameCreate(game_renderer* Renderer)
+internal game* game_create(arena* Arena, d3d12_render_backend* Backend)
 {
-    game Game = {};
+    game* Game = arena_new(Arena, game);
 
     // Crosshair texture will be separate from block textures
-    Game.CrosshairTexture = TextureCreate(Renderer->Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, "Resources/Textures/MC/Crosshair.png");
+    Game->CrosshairTexture = TextureCreate(Backend->Device, Backend->DirectCommandAllocators[0], Backend->DirectCommandList, Backend->DirectCommandQueue, "Resources/Textures/MC/Crosshair.png");
 
     // Load block textures
-    Game.BlockTextures[(u32)block_type::Dirt] = TextureCreate(Renderer->Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, "Resources/Textures/MC/dirt_2.png");
+    Game->BlockTextures[(u32)block_type::Dirt] = TextureCreate(Backend->Device, Backend->DirectCommandAllocators[0], Backend->DirectCommandList, Backend->DirectCommandQueue, "Resources/Textures/MC/dirt_2.png");
 
-    GameGenerateWorld(&Game);
+    GameGenerateWorld(Game);
 
-    Game.CowTexture = TextureCreate(Renderer->Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, "Resources/Textures/MC/cow.png");
+    Game->CowTexture = TextureCreate(Backend->Device, Backend->DirectCommandAllocators[0], Backend->DirectCommandList, Backend->DirectCommandQueue, "Resources/Textures/MC/cow.png");
 
-    Game.PointLightIconTexture = TextureCreate(Renderer->Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, "Resources/Textures/PointLight.png");
+    Game->PointLightIconTexture = TextureCreate(Backend->Device, Backend->DirectCommandAllocators[0], Backend->DirectCommandList, Backend->DirectCommandQueue, "Resources/Textures/PointLight.png");
 
-    //Game.SunTexture = TextureCreate(Renderer->Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, "Resources/Textures/MC/environemnt/sun.png");
+    //Game->SunTexture = TextureCreate(Renderer->Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, "Resources/Textures/MC/environemnt/sun.png");
 
-    //Game.MoonTexture = TextureCreate(Renderer->Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, "Resources/Textures/MC/environemnt/moon.png");
+    //Game->MoonTexture = TextureCreate(Renderer->Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, "Resources/Textures/MC/environemnt/moon.png");
 
-    Game.Registry = EntityRegistryCreate(100);
+    Game->Registry = EntityRegistryCreate(100);
 
     entity_model CowModel = EntityModelCreate();
 
@@ -133,34 +133,34 @@ internal game GameCreate(game_renderer* Renderer)
     // Create another set of cows
     for (i32 i = 10; i < 11; i++)
     {
-        auto CowEntity = CreateEntity(&Game.Registry);
+        auto CowEntity = CreateEntity(&Game->Registry);
 
-        auto& Transform = AddComponent<transform_component>(&Game.Registry, CowEntity);
+        auto& Transform = AddComponent<transform_component>(&Game->Registry, CowEntity);
         Transform.Translation = v3((f32)c_TexelSize / 2 + 10.0f, 17.0, c_TexelSize / 2 + 10.0f);
         Transform.Scale = v3(1.0f);
         Transform.Rotation = v3(0.0f, 0.0f, 0.0f);
 
-        auto& Render = AddComponent<entity_render_component>(&Game.Registry, CowEntity);
-        Render.Texture = Game.CowTexture;
+        auto& Render = AddComponent<entity_render_component>(&Game->Registry, CowEntity);
+        Render.Texture = Game->CowTexture;
         Render.Model = CowModel;
 
-        auto& AABB = AddComponent<aabb_physics_component>(&Game.Registry, CowEntity);
+        auto& AABB = AddComponent<aabb_physics_component>(&Game->Registry, CowEntity);
         AABB.BoxSize = v3(0.8f, 1.8, 0.8f);
         AABB.Velocity = v3(0.0f);
         AABB.Grounded = false;
 
-        auto& Logic = AddComponent<logic_component>(&Game.Registry, CowEntity);
+        auto& Logic = AddComponent<logic_component>(&Game->Registry, CowEntity);
         Logic.CreateFunction = CowCreate;
         Logic.DestroyFunction = CowDestroy;
         Logic.UpdateFunction = CowUpdate;
     }
 
     // On Create event
-    auto View = ViewComponents<logic_component>(&Game.Registry);
+    auto View = ViewComponents<logic_component>(&Game->Registry);
     for (auto Entity : View)
     {
         auto& Logic = View.Get(Entity);
-        Logic.CreateFunction(&Game.Registry, Entity, &Logic);
+        Logic.CreateFunction(&Game->Registry, Entity, &Logic);
     }
 
     return Game;
@@ -316,14 +316,14 @@ internal void GameGenerateWorld(game* Game)
     }
 }
 
-internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* Input, f32 TimeStep, u32 ClientAreaWidth, u32 ClientAreaHeight)
+internal void game_update(game* Game, d3d12_render_backend* Renderer, const game_input* Input, f32 TimeStep, u32 ClientAreaWidth, u32 ClientAreaHeight)
 {
     //debug_cycle_counter GameUpdateCounter("GameUpdateCounter");
 
     // Player update
     // NOTE: I dont think we need everything to be an entity, just most dynamic stuff
     // Player and blocks are perfect examples of where we possibly dont need that flexibility
-    GamePlayerUpdate(Game, Input, Renderer, TimeStep);
+    game_player_update(Game, Input, Renderer, TimeStep);
 
     // Entity update
     // Physics simulation gave us some state of the entity and now we can use it to react to in the update loop
@@ -417,8 +417,8 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
         v3 LightPosition(2, -10, 0);
 
         {
-            m4 LightProjection = bkm::Ortho(-25.0f, 25.0f, -25.0f, 25.0f, 0.1f, 40.0f);
-            m4 LightView = bkm::LookAt(LightPosition, v3(ColumnCount / 2, 0, RowCount / 2), v3(0.0f, 1.0f, 0.0f));
+            m4 LightProjection = bkm::OrthoLH(-25.0f, 25.0f, -25.0f, 25.0f, 0.1f, 40.0f);
+            m4 LightView = bkm::LookAtLH(LightPosition, v3(ColumnCount / 2, 0, RowCount / 2), v3(0.0f, 1.0f, 0.0f));
             //m4 LightView = bkm::LookAt(v3(-SunDirection), v3(0, 0, 0), v3(0.0f, 1.0f, 0.0f));
 
             LightSpaceMatrix = LightProjection * m4(m3(LightView)); // Remove translation
@@ -430,7 +430,7 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
         Game->Camera.View = bkm::Inverse(InverseView);
         Game->Camera.RecalculateProjectionPerspective(ClientAreaWidth, ClientAreaHeight);
 
-        m4 HUDProjection = bkm::Ortho(0, (f32)ClientAreaWidth, (f32)ClientAreaHeight, 0, -1, 1);
+        m4 HUDProjection = bkm::OrthoLH(0, (f32)ClientAreaWidth, (f32)ClientAreaHeight, 0, -1, 1);
         GameRendererSetRenderData(Renderer, CameraPosition, Game->Camera.View, Game->Camera.Projection, InverseView, HUDProjection, Game->TimeSinceStart, LightSpaceMatrix);
 
         GameRendererSubmitDirectionalLight(Renderer, LightDirection, 1.5f, v3(1.0f));
@@ -463,7 +463,7 @@ internal void GameUpdate(game* Game, game_renderer* Renderer, const game_input* 
     }
 }
 
-internal void GamePlayerUpdate(game* Game, const game_input* Input, game_renderer* Renderer, f32 TimeStep)
+internal void game_player_update(game* Game, const game_input* Input, d3d12_render_backend* Renderer, f32 TimeStep)
 {
     auto& Player = Game->Player;
 
@@ -977,7 +977,7 @@ internal void GamePhysicsSimulationUpdateEntities(game* Game, f32 TimeStep)
     }
 }
 
-internal void GameRenderEntities(game* Game, game_renderer* Renderer, f32 TimeStep)
+internal void GameRenderEntities(game* Game, d3d12_render_backend* Renderer, f32 TimeStep)
 {
     //debug_cycle_counter GameRenderEntities("Render Entities");
 
