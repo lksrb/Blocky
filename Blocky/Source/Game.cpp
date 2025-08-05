@@ -1,5 +1,7 @@
 #include "Game.h"
 
+#include "GameRenderer.cpp"
+
 #include "Cow.h"
 
 struct texture_rect
@@ -50,7 +52,7 @@ internal void AddModelPart(entity_model* Model, v3 LocalPosition, v3 Size, textu
     i32 i = 0;
     for (auto& Rect : Rects.Data)
     {
-        TextureCoords.TextureCoords[i++] = GetTextureCoords(Rect.X, Rect.Y, Rect.Width, Rect.Height, Rect.RotationCount);
+        TextureCoords.TextureCoords[i++] = get_texture_coords(Rect.X, Rect.Y, Rect.Width, Rect.Height, Rect.RotationCount);
     }
 
     Part.Coords = TextureCoords;
@@ -58,21 +60,17 @@ internal void AddModelPart(entity_model* Model, v3 LocalPosition, v3 Size, textu
     Part.Size = Size * c_TexelSize;
 }
 
-internal game* game_create(arena* Arena, d3d12_render_backend* Backend)
+internal game* game_create(arena* Arena, render_backend* Backend)
 {
     game* Game = arena_new(Arena, game);
 
+    game_generate_world(Arena, Game);
+
     // Crosshair texture will be separate from block textures
-    Game->CrosshairTexture = TextureCreate(Backend->Device, Backend->DirectCommandAllocators[0], Backend->DirectCommandList, Backend->DirectCommandQueue, "Resources/Textures/MC/Crosshair.png");
-
-    // Load block textures
-    Game->BlockTextures[(u32)block_type::Dirt] = TextureCreate(Backend->Device, Backend->DirectCommandAllocators[0], Backend->DirectCommandList, Backend->DirectCommandQueue, "Resources/Textures/MC/dirt_2.png");
-
-    GameGenerateWorld(Game);
-
-    Game->CowTexture = TextureCreate(Backend->Device, Backend->DirectCommandAllocators[0], Backend->DirectCommandList, Backend->DirectCommandQueue, "Resources/Textures/MC/cow.png");
-
-    Game->PointLightIconTexture = TextureCreate(Backend->Device, Backend->DirectCommandAllocators[0], Backend->DirectCommandList, Backend->DirectCommandQueue, "Resources/Textures/PointLight.png");
+    Game->CrosshairTexture = texture_create(Backend, "Resources/Textures/MC/Crosshair.png");
+    Game->BlockTextures[(u32)block_type::Dirt] = texture_create(Backend, "Resources/Textures/MC/dirt_2.png");
+    Game->CowTexture = texture_create(Backend, "Resources/Textures/MC/cow.png");
+    Game->PointLightIconTexture = texture_create(Backend, "Resources/Textures/PointLight.png");
 
     //Game->SunTexture = TextureCreate(Renderer->Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, "Resources/Textures/MC/environemnt/sun.png");
 
@@ -150,9 +148,9 @@ internal game* game_create(arena* Arena, d3d12_render_backend* Backend)
         AABB.Grounded = false;
 
         auto& Logic = AddComponent<logic_component>(&Game->Registry, CowEntity);
-        Logic.CreateFunction = CowCreate;
-        Logic.DestroyFunction = CowDestroy;
-        Logic.UpdateFunction = CowUpdate;
+        Logic.CreateFunction = cow_create;
+        Logic.DestroyFunction = cow_destroy;
+        Logic.UpdateFunction = cow_update;
     }
 
     // On Create event
@@ -166,10 +164,10 @@ internal game* game_create(arena* Arena, d3d12_render_backend* Backend)
     return Game;
 }
 
-internal void GameGenerateWorld(game* Game)
+internal void game_generate_world(arena* Arena, game* Game)
 {
     Game->BlocksCount = RowCount * ColumnCount * LayerCount;
-    Game->Blocks = VmAllocArray(block, Game->BlocksCount);
+    Game->Blocks = arena_new_array(Arena, block, Game->BlocksCount);
 
     const v3 StartPos = { 0, 0, 0 };
 
@@ -270,7 +268,7 @@ internal void GameGenerateWorld(game* Game)
     */
     return;
     // Disable Sin-like world for now
-    random_series Series = RandomSeriesCreate();
+    random_series Series = random_series_create();
 
     for (i32 L = 0; L < LayerCount; L++)
     {
@@ -281,7 +279,7 @@ internal void GameGenerateWorld(game* Game)
                 i32 Index = (L * RowCount * ColumnCount) + (R * RowCount) + C;
                 auto& Block = Game->Blocks[Index];
 
-                if (!Block.Placed())
+                if (!Block.placed())
                 {
                     f32 A = 5.0f;
                     f32 F = 0.5f;
@@ -316,7 +314,7 @@ internal void GameGenerateWorld(game* Game)
     }
 }
 
-internal void game_update(game* Game, d3d12_render_backend* Renderer, const game_input* Input, f32 TimeStep, u32 ClientAreaWidth, u32 ClientAreaHeight)
+internal void game_update(game* Game, game_renderer* Renderer, const game_input* Input, f32 TimeStep, u32 ClientAreaWidth, u32 ClientAreaHeight)
 {
     //debug_cycle_counter GameUpdateCounter("GameUpdateCounter");
 
@@ -329,13 +327,13 @@ internal void game_update(game* Game, d3d12_render_backend* Renderer, const game
     // Physics simulation gave us some state of the entity and now we can use it to react to in the update loop
     if (1)
     {
-        GameUpdateEntities(Game, TimeStep);
+        game_update_entities(Game, TimeStep);
     }
 
     // Physics simulation
     if (1)
     {
-        GamePhysicsSimulationUpdateEntities(Game, TimeStep);
+        game_physics_simulation_update_entities(Game, TimeStep);
     }
 
     // Count time
@@ -344,7 +342,7 @@ internal void game_update(game* Game, d3d12_render_backend* Renderer, const game
     // Render
     if (1)
     {
-        GameRenderEntities(Game, Renderer, TimeStep);
+        game_render_entities(Game, Renderer, TimeStep);
     }
 
     // Render blocks
@@ -356,10 +354,10 @@ internal void game_update(game* Game, d3d12_render_backend* Renderer, const game
         {
             auto& Block = Game->Blocks[i];
 
-            if (!Block.Placed())
+            if (!Block.placed())
                 continue;
 
-            GameRendererSubmitCuboid(Renderer, Block.Position, Game->BlockTextures[(u32)Block.Type], Block.Color);
+            game_renderer_submit_cuboid(Renderer, Block.Position, &Game->BlockTextures[(u32)Block.Type], Block.Color);
         }
     }
 
@@ -392,7 +390,7 @@ internal void game_update(game* Game, d3d12_render_backend* Renderer, const game
         SunDirection = bkm::Normalize(SunDirection);
         SunPosition = SunDirection * Distance;
         v3 SunRotation(bkm::PI_HALF + Angle, 0, 0);
-        GameRendererSubmitDistantQuad(Renderer, SunPosition, SunRotation, texture(), v4(1));
+        game_renderer_submit_distant_quad(Renderer, SunPosition, SunRotation, nullptr, v4(1));
 
         // TODO: On sunset and sunrise, tweak directional light color to "reflect" the sky color
         local_persist v3 FinalColor = v3(0.8f, 0.5f, 0.3);
@@ -428,19 +426,19 @@ internal void game_update(game* Game, d3d12_render_backend* Renderer, const game
 
         m4 InverseView = bkm::Translate(m4(1.0f), CameraPosition) * bkm::ToM4(qtn(Game->Player.Rotation));
         Game->Camera.View = bkm::Inverse(InverseView);
-        Game->Camera.RecalculateProjectionPerspective(ClientAreaWidth, ClientAreaHeight);
+        Game->Camera.recalculate_projection_persperctive(ClientAreaWidth, ClientAreaHeight);
 
         m4 HUDProjection = bkm::OrthoLH(0, (f32)ClientAreaWidth, (f32)ClientAreaHeight, 0, -1, 1);
-        GameRendererSetRenderData(Renderer, CameraPosition, Game->Camera.View, Game->Camera.Projection, InverseView, HUDProjection, Game->TimeSinceStart, LightSpaceMatrix);
+        game_renderer_set_render_data(Renderer, CameraPosition, Game->Camera.View, Game->Camera.Projection, InverseView, HUDProjection, Game->TimeSinceStart, LightSpaceMatrix);
 
-        GameRendererSubmitDirectionalLight(Renderer, LightDirection, 1.5f, v3(1.0f));
+        game_renderer_submit_directional_light(Renderer, LightDirection, 1.5f, v3(1.0f));
     }
 
     // Render Debug UI
     if (Game->RenderDebugUI)
     {
         // For each point lights so we know that its there
-        //GameRendererSubmitBillboardQuad(Renderer, TestLightPos, v2(0.5), Game->PointLightIconTexture, v4(1.0f));
+        //game_renderer_submit_billboard_quad(Renderer, TestLightPos, v2(0.5), &Game->PointLightIconTexture, v4(1.0f));
     }
 
     // Render HUD
@@ -459,11 +457,11 @@ internal void game_update(game* Game, d3d12_render_backend* Renderer, const game
         Positions[1] = { CenterX + CrosshairSize, CenterY + CrosshairSize, 0.0f };
         Positions[0] = { CenterX, CenterY + CrosshairSize, 0.0f };
 
-        GameRendererHUDSubmitQuad(Renderer, Positions, Game->CrosshairTexture, texture_coords(), v4(1.0f, 1.0f, 1.0f, 0.7f));
+        game_renderer_submit_hud_quad(Renderer, Positions, &Game->CrosshairTexture, texture_coords(), v4(1.0f, 1.0f, 1.0f, 0.7f));
     }
 }
 
-internal void game_player_update(game* Game, const game_input* Input, d3d12_render_backend* Renderer, f32 TimeStep)
+internal void game_player_update(game* Game, const game_input* Input, game_renderer* Renderer, f32 TimeStep)
 {
     auto& Player = Game->Player;
 
@@ -478,7 +476,7 @@ internal void game_player_update(game* Game, const game_input* Input, d3d12_rend
     bool JustPressed = false;
     bool JumpKeyPressed = false;
 
-    if (Input->IsKeyPressed(key::T))
+    if (Input->is_key_pressed(key::T))
     {
         TPressed = !TPressed;
 
@@ -489,7 +487,7 @@ internal void game_player_update(game* Game, const game_input* Input, d3d12_rend
     {
         local_persist v2i OldMousePos;
 
-        v2i MousePos = Input->GetRawMouseInput();
+        v2i MousePos = Input->get_raw_mouse_input();
 
         // Avoids teleporting with camera rotation due to large delta
         if (JustPressed)
@@ -524,43 +522,43 @@ internal void game_player_update(game* Game, const game_input* Input, d3d12_rend
     v3 Direction = {};
     if (TPressed)
     {
-        if (Input->IsKeyDown(key::W))
+        if (Input->is_key_down(key::W))
         {
             Direction += v3(Forward.x, 0.0f, Forward.z);
         }
 
-        if (Input->IsKeyDown(key::S))
+        if (Input->is_key_down(key::S))
         {
             Direction -= v3(Forward.x, 0.0f, Forward.z);
         }
 
-        if (Input->IsKeyDown(key::A))
+        if (Input->is_key_down(key::A))
         {
             Direction -= Right;
         }
 
-        if (Input->IsKeyDown(key::D))
+        if (Input->is_key_down(key::D))
         {
             Direction += Right;
         }
 
-        if (Input->IsKeyPressed(key::BackSpace) || Input->IsKeyDown(key::Space))
+        if (Input->is_key_pressed(key::BackSpace) || Input->is_key_down(key::Space))
         {
             JumpKeyPressed = true;
         }
 
-        if (Input->IsKeyPressed(key::G))
+        if (Input->is_key_pressed(key::G))
         {
             Player.IsPhysicsObject = !Player.IsPhysicsObject;
         }
 
         if (!Player.IsPhysicsObject)
         {
-            if (Input->IsKeyDown(key::Q) || Input->IsKeyDown(key::BackSpace) || Input->IsKeyDown(key::Space))
+            if (Input->is_key_down(key::Q) || Input->is_key_down(key::BackSpace) || Input->is_key_down(key::Space))
             {
                 Direction += v3(0.0f, 1.0f, 0.0f);
             }
-            else if (Input->IsKeyDown(key::E) || Input->IsKeyDown(key::Control) || Input->IsKeyDown(key::Shift))
+            else if (Input->is_key_down(key::E) || Input->is_key_down(key::Control) || Input->is_key_down(key::Shift))
             {
                 Direction -= v3(0.0f, 1.0f, 0.0f);
             }
@@ -595,7 +593,7 @@ internal void game_player_update(game* Game, const game_input* Input, d3d12_rend
         aabb PlayerAABB = AABBFromV3(NextPos, v3(0.5f, 1.8f, 0.5f));
 
         // Stepping on a block
-        auto Pos = GetWorldToBlockPos(NextPos);
+        auto Pos = get_world_to_block_position(NextPos);
 
         for (i32 l = -1; l <= 1; l += 2)
         {
@@ -603,9 +601,9 @@ internal void game_player_update(game* Game, const game_input* Input, d3d12_rend
             {
                 for (i32 r = -1; r <= 1; r++)
                 {
-                    auto Block = BlockGetSafe(Game, Pos.C + c, Pos.R + r, Pos.L + l);
+                    auto Block = block_get_safe(Game, Pos.C + c, Pos.R + r, Pos.L + l);
 
-                    if (Block && Block->Placed())
+                    if (Block && Block->placed())
                     {
                         aabb BlockAABB = AABBFromV3(Block->Position, v3(1.0f));
                         if (AABBCheckCollision(PlayerAABB, BlockAABB))
@@ -633,7 +631,7 @@ internal void game_player_update(game* Game, const game_input* Input, d3d12_rend
 
         PlayerAABB = AABBFromV3(NextPos, v3(0.5f, 1.8f, 0.5f));
 
-        Pos = GetWorldToBlockPos(NextPos);
+        Pos = get_world_to_block_position(NextPos);
 
         for (i32 c = -1; c <= 1; c += 2)
         {
@@ -641,9 +639,9 @@ internal void game_player_update(game* Game, const game_input* Input, d3d12_rend
             {
                 for (i32 l = -1; l <= 1; l++)
                 {
-                    auto Block = BlockGetSafe(Game, Pos.C + c, Pos.R + r, Pos.L + l);
+                    auto Block = block_get_safe(Game, Pos.C + c, Pos.R + r, Pos.L + l);
 
-                    if (Block && Block->Placed())
+                    if (Block && Block->placed())
                     {
                         aabb BlockAABB = AABBFromV3(Block->Position, v3(1.0f));
                         if (AABBCheckCollision(PlayerAABB, BlockAABB))
@@ -664,7 +662,7 @@ internal void game_player_update(game* Game, const game_input* Input, d3d12_rend
 
         PlayerAABB = AABBFromV3(NextPos, v3(0.5f, 1.8f, 0.5f));
 
-        Pos = GetWorldToBlockPos(NextPos);
+        Pos = get_world_to_block_position(NextPos);
 
         for (i32 r = -1; r <= 1; r += 2)
         {
@@ -672,9 +670,9 @@ internal void game_player_update(game* Game, const game_input* Input, d3d12_rend
             {
                 for (i32 l = -1; l <= 1; l++)
                 {
-                    auto Block = BlockGetSafe(Game, Pos.C + c, Pos.R + r, Pos.L + l);
+                    auto Block = block_get_safe(Game, Pos.C + c, Pos.R + r, Pos.L + l);
 
-                    if (Block && Block->Placed())
+                    if (Block && Block->placed())
                     {
                         aabb BlockAABB = AABBFromV3(Block->Position, v3(1.0f));
                         if (AABBCheckCollision(PlayerAABB, BlockAABB))
@@ -698,7 +696,7 @@ internal void game_player_update(game* Game, const game_input* Input, d3d12_rend
         Player.Position += Direction * Speed * TimeStep;
 
         // Update coords
-        auto Pos = GetWorldToBlockPos(Player.Position);
+        auto Pos = get_world_to_block_position(Player.Position);
 #if 0
         for (i32 i = -1; i <= 1; i++)
         {
@@ -716,7 +714,7 @@ internal void game_player_update(game* Game, const game_input* Input, d3d12_rend
     }
 
     // Destroy block
-    if (Input->IsMousePressed(mouse::Left))
+    if (Input->is_mouse_pressed(mouse::Left))
     {
         ray Ray;
         Ray.Origin = Player.Position + Game->CameraOffset; // TODO: Camera position
@@ -726,7 +724,7 @@ internal void game_player_update(game* Game, const game_input* Input, d3d12_rend
         v3 HitNormal;
         block HitBlock;
         u64 HitIndex;
-        if (FindFirstHit(Ray, Game->Blocks, Game->BlocksCount, &HitPoint, &HitNormal, &HitBlock, &HitIndex))
+        if (find_first_hit(Ray, Game->Blocks, Game->BlocksCount, &HitPoint, &HitNormal, &HitBlock, &HitIndex))
         {
             auto& Block = Game->Blocks[HitIndex];
             Block.Type = block_type::Air;
@@ -781,7 +779,7 @@ internal void game_player_update(game* Game, const game_input* Input, d3d12_rend
     }
 
     // Create blocks
-    if (Input->IsMousePressed(mouse::Right))
+    if (Input->is_mouse_pressed(mouse::Right))
     {
         v2i PlacePos = { 0,0 };
 
@@ -794,7 +792,7 @@ internal void game_player_update(game* Game, const game_input* Input, d3d12_rend
         block HitBlock;
         u64 HitIndex;
 
-        if (FindFirstHit(Ray, Game->Blocks, Game->BlocksCount, &HitPoint, &HitNormal, &HitBlock, &HitIndex))
+        if (find_first_hit(Ray, Game->Blocks, Game->BlocksCount, &HitPoint, &HitNormal, &HitBlock, &HitIndex))
         {
             v3 NewBlockPos = HitBlock.Position + HitNormal;
 
@@ -805,7 +803,7 @@ internal void game_player_update(game* Game, const game_input* Input, d3d12_rend
                 i32 C = (i32)NewBlockPos.x;
                 i32 R = (i32)NewBlockPos.z;
                 i32 L = (i32)NewBlockPos.y;
-                auto Block = BlockGetSafe(Game, C, R, L);
+                auto Block = block_get_safe(Game, C, R, L);
 
                 if (Block)
                 {
@@ -834,7 +832,7 @@ internal void game_player_update(game* Game, const game_input* Input, d3d12_rend
     //}
 }
 
-internal void GameUpdateEntities(game* Game, f32 TimeStep)
+internal void game_update_entities(game* Game, f32 TimeStep)
 {
     // TODO: Of course fetching function pointer is a lot slower than calling an actual function on a struct
     // The difference is between 5-6x when I spawn 10000 entities with optimalizations, thats quite huge and is worth considering.
@@ -850,7 +848,7 @@ internal void GameUpdateEntities(game* Game, f32 TimeStep)
     }
 }
 
-internal void GamePhysicsSimulationUpdateEntities(game* Game, f32 TimeStep)
+internal void game_physics_simulation_update_entities(game* Game, f32 TimeStep)
 {
     auto View = ViewComponents<transform_component, aabb_physics_component>(&Game->Registry);
 
@@ -874,7 +872,7 @@ internal void GamePhysicsSimulationUpdateEntities(game* Game, f32 TimeStep)
         aabb EntityAABB = AABBFromV3(NextPos, AABBPhysics.BoxSize);
 
         // Figuring out if somehit is it
-        block_pos Pos = GetWorldToBlockPos(NextPos);
+        block_pos Pos = get_world_to_block_position(NextPos);
 
         for (i32 l = -1; l <= 1; l += 2)
         {
@@ -882,9 +880,9 @@ internal void GamePhysicsSimulationUpdateEntities(game* Game, f32 TimeStep)
             {
                 for (i32 r = -1; r <= 1; r++)
                 {
-                    auto Block = BlockGetSafe(Game, Pos.C + c, Pos.R + r, Pos.L + l);
+                    auto Block = block_get_safe(Game, Pos.C + c, Pos.R + r, Pos.L + l);
 
-                    if (Block && Block->Placed())
+                    if (Block && Block->placed())
                     {
                         aabb BlockAABB = AABBFromV3(Block->Position, v3(1.0f));
                         if (AABBCheckCollision(EntityAABB, BlockAABB))
@@ -915,7 +913,7 @@ internal void GamePhysicsSimulationUpdateEntities(game* Game, f32 TimeStep)
 
         EntityAABB = AABBFromV3(NextPos, AABBPhysics.BoxSize);
 
-        Pos = GetWorldToBlockPos(NextPos);
+        Pos = get_world_to_block_position(NextPos);
 
         for (i32 c = -1; c <= 1; c += 2)
         {
@@ -923,9 +921,9 @@ internal void GamePhysicsSimulationUpdateEntities(game* Game, f32 TimeStep)
             {
                 for (i32 l = -1; l <= 1; l++)
                 {
-                    auto Block = BlockGetSafe(Game, Pos.C + c, Pos.R + r, Pos.L + l);
+                    auto Block = block_get_safe(Game, Pos.C + c, Pos.R + r, Pos.L + l);
 
-                    if (Block && Block->Placed())
+                    if (Block && Block->placed())
                     {
                         aabb BlockAABB = AABBFromV3(Block->Position, v3(1.0f));
                         if (AABBCheckCollision(EntityAABB, BlockAABB))
@@ -946,7 +944,7 @@ internal void GamePhysicsSimulationUpdateEntities(game* Game, f32 TimeStep)
 
         EntityAABB = AABBFromV3(NextPos, AABBPhysics.BoxSize);
 
-        Pos = GetWorldToBlockPos(NextPos);
+        Pos = get_world_to_block_position(NextPos);
 
         for (i32 r = -1; r <= 1; r += 2)
         {
@@ -954,9 +952,9 @@ internal void GamePhysicsSimulationUpdateEntities(game* Game, f32 TimeStep)
             {
                 for (i32 l = -1; l <= 1; l++)
                 {
-                    auto Block = BlockGetSafe(Game, Pos.C + c, Pos.R + r, Pos.L + l);
+                    auto Block = block_get_safe(Game, Pos.C + c, Pos.R + r, Pos.L + l);
 
-                    if (Block && Block->Placed())
+                    if (Block && Block->placed())
                     {
                         aabb BlockAABB = AABBFromV3(Block->Position, v3(1.0f));
                         if (AABBCheckCollision(EntityAABB, BlockAABB))
@@ -977,7 +975,7 @@ internal void GamePhysicsSimulationUpdateEntities(game* Game, f32 TimeStep)
     }
 }
 
-internal void GameRenderEntities(game* Game, d3d12_render_backend* Renderer, f32 TimeStep)
+internal void game_render_entities(game* Game, game_renderer* Renderer, f32 TimeStep)
 {
     //debug_cycle_counter GameRenderEntities("Render Entities");
 
@@ -994,7 +992,7 @@ internal void GameRenderEntities(game* Game, d3d12_render_backend* Renderer, f32
             m4 Local = bkm::Translate(m4(1.0f), Part.LocalPosition) * bkm::Scale(m4(1.0f), Part.Size);
             m4 TransformMatrix = Transform.Matrix() * Local;
 
-            GameRendererSubmitQuadedCuboid(Renderer, TransformMatrix, Render.Texture, Part.Coords, Render.Color);
+            game_renderer_submit_quaded_cuboid(Renderer, TransformMatrix, &Render.Texture, Part.Coords, Render.Color);
         }
     }
 }

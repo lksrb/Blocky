@@ -5,6 +5,12 @@
 #define STB_IMAGE_STATIC
 #include "stb_image.h"
 
+enum class texture_format : u32
+{
+    None = 0,
+    RGBA8_Unorm_SRGB
+};
+
 struct texture
 {
     ID3D12Resource* Handle;
@@ -14,10 +20,8 @@ struct texture
     D3D12_CPU_DESCRIPTOR_HANDLE SRVDescriptor;
 };
 
-internal texture TextureCreate(ID3D12Device* Device, u32 Width, u32 Height, DXGI_FORMAT Format, D3D12_RESOURCE_STATES InitialState, const wchar_t* DebugName);
+struct d3d12_render_backend;
 
-internal texture TextureCreate(ID3D12Device* Device, ID3D12CommandAllocator* CommandAllocator, ID3D12GraphicsCommandList* CommandList, ID3D12CommandQueue* CommandQueue, buffer Pixels, u32 Width, u32 Height, DXGI_FORMAT Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB);
-
-internal texture TextureCreate(ID3D12Device* Device, ID3D12CommandAllocator* CommandAllocator, ID3D12GraphicsCommandList* CommandList, ID3D12CommandQueue* CommandQueue, const char* Path);
-
-internal void TextureDestroy(texture* Texture);
+internal texture texture_create(render_backend* Backend, u32 Width, u32 Height, buffer Pixels, texture_format Format = texture_format::RGBA8_Unorm_SRGB, const wchar_t* DebugName = L"DX12Texture");
+internal texture texture_create(render_backend* Backend, const char* Path);
+internal void texture_destroy(texture* Texture);

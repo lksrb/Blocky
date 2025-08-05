@@ -54,6 +54,7 @@ constexpr Enum& operator^=(Enum& ioLHS, Enum inRHS)                  \
 #include "Log.h"
 #include "DebugAssert.h"
 #include "Math/BKM.h"
+#include "Arena.h"
 
 // Common types
 struct buffer

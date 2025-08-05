@@ -123,13 +123,6 @@ struct entity_render_component
     entity_model Model;
 };
 
-struct relationship_component
-{
-    // TODO
-    uuid Children[6];
-    uuid Parent;
-};
-
 // Helper to get the index of a type in the tuple
 template<typename T, typename Tuple>
 struct type_index;
@@ -146,7 +139,7 @@ struct type_index<T, std::tuple<U, Types...>>
     static constexpr std::size_t value = 1 + type_index<T, std::tuple<Types...>>::value;
 };
 
-using components_pools = std::tuple<component_pool<transform_component>, component_pool<entity_render_component>, component_pool<aabb_physics_component>, component_pool<logic_component>, component_pool<relationship_component>>;
+using components_pools = std::tuple<component_pool<transform_component>, component_pool<entity_render_component>, component_pool<aabb_physics_component>, component_pool<logic_component>>;
 
 struct entity_registry
 {

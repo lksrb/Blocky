@@ -12,19 +12,19 @@
 #define GET_Y_LPARAM(lp) ((int)(short)HIWORD(lp))
 
 // Just to replace "new"s everywhere, they are slow as fuck
-#define VmAllocArray(__type, __count) (__type*)::VirtualAlloc(nullptr, sizeof(__type) * __count, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE)
+//#define VmAllocArray(__type, __count) (__type*)::VirtualAlloc(nullptr, sizeof(__type) * __count, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE)
 
 // SIMD Stuff
-#define ENABLE_SIMD 1
+#define ENABLE_SIMD 0
+
+// Memory
+#define SMALL_PAGE_SIZE 4096
 
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 #include <hidusage.h>
 
 #include "Common.h"
-
-// HAHA ITS GENIUS
-#define debug_new(__type) ([]() { __type* __Variable = (__type*)VmAllocArray(__type, 1); new (__Variable) __type(); return __Variable; })()
 
 struct win32_window
 {
@@ -85,48 +85,18 @@ struct game_input
         KeyPressed[(u32)Key] = IsDown;
     }
 
-    void SetMouseState(mouse Mouse, bool IsDown)
+    void set_mouse_state(mouse Mouse, bool IsDown)
     {
         MouseDown[(u32)Mouse] = IsDown;
         MousePressed[(u32)Mouse] = IsDown;
     }
 
-    v2i GetMouseInput() const { return IsCursorLocked ? VirtualMousePosition : LastMousePosition; };
-    v2i GetRawMouseInput() const { return IsCursorLocked ? RawVirtualMousePosition : RawLastMousePosition; };
+    v2i get_mouse_input() const { return IsCursorLocked ? VirtualMousePosition : LastMousePosition; };
+    v2i get_raw_mouse_input() const { return IsCursorLocked ? RawVirtualMousePosition : RawLastMousePosition; };
 
-    bool IsKeyDown(key Key) const { return KeyDown[(u32)Key]; }
-    bool IsKeyPressed(key Key) const { return KeyPressed[(u32)Key]; }
+    bool is_key_down(key Key) const { return KeyDown[(u32)Key]; }
+    bool is_key_pressed(key Key) const { return KeyPressed[(u32)Key]; }
 
-    bool IsMouseDown(mouse Mouse) const { return MouseDown[(u32)Mouse]; }
-    bool IsMousePressed(mouse Mouse) const { return MousePressed[(u32)Mouse]; }
+    bool is_mouse_down(mouse Mouse) const { return MouseDown[(u32)Mouse]; }
+    bool is_mouse_pressed(mouse Mouse) const { return MousePressed[(u32)Mouse]; }
 };
-
-struct arena
-{
-    u8* MemoryBase;
-    u8* MemoryPointer;
-    u64 Capacity;
-    u64 Size;
-};
-
-#define SMALL_PAGE_SIZE 4096
-
-inline u32 align(u32 n, u32 alignment)
-{
-    return (n + alignment - 1) & ~(alignment - 1);
-}
-
-#define arena_new(__arena, __type) ([](arena* Arena) { __type* __Variable = (__type*)arena_alloc(Arena, sizeof(__type)); new (__Variable) __type(); return __Variable; })(__arena)
-
-internal void* arena_alloc(arena* Arena, u64 AllocationSize, u64 Alignment = 8)
-{
-    Assert(Arena->Size + AllocationSize < Arena->Capacity, "Not enough memory in the pool!");
-
-    // Get the current pointer
-    Arena->MemoryPointer = (u8*)((u64)Arena->MemoryPointer + (static_cast<u64>(Alignment) - 1) & ~(static_cast<u64>(Alignment) - 1));
-
-    void* Pointer = Arena->MemoryPointer;
-    Arena->MemoryPointer += AllocationSize;
-    Arena->Size += AllocationSize;
-    return Pointer;
-}

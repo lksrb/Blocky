@@ -18,7 +18,7 @@ struct camera
     f32 PerspectiveFOV = bkm::PI_HALF;
     f32 PerspectiveNear = 0.1f, PerspectiveFar = 1000.0f;
 
-    void RecalculateProjectionOrtho(u32 Width, u32 Height)
+    void recalculate_projection_ortho(u32 Width, u32 Height)
     {
         AspectRatio = static_cast<f32>(Width) / Height;
         f32 OrthoLeft = -0.5f * AspectRatio * OrthographicSize;
@@ -28,13 +28,13 @@ struct camera
         Projection = bkm::Ortho(OrthoLeft, OrthoRight, OrthoBottom, OrthoTop, OrthographicNear, OrthographicFar);
     }
 
-    void RecalculateProjectionPerspective(u32 Width, u32 Height)
+    void recalculate_projection_persperctive(u32 Width, u32 Height)
     {
         AspectRatio = static_cast<f32>(Width) / Height;
         Projection = bkm::Perspective(PerspectiveFOV, AspectRatio, PerspectiveNear, PerspectiveFar);
     }
 
-    m4 GetViewProjection() const { return Projection * View; }
+    m4 get_view_projection() const { return Projection * View; }
 };
 
 enum class block_type : u32
@@ -80,7 +80,7 @@ struct block
     v3 Position = {};
     v4 Color = v4(1.0f);
 
-    inline bool Placed() const { return Type != block_type::Air; }
+    inline bool placed() const { return Type != block_type::Air; }
     //i32 Left = INT_MAX, Right = INT_MAX, Front = INT_MAX, Back = INT_MAX, Up = INT_MAX, Down = INT_MAX; // Neighbours
 };
 
@@ -119,16 +119,16 @@ struct game
     bool RenderHUD = true;
 };
 
-internal game* game_create(arena* Arena, d3d12_render_backend* Backend);
-internal void game_update(game* Game, d3d12_render_backend* Backend, const game_input* Input, f32 TimeStep, u32 ClientAreaWidth, u32 ClientAreaHeight);
-internal void game_player_update(game* Game, const game_input* Input, d3d12_render_backend* Backend, f32 TimeStep);
-internal void GameGenerateWorld(game* Game);
+internal game* game_create(arena* Arena, render_backend* Backend);
+internal void game_update(game* Game, game_renderer* Renderer, const game_input* Input, f32 TimeStep, u32 ClientAreaWidth, u32 ClientAreaHeight);
+internal void game_player_update(game* Game, const game_input* Input, game_renderer* Renderer, f32 TimeStep);
+internal void game_generate_world(arena* Arena, game* Game);
 
-internal void GameUpdateEntities(game* Game, f32 TimeStep);
-internal void GamePhysicsSimulationUpdateEntities(game* Game, f32 TimeStep);
-internal void GameRenderEntities(game* Game, d3d12_render_backend* Backend, f32 TimeStep);
+internal void game_update_entities(game* Game, f32 TimeStep);
+internal void game_physics_simulation_update_entities(game* Game, f32 TimeStep);
+internal void game_render_entities(game* Game, game_renderer* Renderer, f32 TimeStep);
 
-internal bool FindFirstHit(const ray& Ray, const block* Blocks, u64 BlocksCount, v3* HitPoint, v3* HitNormal, block* HitBlock, u64* HitIndex)
+internal bool find_first_hit(const ray& Ray, const block* Blocks, u64 BlocksCount, v3* HitPoint, v3* HitNormal, block* HitBlock, u64* HitIndex)
 {
     f32 ClosestT = INFINITY;
     bool FoundHit = false;
@@ -137,7 +137,7 @@ internal bool FindFirstHit(const ray& Ray, const block* Blocks, u64 BlocksCount,
     {
         auto& Block = Blocks[Index];
 
-        if (!Block.Placed())
+        if (!Block.placed())
             continue;
 
         aabb Box;
@@ -167,7 +167,7 @@ internal bool FindFirstHit(const ray& Ray, const block* Blocks, u64 BlocksCount,
 //    return FindFirstHit(Ray, Blocks.data(), Blocks.size(), HitPoint, HitNormal, HitBlock, HitIndex);
 //}
 
-internal block* BlockGetSafe(game* Game, i32 C, i32 R, i32 L)
+internal block* block_get_safe(game* Game, i32 C, i32 R, i32 L)
 {
     if (C >= 0 && C < ColumnCount &&
        R >= 0 && R < RowCount &&
@@ -179,7 +179,7 @@ internal block* BlockGetSafe(game* Game, i32 C, i32 R, i32 L)
     return nullptr;
 }
 
-internal texture_coords GetTextureCoords(i32 GridWidth, i32 GridHeight, i32 BottomLeftX, i32 BottomLeftY, i32 RotationCount = 0)
+internal texture_coords get_texture_coords(i32 GridWidth, i32 GridHeight, i32 BottomLeftX, i32 BottomLeftY, i32 RotationCount = 0)
 {
     texture_coords TextureCoords;
 
@@ -221,7 +221,7 @@ struct block_pos
     i32 C, R, L; // Column, Row, Layer // X, Z, Y
 };
 
-internal block_pos GetWorldToBlockPos(const v3& WorldPos)
+internal block_pos get_world_to_block_position(const v3& WorldPos)
 {
     // Kinda wonky
     i32 C = (i32)bkm::Floor(WorldPos.x + 0.5f);

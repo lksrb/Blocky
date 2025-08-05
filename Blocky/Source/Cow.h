@@ -24,21 +24,6 @@ struct action
     bool Finished = false; // Upon finishing, start the timer
 };
 
-internal const char* GetAliveEntityStateString(alive_entity_state State)
-{
-    switch (State)
-    {
-        case alive_entity_state::None:    return "None";
-        case alive_entity_state::Idle:    return "Idle";
-        case alive_entity_state::Walking: return "Walking";
-        case alive_entity_state::Running: return "Running";
-        case alive_entity_state::InAir:   return "InAir";
-    }
-
-    Assert(false, "Unknown state!");
-    return "UNKNOWN";
-}
-
 struct state_timer
 {
     f32 Current;
@@ -46,7 +31,7 @@ struct state_timer
 };
 
 template<typename F>
-internal void StateTimer(state_timer* Timer, f32 TimeStep, F&& Function)
+internal void state_timer_update(state_timer* Timer, f32 TimeStep, F&& Function)
 {
     // Simple timer
     if (Timer->Current > Timer->Time)
@@ -61,9 +46,24 @@ internal void StateTimer(state_timer* Timer, f32 TimeStep, F&& Function)
     }
 }
 
+internal const char* get_alive_entity_state_string(alive_entity_state State)
+{
+    switch (State)
+    {
+        case alive_entity_state::None:    return "None";
+        case alive_entity_state::Idle:    return "Idle";
+        case alive_entity_state::Walking: return "Walking";
+        case alive_entity_state::Running: return "Running";
+        case alive_entity_state::InAir:   return "InAir";
+    }
+
+    Assert(false, "Unknown state!");
+    return "UNKNOWN";
+}
+
 // Forward declarations
 struct cow;
-internal void CowChangeState(cow* Cow, alive_entity_state NewState);
+internal void cow_change_state(cow* Cow, alive_entity_state NewState);
 
 // Internal storage
 struct cow
@@ -81,18 +81,18 @@ struct cow
     random_series RandomSeries;
 };
 
-internal void CowCreate(entity_registry* Registry, entity Entity, logic_component* Logic)
+internal void cow_create(entity_registry* Registry, entity Entity, logic_component* Logic)
 {
     auto Cow = new cow; // TODO: Arena allocator
     Logic->Storage = Cow;
 
     // Set initial state
-    CowChangeState(Cow, alive_entity_state::Idle);
+    cow_change_state(Cow, alive_entity_state::Idle);
 
     Cow->CurrentAction = { action_type::None, 3.0f, true };
 
     // Initialize random series for random behaviour
-    Cow->RandomSeries = RandomSeriesCreate();
+    Cow->RandomSeries = random_series_create();
 
     //auto& MeshRender = AddComponent<mesh_render_component>(Registry, Entity);
     //auto Mesh = MeshRender.Mesh = new mesh;
@@ -140,12 +140,12 @@ internal void CowCreate(entity_registry* Registry, entity Entity, logic_componen
     //}
 }
 
-internal void CowDestroy(entity_registry* Registry, entity Entity, logic_component* Logic)
+internal void cow_destroy(entity_registry* Registry, entity Entity, logic_component* Logic)
 {
     delete Logic->Storage; // Does not call destruction, I dont think we need it
 }
 
-internal void CowUpdate(game* Game, entity_registry* Registry, entity Entity, logic_component* Logic, f32 TimeStep)
+internal void cow_update(game* Game, entity_registry* Registry, entity Entity, logic_component* Logic, f32 TimeStep)
 {
     using namespace bkm;
 
@@ -161,9 +161,9 @@ internal void CowUpdate(game* Game, entity_registry* Registry, entity Entity, lo
         {
             case action_type::None:
             {
-                block_pos Pos = GetWorldToBlockPos(Transform.Translation);
+                block_pos Pos = get_world_to_block_position(Transform.Translation);
 
-                auto GroundBlock = BlockGetSafe(Game, Pos.C, Pos.R, Pos.L - 1);
+                auto GroundBlock = block_get_safe(Game, Pos.C, Pos.R, Pos.L - 1);
 
                 if (GroundBlock)
                 {
@@ -218,9 +218,9 @@ internal void CowUpdate(game* Game, entity_registry* Registry, entity Entity, lo
                     case action_type::RotateRandomly:
                     {
                         // Choose a random direcion to face body to
-                        Cow->Direction = RandomNormal(&Cow->RandomSeries);
+                        Cow->Direction = random_normal(&Cow->RandomSeries);
 
-                        Cow->CurrentAction.Duration = 1.0f + RandomFloat01(&Cow->RandomSeries);
+                        Cow->CurrentAction.Duration = 1.0f + random_float01(&Cow->RandomSeries);
 
                         Trace("%.3f, %.3f", Cow->Direction.x, Cow->Direction.y);
 
@@ -254,16 +254,16 @@ internal void CowUpdate(game* Game, entity_registry* Registry, entity Entity, lo
         {
             Cow->Direction = v2(0.0f);
 
-            StateTimer(&Cow->IdleTimer, TimeStep, [&]()
+            state_timer_update(&Cow->IdleTimer, TimeStep, [&]()
             {
-                CowChangeState(Cow, alive_entity_state::Walking);
+                cow_change_state(Cow, alive_entity_state::Walking);
             });
         }
         else if (Cow->State == alive_entity_state::Walking)
         {
-            StateTimer(&Cow->DecideDirectionTimer, TimeStep, [&]()
+            state_timer_update(&Cow->DecideDirectionTimer, TimeStep, [&]()
             {
-                Cow->Direction = RandomDirection(&Cow->RandomSeries);
+                Cow->Direction = random_direction(&Cow->RandomSeries);
             });
 
             Cow->Speed = 1.0f;
@@ -293,7 +293,7 @@ internal void CowUpdate(game* Game, entity_registry* Registry, entity Entity, lo
     }
 }
 
-internal void CowChangeState(cow* Cow, alive_entity_state NewState)
+internal void cow_change_state(cow* Cow, alive_entity_state NewState)
 {
     Assert(NewState != alive_entity_state::None, "Cannot change state to \"None\"!");
     if (Cow->State == NewState)
@@ -302,7 +302,7 @@ internal void CowChangeState(cow* Cow, alive_entity_state NewState)
     alive_entity_state OldState = Cow->State;
     Cow->State = NewState;
 
-    Trace("Cow has changed its state! From '%s' to '%s'.", GetAliveEntityStateString(OldState), GetAliveEntityStateString(NewState));
+    Trace("Cow has changed its state! From '%s' to '%s'.", get_alive_entity_state_string(OldState), get_alive_entity_state_string(NewState));
 
     // Something that will be done only once
     if (NewState == alive_entity_state::Idle)

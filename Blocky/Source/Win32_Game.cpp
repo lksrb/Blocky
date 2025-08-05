@@ -1,8 +1,9 @@
 #include "Win32_Game.h"
 
 // Headers
+#include "GameRenderer.h"
 #include "DX12/DX12Renderer.h"
-
+#include "DX12/DX12Texture.h"
 #include "Game.h"
 
 // Source files
@@ -220,34 +221,34 @@ internal void win32_process_events(game_input* Input, HWND WindowHandle)
             case WM_LBUTTONDOWN:
             case WM_LBUTTONDBLCLK:
             {
-                Input->SetMouseState(mouse::Left, true);
+                Input->set_mouse_state(mouse::Left, true);
                 break;
             }
             case WM_RBUTTONDOWN:
             case WM_RBUTTONDBLCLK:
             {
-                Input->SetMouseState(mouse::Right, true);
+                Input->set_mouse_state(mouse::Right, true);
                 break;
             }
             case WM_MBUTTONDOWN:
             case WM_MBUTTONDBLCLK:
             {
-                Input->SetMouseState(mouse::Middle, true);
+                Input->set_mouse_state(mouse::Middle, true);
                 break;
             }
             case WM_LBUTTONUP:
             {
-                Input->SetMouseState(mouse::Left, false);
+                Input->set_mouse_state(mouse::Left, false);
                 break;
             }
             case WM_RBUTTONUP:
             {
-                Input->SetMouseState(mouse::Right, false);
+                Input->set_mouse_state(mouse::Right, false);
                 break;
             }
             case WM_MBUTTONUP:
             {
-                Input->SetMouseState(mouse::Middle, false);
+                Input->set_mouse_state(mouse::Middle, false);
                 break;
             }
 
@@ -432,9 +433,6 @@ internal win32_context* win32_context_create(arena* Arena, HMODULE ModuleInstanc
     return Win32Context;
 }
 
-// Memory management
-#define debug_new(__type) ([]() { __type* __Variable = (__type*)VmAllocArray(__type, 1); new (__Variable) __type(); return __Variable; })()
-
 int main(int argc, char** argv)
 {
     Trace("Hello, Blocky!");
@@ -463,10 +461,13 @@ int main(int argc, char** argv)
     // Get current system time and use its value to initialize seed for our random
     FILETIME FileTime;
     GetSystemTimePreciseAsFileTime(&FileTime);
-    RandomSetSeed(FileTime.dwLowDateTime);
+    random_set_seed(FileTime.dwLowDateTime);
 
     // Initialize backend
     d3d12_render_backend* D3D12Backend = d3d12_render_backend_create(&Arena, Win32Context->Window);
+
+    // Initialize renderer
+    game_renderer* Renderer = game_renderer_create(&Arena);
 
     // Initialize game
     game* Game = game_create(&Arena, D3D12Backend);
@@ -508,12 +509,15 @@ int main(int argc, char** argv)
         if (!IsMinimized)
         {
             //ScopedTimer timer("Game update");
-            game_update(Game, D3D12Backend, &Input, TimeStep, g_ClientWidth, g_ClientHeight);
+            game_update(Game, Renderer,  &Input, TimeStep, g_ClientWidth, g_ClientHeight);
         }
         // ImGui::End
 
         // Render stuff
-        d3d12_render_backend_render(D3D12Backend);
+        d3d12_render_backend_render(D3D12Backend, Renderer);
+
+        // Clear old state
+        game_renderer_clear(Renderer);
 
         DWORD64 EndCycleCount = __rdtsc();
 
