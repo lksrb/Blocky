@@ -266,7 +266,6 @@ internal void game_generate_world(arena* Arena, game* Game)
     }
 
     */
-    return;
     // Disable Sin-like world for now
     random_series Series = random_series_create();
 
@@ -590,7 +589,7 @@ internal void game_player_update(game* Game, const game_input* Input, game_rende
 
         NextPos.y += NextVelocity.y * TimeStep;
 
-        aabb PlayerAABB = AABBFromV3(NextPos, v3(0.5f, 1.8f, 0.5f));
+        aabb PlayerAABB = aabb_from_v3(NextPos, v3(0.5f, 1.8f, 0.5f));
 
         // Stepping on a block
         auto Pos = get_world_to_block_position(NextPos);
@@ -605,7 +604,7 @@ internal void game_player_update(game* Game, const game_input* Input, game_rende
 
                     if (Block && Block->placed())
                     {
-                        aabb BlockAABB = AABBFromV3(Block->Position, v3(1.0f));
+                        aabb BlockAABB = aabb_from_v3(Block->Position, v3(1.0f));
                         if (AABBCheckCollision(PlayerAABB, BlockAABB))
                         {
                             // Hit something above? Stop jumping.
@@ -629,7 +628,7 @@ internal void game_player_update(game* Game, const game_input* Input, game_rende
         // XXX
         NextPos.x += NextVelocity.x * TimeStep;
 
-        PlayerAABB = AABBFromV3(NextPos, v3(0.5f, 1.8f, 0.5f));
+        PlayerAABB = aabb_from_v3(NextPos, v3(0.5f, 1.8f, 0.5f));
 
         Pos = get_world_to_block_position(NextPos);
 
@@ -643,7 +642,7 @@ internal void game_player_update(game* Game, const game_input* Input, game_rende
 
                     if (Block && Block->placed())
                     {
-                        aabb BlockAABB = AABBFromV3(Block->Position, v3(1.0f));
+                        aabb BlockAABB = aabb_from_v3(Block->Position, v3(1.0f));
                         if (AABBCheckCollision(PlayerAABB, BlockAABB))
                         {
                             Block->Color = v4(0, 0, 1, 1);
@@ -660,7 +659,7 @@ internal void game_player_update(game* Game, const game_input* Input, game_rende
         // ZZZ
         NextPos.z += NextVelocity.z * TimeStep;
 
-        PlayerAABB = AABBFromV3(NextPos, v3(0.5f, 1.8f, 0.5f));
+        PlayerAABB = aabb_from_v3(NextPos, v3(0.5f, 1.8f, 0.5f));
 
         Pos = get_world_to_block_position(NextPos);
 
@@ -674,7 +673,7 @@ internal void game_player_update(game* Game, const game_input* Input, game_rende
 
                     if (Block && Block->placed())
                     {
-                        aabb BlockAABB = AABBFromV3(Block->Position, v3(1.0f));
+                        aabb BlockAABB = aabb_from_v3(Block->Position, v3(1.0f));
                         if (AABBCheckCollision(PlayerAABB, BlockAABB))
                         {
                             Block->Color = v4(0, 0, 1, 1);
@@ -796,8 +795,8 @@ internal void game_player_update(game* Game, const game_input* Input, game_rende
         {
             v3 NewBlockPos = HitBlock.Position + HitNormal;
 
-            aabb BlockAABB = AABBFromV3(NewBlockPos, v3(1.0f));
-            aabb PlayerAABB = AABBFromV3(Player.Position, v3(0.5f, 1.8f, 0.5f));
+            aabb BlockAABB = aabb_from_v3(NewBlockPos, v3(1.0f));
+            aabb PlayerAABB = aabb_from_v3(Player.Position, v3(0.5f, 1.8f, 0.5f));
             if (!AABBCheckCollision(PlayerAABB, BlockAABB))
             {
                 i32 C = (i32)NewBlockPos.x;
@@ -869,7 +868,7 @@ internal void game_physics_simulation_update_entities(game* Game, f32 TimeStep)
 
         NextPos.y += NextVelocity.y * TimeStep;
 
-        aabb EntityAABB = AABBFromV3(NextPos, AABBPhysics.BoxSize);
+        aabb EntityAABB = aabb_from_v3(NextPos, AABBPhysics.BoxSize);
 
         // Figuring out if somehit is it
         block_pos Pos = get_world_to_block_position(NextPos);
@@ -884,7 +883,7 @@ internal void game_physics_simulation_update_entities(game* Game, f32 TimeStep)
 
                     if (Block && Block->placed())
                     {
-                        aabb BlockAABB = AABBFromV3(Block->Position, v3(1.0f));
+                        aabb BlockAABB = aabb_from_v3(Block->Position, v3(1.0f));
                         if (AABBCheckCollision(EntityAABB, BlockAABB))
                         {
                             // Hit something above? Stop jumping.
@@ -911,7 +910,7 @@ internal void game_physics_simulation_update_entities(game* Game, f32 TimeStep)
         // XXX
         NextPos.x += NextVelocity.x * TimeStep;
 
-        EntityAABB = AABBFromV3(NextPos, AABBPhysics.BoxSize);
+        EntityAABB = aabb_from_v3(NextPos, AABBPhysics.BoxSize);
 
         Pos = get_world_to_block_position(NextPos);
 
@@ -925,7 +924,7 @@ internal void game_physics_simulation_update_entities(game* Game, f32 TimeStep)
 
                     if (Block && Block->placed())
                     {
-                        aabb BlockAABB = AABBFromV3(Block->Position, v3(1.0f));
+                        aabb BlockAABB = aabb_from_v3(Block->Position, v3(1.0f));
                         if (AABBCheckCollision(EntityAABB, BlockAABB))
                         {
                             Block->Color = v4(0, 0, 1, 1);
@@ -942,7 +941,7 @@ internal void game_physics_simulation_update_entities(game* Game, f32 TimeStep)
         // ZZZ
         NextPos.z += NextVelocity.z * TimeStep;
 
-        EntityAABB = AABBFromV3(NextPos, AABBPhysics.BoxSize);
+        EntityAABB = aabb_from_v3(NextPos, AABBPhysics.BoxSize);
 
         Pos = get_world_to_block_position(NextPos);
 
@@ -956,7 +955,7 @@ internal void game_physics_simulation_update_entities(game* Game, f32 TimeStep)
 
                     if (Block && Block->placed())
                     {
-                        aabb BlockAABB = AABBFromV3(Block->Position, v3(1.0f));
+                        aabb BlockAABB = aabb_from_v3(Block->Position, v3(1.0f));
                         if (AABBCheckCollision(EntityAABB, BlockAABB))
                         {
                             Block->Color = v4(0, 0, 1, 1);

@@ -62,13 +62,13 @@ cbuffer light_environment : register(b1)
 };
 
 // Upper bound
-//Texture2D<float4> g_Texture[32] : register(t0);
-//SamplerState g_Sampler : register(s0);
+Texture2D<float4> g_Texture[32] : register(t0);
+SamplerState g_Sampler : register(s0);
 
-Texture2D<float> g_ShadowMap : register(t0);
-SamplerState g_ShadowMapSampler : register(s0);
+//Texture2D<float> g_ShadowMap : register(t0);
+//SamplerState g_ShadowMapSampler : register(s0);
 
-#if 1
+#if 0
 float ShadowCalculation(float4 fragPosLightSpace, float3 Normal, float3 LightDirection)
 {
     // perform perspective divide
@@ -129,16 +129,18 @@ float4 PSMain(pixel_shader_input In) : SV_TARGET
     float3 Normal = normalize(In.Normal);
     float3 ViewDir = normalize(In.ViewPosition - In.WorldPosition.xyz);
     float Shininess = 32.0;
+#if 0
     float ShadowValue = ShadowCalculation(In.PositionInLightSpace, Normal, u_DirectionalLights[0].Direction);
-
-    float3 TextureColor = float3(1, 1, 1); //g_Texture[In.TexIndex].Sample(g_Sampler, In.TexCoord);
+#endif
+    float3 TextureColor = g_Texture[In.TexIndex].Sample(g_Sampler, In.TexCoord);
     
+    //float3 TextureColor = float3(1.0, 1.0, 1.0);
     // Phase 1: Directional lights
     float3 Result = float3(0, 0, 0);
     
     for (int i = 0; i < u_DirectionalLightCount; i++)
     {
-        Result += CalculateDirectionalLight2(u_DirectionalLights[i], Normal, ViewDir, Shininess, TextureColor * In.Color.rgb, ShadowValue);
+        Result += CalculateDirectionalLight(u_DirectionalLights[i], Normal, ViewDir, Shininess, TextureColor * In.Color.rgb);
     }
     
     // Phase 2: Point lights

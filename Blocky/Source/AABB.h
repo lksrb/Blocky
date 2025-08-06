@@ -22,7 +22,7 @@ struct aabb_collision_result
     aabb_collision_side Side;
 };
 
-internal aabb AABBFromV3(const v3& Position, const v3& Scale) noexcept
+internal aabb aabb_from_v3(const v3& Position, const v3& Scale) noexcept
 {
     aabb Result;
     v3 HalfScale = bkm::Abs(Scale) * 0.5f;

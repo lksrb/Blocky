@@ -7,6 +7,8 @@
 #include "DX12Texture.h"
 #include "DX12Pipeline.h"
 
+#define ENABLE_SHADOW_PASS 0
+
 struct d3d12_render_backend
 {
     ID3D12Device2* Device;
@@ -91,6 +93,7 @@ struct d3d12_render_backend
         dx12_vertex_buffer VertexBuffers[FIF];
     } DistantQuad;
 
+#if ENABLE_SHADOW_PASS
     // Shadows
     struct
     {
@@ -102,6 +105,7 @@ struct d3d12_render_backend
         ID3D12DescriptorHeap* DSVDescriptorHeap;
         ID3D12DescriptorHeap* SRVDescriptorHeap;
     } ShadowPass;
+#endif
 
     // HUD stuff
     struct

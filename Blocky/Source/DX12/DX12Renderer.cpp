@@ -380,9 +380,9 @@ internal void d3d12_render_backend_initialize_pipeline(arena* Arena, d3d12_rende
 
             // Sampler
             Samplers[0].Filter = D3D12_FILTER_MIN_MAG_MIP_POINT;
-            Samplers[0].AddressU = D3D12_TEXTURE_ADDRESS_MODE_BORDER;
-            Samplers[0].AddressV = D3D12_TEXTURE_ADDRESS_MODE_BORDER;
-            Samplers[0].AddressW = D3D12_TEXTURE_ADDRESS_MODE_BORDER;
+            Samplers[0].AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+            Samplers[0].AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+            Samplers[0].AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
             Samplers[0].MipLODBias = 0;
             Samplers[0].MaxAnisotropy = 1;
             Samplers[0].ComparisonFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
@@ -395,7 +395,7 @@ internal void d3d12_render_backend_initialize_pipeline(arena* Arena, d3d12_rende
 
             D3D12_DESCRIPTOR_RANGE Ranges[1] = {};
             Ranges[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-            Ranges[0].NumDescriptors = 1; // Find upper driver limit
+            Ranges[0].NumDescriptors = c_MaxTexturesPerDrawCall; // Find upper driver limit
             Ranges[0].BaseShaderRegister = 0;
             Ranges[0].RegisterSpace = 0;
             Ranges[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
@@ -580,8 +580,7 @@ internal void d3d12_render_backend_initialize_pipeline(arena* Arena, d3d12_rende
     }
 
     // Describe and create a SRV for the white texture.
-#if 0
-    auto SRV = Renderer->SRVDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
+    auto SRV = Backend->SRVDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
     auto Increment = Device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
     for (u32 i = 0; i < c_MaxTexturesPerDrawCall; i++)
     {
@@ -593,11 +592,10 @@ internal void d3d12_render_backend_initialize_pipeline(arena* Arena, d3d12_rende
         Desc.Texture2D.MostDetailedMip = 0;
         Desc.Texture2D.PlaneSlice = 0;
         Desc.Texture2D.ResourceMinLODClamp = 0.0f;
-        Device->CreateShaderResourceView(Renderer->WhiteTexture.Handle, &Desc, SRV);
+        Device->CreateShaderResourceView(Backend->WhiteTexture.Handle, &Desc, SRV);
 
         SRV.ptr += Increment;
     }
-#endif
 
     // Create light environment constant buffer for each frame
     for (u32 i = 0; i < FIF; i++)
@@ -606,6 +604,7 @@ internal void d3d12_render_backend_initialize_pipeline(arena* Arena, d3d12_rende
     }
 
     // Shadow Pass
+#if ENABLE_SHADOW_PASS
     {
         // Define the vertex input layout.
         D3D12_INPUT_ELEMENT_DESC InputElementDescs[] =
@@ -646,7 +645,6 @@ internal void d3d12_render_backend_initialize_pipeline(arena* Arena, d3d12_rende
             DxAssert(D3D12SerializeRootSignature(&Desc, D3D_ROOT_SIGNATURE_VERSION_1, &Signature, &Error));
             DxAssert(Device->CreateRootSignature(0, Signature->GetBufferPointer(), Signature->GetBufferSize(), IID_PPV_ARGS(&Backend->ShadowPass.RootSignature)));
         }
-
         Backend->ShadowPass.Pipeline = DX12GraphicsPipelineCreate(Device, Backend->ShadowPass.RootSignature, InputElementDescs, CountOf(InputElementDescs), L"Resources/Shadow.hlsl", D3D12_CULL_MODE_FRONT, true, 0);
 
         // Create resources
@@ -743,6 +741,7 @@ internal void d3d12_render_backend_initialize_pipeline(arena* Arena, d3d12_rende
             }
         }
     }
+#endif
 }
 
 internal void d3d12_render_backend_render(d3d12_render_backend* Backend, const game_renderer* Renderer)
@@ -765,7 +764,7 @@ internal void d3d12_render_backend_render(d3d12_render_backend* Backend, const g
     DxAssert(DirectCommandAllocator->Reset());
 
     // Copy texture's descriptor to our renderer's descriptor
-    if (false)
+    if (true)
     {
         //debug_cycle_counter C("Copy");
         // We cannot use CopyDescriptorsSimple to copy everything at once because it assumes that source descriptors are ordered... and TextureStack's ptrs are not.
@@ -775,7 +774,7 @@ internal void d3d12_render_backend_render(d3d12_render_backend* Backend, const g
         // First element of the texture stack will be the white texture
         //Renderer->TextureStack[0] = Backend->WhiteTexture.SRVDescriptor;
 #if 1
-        auto DstSRV = Backend->SRVDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
+    auto DstSRV = Backend->SRVDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
         auto DescriptorSize = Backend->Device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
         DstSRV.ptr += DescriptorSize;
         for (u32 i = 1; i < Renderer->CurrentTextureStackIndex; i++)
@@ -824,6 +823,7 @@ internal void d3d12_render_backend_render(d3d12_render_backend* Backend, const g
         DX12VertexBufferSendData(&Backend->HUD.VertexBuffers[CurrentBackBufferIndex], Backend->DirectCommandList, Renderer->HUD.VertexDataBase, sizeof(hud_quad_vertex) * Renderer->HUD.IndexCount);
     }
 
+#if ENABLE_SHADOW_PASS
     // Render shadow maps
     {
         auto& ShadowPass = Backend->ShadowPass;
@@ -860,6 +860,7 @@ internal void d3d12_render_backend_render(d3d12_render_backend* Backend, const g
         // From depth write to resource
         DX12CmdTransition(CommandList, ShadowMap, D3D12_RESOURCE_STATE_DEPTH_WRITE, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
     }
+#endif
 
     // Render rest of the scene
     // Render rest of the scene
@@ -881,34 +882,8 @@ internal void d3d12_render_backend_render(d3d12_render_backend* Backend, const g
 
     CommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-    // Render instanced cuboids
-    if (Renderer->Cuboid.InstanceCount > 0)
-    {
-        // Set root constants
-        // Number of 32 bit values - 16 floats in 4x4 matrix
-        CommandList->SetGraphicsRootSignature(Backend->Cuboid.RootSignature);
-        CommandList->SetDescriptorHeaps(1, (ID3D12DescriptorHeap* const*)&Backend->ShadowPass.SRVDescriptorHeap);
-        auto SRVPTR = Backend->ShadowPass.SRVDescriptorHeap->GetGPUDescriptorHandleForHeapStart();
-        //SRVPTR.ptr += CurrentBackBufferIndex * Renderer->Device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-
-        CommandList->SetGraphicsRootDescriptorTable(2, SRVPTR);
-
-        CommandList->SetPipelineState(Backend->Cuboid.Pipeline.Handle);
-
-        CommandList->SetGraphicsRoot32BitConstants(0, sizeof(cuboid_buffer_data) / 4, &Renderer->RenderData.CuboidBuffer, 0);
-        CommandList->SetGraphicsRootConstantBufferView(1, Backend->LightEnvironmentConstantBuffers[CurrentBackBufferIndex].Buffer.Handle->GetGPUVirtualAddress());
-
-        DX12CmdSetVertexBuffers2(CommandList, 0, Backend->Cuboid.PositionsVertexBuffer.Buffer.Handle, Backend->Cuboid.PositionsVertexBuffer.Buffer.Size, sizeof(cuboid_vertex), Backend->Cuboid.TransformVertexBuffers[CurrentBackBufferIndex].Buffer.Handle, Renderer->Cuboid.InstanceCount * sizeof(cuboid_transform_vertex_data), sizeof(cuboid_transform_vertex_data));
-
-        // Bind index buffer
-        DX12CmdSetIndexBuffer(CommandList, Backend->Quad.IndexBuffer.Buffer.Handle, 36 * sizeof(u32), DXGI_FORMAT_R32_UINT);
-
-        // Issue draw call
-        CommandList->DrawIndexedInstanced(36, Renderer->Cuboid.InstanceCount, 0, 0, 0);
-    }
-
     // Render a skybox
-    if (false)
+    if (true)
     {
         auto& Skybox = Backend->Skybox;
         CommandList->SetGraphicsRootSignature(Skybox.RootSignature);
@@ -925,8 +900,35 @@ internal void d3d12_render_backend_render(d3d12_render_backend* Backend, const g
         CommandList->DrawIndexedInstanced(36, 1, 0, 0, 0);
     }
 
+    // Render instanced cuboids
+    if (Renderer->Cuboid.InstanceCount > 0)
+    {
+        // Set root constants
+        // Number of 32 bit values - 16 floats in 4x4 matrix
+        CommandList->SetGraphicsRootSignature(Backend->Cuboid.RootSignature);
+#if ENABLE_SHADOW_PASS
+        //SRVPTR.ptr += CurrentBackBufferIndex * Renderer->Device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+#endif
+        CommandList->SetDescriptorHeaps(1, (ID3D12DescriptorHeap* const*)&Backend->SRVDescriptorHeap);
+        auto GPUSRV = Backend->SRVDescriptorHeap->GetGPUDescriptorHandleForHeapStart();
+        CommandList->SetGraphicsRootDescriptorTable(2, GPUSRV);
+
+        CommandList->SetPipelineState(Backend->Cuboid.Pipeline.Handle);
+
+        CommandList->SetGraphicsRoot32BitConstants(0, sizeof(cuboid_buffer_data) / 4, &Renderer->RenderData.CuboidBuffer, 0);
+        CommandList->SetGraphicsRootConstantBufferView(1, Backend->LightEnvironmentConstantBuffers[CurrentBackBufferIndex].Buffer.Handle->GetGPUVirtualAddress());
+
+        DX12CmdSetVertexBuffers2(CommandList, 0, Backend->Cuboid.PositionsVertexBuffer.Buffer.Handle, Backend->Cuboid.PositionsVertexBuffer.Buffer.Size, sizeof(cuboid_vertex), Backend->Cuboid.TransformVertexBuffers[CurrentBackBufferIndex].Buffer.Handle, Renderer->Cuboid.InstanceCount * sizeof(cuboid_transform_vertex_data), sizeof(cuboid_transform_vertex_data));
+
+        // Bind index buffer
+        DX12CmdSetIndexBuffer(CommandList, Backend->Quad.IndexBuffer.Buffer.Handle, 36 * sizeof(u32), DXGI_FORMAT_R32_UINT);
+
+        // Issue draw call
+        CommandList->DrawIndexedInstanced(36, Renderer->Cuboid.InstanceCount, 0, 0, 0);
+    }
+
     // Render distant objects
-    if (Renderer->DistantQuad.IndexCount > 0 && false)
+    if (Renderer->DistantQuad.IndexCount > 0 && true)
     {
         CommandList->SetGraphicsRootSignature(Backend->Skybox.RootSignature);
         CommandList->SetPipelineState(Backend->DistantQuad.Pipeline.Handle);
@@ -944,7 +946,7 @@ internal void d3d12_render_backend_render(d3d12_render_backend* Backend, const g
     CommandList->SetGraphicsRootSignature(Backend->RootSignature);
 
     // Render quaded cuboids
-    if (Renderer->QuadedCuboid.IndexCount > 0 && false)
+    if (Renderer->QuadedCuboid.IndexCount > 0 && true)
     {
         CommandList->SetPipelineState(Backend->QuadedCuboid.Pipeline.Handle);
 
@@ -962,7 +964,7 @@ internal void d3d12_render_backend_render(d3d12_render_backend* Backend, const g
     }
 
     // Render quads
-    if (Renderer->Quad.IndexCount > 0 && false)
+    if (Renderer->Quad.IndexCount > 0 && true)
     {
         CommandList->SetPipelineState(Backend->Quad.Pipeline.Handle);
 
@@ -980,7 +982,7 @@ internal void d3d12_render_backend_render(d3d12_render_backend* Backend, const g
     }
 
     // Render HUD
-    if (Renderer->HUD.IndexCount > 0 && false)
+    if (Renderer->HUD.IndexCount > 0 && true)
     {
         CommandList->SetPipelineState(Backend->HUD.Pipeline.Handle);
 
