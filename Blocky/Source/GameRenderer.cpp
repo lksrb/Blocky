@@ -369,7 +369,7 @@ internal void game_renderer_submit_cuboid(game_renderer* Renderer, const v3& Tra
     auto& Cuboid = Renderer->Cuboid.InstanceData[Renderer->Cuboid.InstanceCount];
 
 #if ENABLE_SIMD
-    Cuboid.XmmTransform = XMMatrixTranslationFromVector(XMVectorSet(Translation.x, Translation.y, Translation.z, 0.0f));
+    Cuboid.XmmTransform = XMMatrixTranslation(Translation.x, Translation.y, Translation.z);
     Cuboid.Color = Color;
     Cuboid.TextureIndex = 0;
     Renderer->Cuboid.InstanceCount++;

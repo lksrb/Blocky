@@ -50,11 +50,26 @@ global u64 random_u64()
     return Value;
 }
 
+global random_series random_series_create(u32 Seed)
+{
+    random_series Series;
+    Series.Seed = Seed;
+    return Series;
+}
+
 global random_series random_series_create()
 {
     random_series Series;
     Series.Seed = random_pcg_hash(g_RandomSeed);
     return Series;
+}
+
+global u32 random_series_u32(random_series* Series, u32 Min = 0, u32 Max = UINT32_MAX)
+{
+    Series->Seed = random_pcg_hash(Series->Seed);
+
+    // FIXME: Due to modulo we lose uniformness
+    return Min + Series->Seed % (Max + 1 - Min);
 }
 
 global f32 random_float01(random_series* Series)

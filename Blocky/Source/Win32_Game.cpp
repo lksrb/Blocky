@@ -1,6 +1,8 @@
 #include "Win32_Game.h"
 
-// Headers
+#include <DirectXMath.h>
+using namespace DirectX;
+
 #include "GameRenderer.h"
 #include "DX12/DX12Renderer.h"
 #include "DX12/DX12Texture.h"

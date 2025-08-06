@@ -76,9 +76,9 @@ struct player
 // TODO: Possible cache optimalizations
 struct block
 {
-    block_type Type = block_type::INVALID;
-    v3 Position = {};
     v4 Color = v4(1.0f);
+    block_type Type = block_type::INVALID;
+    v3 Position = {}; // Position can be removed
 
     inline bool placed() const { return Type != block_type::Air; }
     //i32 Left = INT_MAX, Right = INT_MAX, Front = INT_MAX, Back = INT_MAX, Up = INT_MAX, Down = INT_MAX; // Neighbours
@@ -141,8 +141,8 @@ internal bool find_first_hit(const ray& Ray, const block* Blocks, u64 BlocksCoun
             continue;
 
         aabb Box;
-        Box.Min = Block.Position - v3(0.5f);
-        Box.Max = Block.Position + v3(0.5f);
+        /*  Box.Min = Block.Position - v3(0.5f);
+          Box.Max = Block.Position + v3(0.5f);*/
 
         if (raycast_result RayCast = RayCastIntersectsAABB(Ray, Box))
         {

@@ -15,7 +15,7 @@
 //#define VmAllocArray(__type, __count) (__type*)::VirtualAlloc(nullptr, sizeof(__type) * __count, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE)
 
 // SIMD Stuff
-#define ENABLE_SIMD 0
+#define ENABLE_SIMD 1
 
 // Memory
 #define SMALL_PAGE_SIZE 4096

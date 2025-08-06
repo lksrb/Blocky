@@ -6,9 +6,6 @@
 #include <dxgi1_6.h>
 #include <d3d12shader.h>
 #include <dxcapi.h>
-#include <DirectXMath.h>
-using namespace DirectX;
-
 #pragma comment(lib, "dxcompiler.lib")
 #pragma comment(lib, "d3d12.lib")
 #pragma comment(lib, "dxgi.lib")
