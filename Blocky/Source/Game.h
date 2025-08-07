@@ -4,6 +4,7 @@
 #include "AABB.h"
 #include "RayCast.h"
 #include "ECS.h"
+#include "PerlinNoise.h"
 
 struct camera
 {
@@ -113,6 +114,8 @@ struct game
 
     f32 TimeSinceStart;
 
+    perlin_noise PerlinNoise;
+
     entity_registry Registry;
 
     bool RenderDebugUI = true;
@@ -141,8 +144,8 @@ internal bool find_first_hit(const ray& Ray, const block* Blocks, u64 BlocksCoun
             continue;
 
         aabb Box;
-        /*  Box.Min = Block.Position - v3(0.5f);
-          Box.Max = Block.Position + v3(0.5f);*/
+        Box.Min = Block.Position - v3(0.5f);
+        Box.Max = Block.Position + v3(0.5f);
 
         if (raycast_result RayCast = RayCastIntersectsAABB(Ray, Box))
         {

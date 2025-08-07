@@ -510,7 +510,7 @@ int main(int argc, char** argv)
         // ImGui::Begin();
         if (!IsMinimized)
         {
-            //ScopedTimer timer("Game update");
+            //scoped_timer timer("Game update");
             game_update(Game, Renderer,  &Input, TimeStep, g_ClientWidth, g_ClientHeight);
         }
         // ImGui::End

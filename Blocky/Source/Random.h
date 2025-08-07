@@ -31,7 +31,7 @@ global u32 random_u32(u32 Min = 0, u32 Max = UINT32_MAX)
     g_RandomSeed = random_pcg_hash(g_RandomSeed);
 
     // FIXME: Due to modulo we lose uniformness
-    return Min + g_RandomSeed % (Max + 1 - Min);
+    return Min + g_RandomSeed % (Max - Min);
 }
 
 // Test this
