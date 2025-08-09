@@ -118,6 +118,66 @@ internal void DX12CmdSetVertexBuffers2(ID3D12GraphicsCommandList* CommandList, u
     CommandList->IASetVertexBuffers(0, 2, VertexBufferViews);
 }
 
+internal ID3D12Resource* dx12_render_target_create(ID3D12Device* Device, DXGI_FORMAT Format, u32 Width, u32 Height, const wchar_t* DebugName = L"RenderTarget")
+{
+    ID3D12Resource* Resource = nullptr;
+
+    D3D12_RESOURCE_DESC Desc = {};
+    Desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+    Desc.MipLevels = 1;
+    Desc.Format = Format;
+    Desc.Width = Width;
+    Desc.Height = Height;
+    Desc.DepthOrArraySize = 1;
+    Desc.SampleDesc.Count = 1;
+    Desc.SampleDesc.Quality = 0;
+    Desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+    Desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+
+    D3D12_HEAP_PROPERTIES HeapProperties = {};
+    HeapProperties.Type = D3D12_HEAP_TYPE_DEFAULT;
+    HeapProperties.CreationNodeMask = 1;
+    HeapProperties.VisibleNodeMask = 1;
+    HeapProperties.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+    HeapProperties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+
+    DxAssert(Device->CreateCommittedResource(&HeapProperties, D3D12_HEAP_FLAG_NONE, &Desc, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, nullptr, IID_PPV_ARGS(&Resource)));
+    Resource->SetName(DebugName);
+    return Resource;
+}
+
+internal ID3D12Resource* dx12_depth_buffer_create(ID3D12Device* Device, u32 Width, u32 Height, DXGI_FORMAT Format, DXGI_FORMAT ClearFormat, const wchar_t* DebugName = L"DepthBuffer", D3D12_RESOURCE_STATES InitialState = D3D12_RESOURCE_STATE_DEPTH_WRITE)
+{
+    ID3D12Resource* Resource = nullptr;
+
+    D3D12_CLEAR_VALUE OptimizedClearValue = {};
+    OptimizedClearValue.Format = ClearFormat;
+    OptimizedClearValue.DepthStencil = { 1.0f, 0 }; // No need for abstracting this
+
+    D3D12_RESOURCE_DESC Desc = {};
+    Desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+    Desc.MipLevels = 1;
+    Desc.Format = Format;
+    Desc.Width = Width;
+    Desc.Height = Height;
+    Desc.DepthOrArraySize = 1;
+    Desc.SampleDesc.Count = 1;
+    Desc.SampleDesc.Quality = 0;
+    Desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+    Desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
+
+    D3D12_HEAP_PROPERTIES HeapProperties = {};
+    HeapProperties.Type = D3D12_HEAP_TYPE_DEFAULT;
+    HeapProperties.CreationNodeMask = 1;
+    HeapProperties.VisibleNodeMask = 1;
+    HeapProperties.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+    HeapProperties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+
+    DxAssert(Device->CreateCommittedResource(&HeapProperties, D3D12_HEAP_FLAG_NONE, &Desc, InitialState, &OptimizedClearValue, IID_PPV_ARGS(&Resource)));
+    Resource->SetName(DebugName);
+    return Resource;
+}
+
 // Blocking API for submitting stuff to GPU
 // NOTE: Inefficient
 template<typename F>

@@ -144,7 +144,6 @@ internal texture texture_create(render_backend* Backend, u32 Width, u32 Height, 
 
     // Describe and create a SRV for the white texture.
     Texture.SRVDescriptor = g_OfflineTextureHeap->GetCPUDescriptorHandleForHeapStart();
-    auto DescriptorSize = Device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
     {
         D3D12_SHADER_RESOURCE_VIEW_DESC Desc = {};
         Desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
@@ -154,7 +153,7 @@ internal texture texture_create(render_backend* Backend, u32 Width, u32 Height, 
         Desc.Texture2D.MostDetailedMip = 0;
         Desc.Texture2D.PlaneSlice = 0;
         Desc.Texture2D.ResourceMinLODClamp = 0.0f;
-        Texture.SRVDescriptor.ptr += g_OfflineTextureHeapIndex * DescriptorSize; // Free slot
+        Texture.SRVDescriptor.ptr += g_OfflineTextureHeapIndex * Backend->DescriptorSizes.CBV_SRV_UAV; // Free slot
         Device->CreateShaderResourceView(Texture.Handle, &Desc, Texture.SRVDescriptor);
 
         g_OfflineTextureHeapIndex++;

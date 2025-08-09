@@ -8,6 +8,7 @@
 #include "DX12Pipeline.h"
 
 #define ENABLE_SHADOW_PASS 1
+#define SHADOW_MAP_SIZE 1024
 
 struct dx12_render_backend
 {
@@ -21,24 +22,27 @@ struct dx12_render_backend
     IDXGIDebug1* DxgiDebugInterface;
 #endif
 
+    struct
+    {
+        u32 RTV;
+        u32 DSV;
+        u32 CBV_SRV_UAV;
+    } DescriptorSizes;
+
     ID3D12CommandAllocator* DirectCommandAllocators[FIF];
     ID3D12GraphicsCommandList2* DirectCommandList;
     ID3D12CommandQueue* DirectCommandQueue;
 
     IDXGISwapChain4* SwapChain;
-    ID3D12Resource* BackBuffers[FIF];
+    ID3D12Resource* SwapChainBackbuffers[FIF];
+    D3D12_CPU_DESCRIPTOR_HANDLE SwapChainBufferRTVHandles[FIF];
+
     ID3D12DescriptorHeap* RTVDescriptorHeap;
-    D3D12_CPU_DESCRIPTOR_HANDLE RTVHandles[FIF];
 
     u32 CurrentBackBufferIndex;
 
-    ID3D12Resource* DepthBuffers[FIF];
-    ID3D12DescriptorHeap* DSVDescriptorHeap;
-    D3D12_CPU_DESCRIPTOR_HANDLE DSVHandles[FIF];
-
     bool DepthTesting = true;
     bool VSync = true;
-
     // Fence
     ID3D12Fence* Fence;
     u64 FenceValue;
@@ -51,6 +55,20 @@ struct dx12_render_backend
     // Textures
     ID3D12DescriptorHeap* TextureDescriptorHeap;
     texture WhiteTexture;
+
+    // These will be rendered to and then copied via fullscreen pass to swapchain buffers
+    struct
+    {
+        ID3D12Resource* DepthBuffers[FIF];
+        ID3D12DescriptorHeap* DSVDescriptorHeap;
+        D3D12_CPU_DESCRIPTOR_HANDLE DSVHandles[FIF];
+
+        ID3D12Resource* RenderBuffers[FIF];
+        ID3D12DescriptorHeap* RTVDescriptorHeap;
+        D3D12_CPU_DESCRIPTOR_HANDLE RTVHandles[FIF];
+
+        ID3D12DescriptorHeap* SRVDescriptorHeap;
+    } MainPass;
 
     // Quad
     struct
@@ -113,6 +131,13 @@ struct dx12_render_backend
         dx12_vertex_buffer VertexBuffers[FIF];
         dx12_pipeline Pipeline;
     } HUD;
+
+    // Fullscreen pass
+    struct
+    {
+        dx12_pipeline Pipeline;
+        ID3D12RootSignature* RootSignature;
+    } FullscreenPass;
 
     dx12_constant_buffer LightEnvironmentConstantBuffers[FIF];
 };
