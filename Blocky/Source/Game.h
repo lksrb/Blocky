@@ -66,7 +66,7 @@ ENABLE_BITWISE_OPERATORS(entity_flags, u32);
 
 struct player
 {
-    v3 Position = v3(0.0f, 20, 1.0f);
+    v3 Position = v3(0.0f, 10, 1.0f);
     //v3 Position = v3(2.5f, 0.0f, 0.0f);
     v3 Rotation = v3(0.0f, bkm::PI_HALF / 2, 0.0f);
     v3 Velocity = v3(0.0f);
@@ -85,9 +85,9 @@ struct block
     //i32 Left = INT_MAX, Right = INT_MAX, Front = INT_MAX, Back = INT_MAX, Up = INT_MAX, Down = INT_MAX; // Neighbours
 };
 
-internal const i64 RowCount = 64;
-internal const i64 ColumnCount = 64;
-internal const i64 LayerCount = 32;
+internal const i64 RowCount = 16;
+internal const i64 ColumnCount = 16;
+internal const i64 LayerCount = 8;
 internal const i32 MaxAliveEntitiesCount = 16;
 internal const f32 c_TexelSize = 1 / 16.0f; // Global scale for entity models. 1m block is exactly 16x16 texels.
 

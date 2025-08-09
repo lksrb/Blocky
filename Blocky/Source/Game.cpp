@@ -172,7 +172,7 @@ internal void game_generate_world(arena* Arena, game* Game)
     Game->Blocks = arena_new_array(Arena, block, Game->BlocksCount);
 
     u32 Seed = 1217917;
-    perlin_noise_create(&Game->PerlinNoise, Seed);
+    //perlin_noise_create(&Game->PerlinNoise, Seed);
     i32 MaxTerrainHeight = 8;
 
     const v3 StartPos = { 0, 0, 0 };
@@ -186,7 +186,8 @@ internal void game_generate_world(arena* Arena, game* Game)
 
             // Step 1: Generate height using noise
             f32 NoiseScale = 0.05f;
-            f32 HeightValue = perlin_noise_get(&Game->PerlinNoise, X * NoiseScale, Z * NoiseScale); // in [0, 1]
+            //f32 HeightValue = perlin_noise_get(&Game->PerlinNoise, X * NoiseScale, Z * NoiseScale); // in [0, 1]
+            f32 HeightValue = 0;
             i32 TerrainHeight = (i32)(HeightValue * MaxTerrainHeight);
 
             for (i32 Y = 0; Y < LayerCount; Y++)
@@ -275,13 +276,14 @@ internal void game_update(game* Game, game_renderer* Renderer, const game_input*
     //GameRendererSubmitDirectionalLight(Renderer, )
 
     f32 GameTime = Game->TimeSinceStart * 0.1f;
+    GameTime = 0;
     //Trace("%.3f", GameTime);
 
     // Render sun
     v3 SunDirection;
     v3 SunPosition;
     {
-        GameTime = bkm::PI_HALF;
+        f32 DirGameTime = GameTime + bkm::PI_HALF;
         f32 Distance = 10.0f;
         f32 Angle = bkm::PI_HALF - GameTime; // speed of day-night cycle (radians per second)
         // Rotate baseDir around X axis to simulate sun path
@@ -301,7 +303,7 @@ internal void game_update(game* Game, game_renderer* Renderer, const game_input*
 
         // TODO: On sunset and sunrise, tweak directional light color to "reflect" the sky color
         local_persist v3 FinalColor = v3(0.8f, 0.5f, 0.3);
-        if (GameTime > bkm::PI_HALF)
+        if (DirGameTime > bkm::PI_HALF)
         {
             FinalColor = bkm::Lerp(FinalColor, v3(0.8f, 0.5f, 0.3), TimeStep * 0.3f);
         }
@@ -315,18 +317,26 @@ internal void game_update(game* Game, game_renderer* Renderer, const game_input*
         //GameRendererSubmitDirectionalLight(Renderer, -SunDirection, 1.5f, v3(1.0f));
     }
 
+    local_persist v3 Eye = v3(8.0f, 12.0f, 8.0f);
     // Update camera and HUD
     {
+        local_persist f32 Size = 15;
+        local_persist f32 Near = 1.0f;
+        local_persist f32 Far = 15.5;
+        //m4 LightSpaceProjection = glm::orthoLH_ZO(-Size, Size, -Size, Size, Near, Far);
+        //m4 LightSpaceView = glm::lookAtLH(Eye, v3(0, 0, 0), v3(0, 1, 0));
+        //
+        //LightSpaceMatrix = LightSpaceProjection * LightSpaceView;
+
         m4 LightSpaceMatrix;
         v3 LightDirection = bkm::Normalize(v3(0, -1.0f, 0));
-        v3 LightPosition(2, -10, 0);
 
         {
-            m4 LightProjection = bkm::OrthoLH(-25.0f, 25.0f, -25.0f, 25.0f, 0.1f, 40.0f);
-            m4 LightView = bkm::LookAtLH(LightPosition, v3(ColumnCount / 2, 0, RowCount / 2), v3(0.0f, 1.0f, 0.0f));
+            m4 LightProjection = bkm::OrthoLH_ZO(-Size, Size, -Size, Size, Near, Far);
+            m4 LightView = bkm::LookAtLH(Eye, v3(0.0f), v3(0.0f, 1.0f, 0.0f));
             //m4 LightView = bkm::LookAt(v3(-SunDirection), v3(0, 0, 0), v3(0.0f, 1.0f, 0.0f));
 
-            LightSpaceMatrix = LightProjection * m4(m3(LightView)); // Remove translation
+            LightSpaceMatrix = LightProjection * LightView; // Remove translation
         }
 
         v3 CameraPosition = Game->Player.Position + Game->CameraOffset;
@@ -335,8 +345,8 @@ internal void game_update(game* Game, game_renderer* Renderer, const game_input*
         Game->Camera.View = bkm::Inverse(InverseView);
         Game->Camera.recalculate_projection_persperctive(ClientAreaWidth, ClientAreaHeight);
 
-        m4 HUDProjection = bkm::OrthoLH(0, (f32)ClientAreaWidth, (f32)ClientAreaHeight, 0, -1, 1);
-        game_renderer_set_render_data(Renderer, CameraPosition, Game->Camera.View, Game->Camera.Projection, InverseView, HUDProjection, Game->TimeSinceStart, LightSpaceMatrix);
+        m4 HUDProjection = bkm::OrthoLH_ZO(0, (f32)ClientAreaWidth, (f32)ClientAreaHeight, 0, -1, 1);
+        game_renderer_set_render_data(Renderer, CameraPosition, Game->Camera.View, Game->Camera.Projection, InverseView, HUDProjection, GameTime, LightSpaceMatrix);
 
         game_renderer_submit_directional_light(Renderer, LightDirection, 1.5f, v3(1.0f));
     }
@@ -345,13 +355,13 @@ internal void game_update(game* Game, game_renderer* Renderer, const game_input*
     if (Game->RenderDebugUI)
     {
         // For each point lights so we know that its there
-        //game_renderer_submit_billboard_quad(Renderer, TestLightPos, v2(0.5), &Game->PointLightIconTexture, v4(1.0f));
+        game_renderer_submit_billboard_quad(Renderer, Eye, v2(0.5), &Game->PointLightIconTexture, v4(1.0f));
     }
 
     // Render HUD
     if (Game->RenderHUD)
     {
-        m4 Projection = bkm::Ortho(0, (f32)ClientAreaWidth, (f32)ClientAreaHeight, 0, -1.0f, 1.0f);
+        m4 Projection = bkm::OrthoLH_ZO(0, (f32)ClientAreaWidth, (f32)ClientAreaHeight, 0, 0.0f, 1.0f);
 
         // Build crosshair vertices
         f32 CrosshairSize = 15.0f * 2.0f;
@@ -375,7 +385,7 @@ internal void game_player_update(game* Game, const game_input* Input, game_rende
     v3 Up = { 0.0f, 1.0, 0.0f };
     v3 Right = { 1.0f, 0.0, 0.0f };
     v3 Forward = { 0.0f, 0.0, -1.0f };
-    f32 Speed = 4.0f;
+    f32 Speed = 15.0f;
 
     // Rotating
     local_persist bool TPressed = false;

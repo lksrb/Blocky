@@ -65,10 +65,10 @@ cbuffer light_environment : register(b1)
 Texture2D<float4> g_Texture[32] : register(t0);
 SamplerState g_Sampler : register(s0);
 
-//Texture2D<float> g_ShadowMap : register(t0);
-//SamplerState g_ShadowMapSampler : register(s0);
+Texture2D<float> g_ShadowMap[2] : register(t32);
+SamplerState g_ShadowMapSampler : register(s1);
 
-#if 0
+#if 1
 float ShadowCalculation(float4 fragPosLightSpace, float3 Normal, float3 LightDirection)
 {
     // perform perspective divide
@@ -77,7 +77,7 @@ float ShadowCalculation(float4 fragPosLightSpace, float3 Normal, float3 LightDir
     // transform to [0,1] range
     projCoords = projCoords * 0.5 + 0.5;
     // get closest depth value from light's perspective (using [0,1] range fragPosLight as coords)
-    float closestDepth = g_ShadowMap.Sample(g_ShadowMapSampler, projCoords.xy);
+    float closestDepth = g_ShadowMap[0].Sample(g_ShadowMapSampler, projCoords.xy);
     // get depth of current fragment from light's perspective
     float currentDepth = projCoords.z;
     

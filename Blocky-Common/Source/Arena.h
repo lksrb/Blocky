@@ -24,7 +24,7 @@ internal inline void* arena_alloc(arena* Arena, u64 AllocationSize, u64 Alignmen
     // Get the current pointer
     Arena->MemoryPointer = (u8*)((u64)Arena->MemoryPointer + (static_cast<u64>(Alignment) - 1) & ~(static_cast<u64>(Alignment) - 1));
 
-    void* Pointer = Arena->MemoryPointer;
+    auto Pointer = Arena->MemoryPointer;
     Arena->MemoryPointer += AllocationSize;
     Arena->Size += AllocationSize;
     return Pointer;

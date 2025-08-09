@@ -1,15 +1,15 @@
 #pragma once
 
-#define render_backend d3d12_render_backend
+#define render_backend dx12_render_backend
 
 #include "DX12.h"
 #include "DX12Buffer.h"
 #include "DX12Texture.h"
 #include "DX12Pipeline.h"
 
-#define ENABLE_SHADOW_PASS 0
+#define ENABLE_SHADOW_PASS 1
 
-struct d3d12_render_backend
+struct dx12_render_backend
 {
     ID3D12Device2* Device;
     IDXGIFactory4* Factory;
@@ -49,7 +49,7 @@ struct d3d12_render_backend
     ID3D12RootSignature* RootSignature;
 
     // Textures
-    ID3D12DescriptorHeap* SRVDescriptorHeap;
+    ID3D12DescriptorHeap* TextureDescriptorHeap;
     texture WhiteTexture;
 
     // Quad
@@ -99,11 +99,11 @@ struct d3d12_render_backend
     {
         ID3D12Resource* ShadowMaps[FIF];
         D3D12_CPU_DESCRIPTOR_HANDLE DSVHandles[FIF];
-        D3D12_CPU_DESCRIPTOR_HANDLE SRVHandles[FIF];
+        //D3D12_CPU_DESCRIPTOR_HANDLE OfflineSRVHandles[FIF];
         dx12_pipeline Pipeline;
         ID3D12RootSignature* RootSignature;
         ID3D12DescriptorHeap* DSVDescriptorHeap;
-        ID3D12DescriptorHeap* SRVDescriptorHeap;
+        //ID3D12DescriptorHeap* OfflineDescriptorHeap;
     } ShadowPass;
 #endif
 
@@ -117,13 +117,13 @@ struct d3d12_render_backend
     dx12_constant_buffer LightEnvironmentConstantBuffers[FIF];
 };
 
-internal d3d12_render_backend* d3d12_render_backend_create(arena* Arena, const win32_window& Window);
-internal void d3d12_render_backend_destroy(d3d12_render_backend* Backend);
+internal dx12_render_backend* dx12_render_backend_create(arena* Arena, const win32_window& Window);
+internal void dx12_render_backend_destroy(dx12_render_backend* Backend);
 
-internal void d3d12_render_backend_initialize_pipeline(arena* Arena, d3d12_render_backend* Backend);
-internal void d3d12_render_backend_resize_swapchain(d3d12_render_backend* Backend, u32 RequestWidth, u32 RequestHeight);
-internal void d3d12_render_backend_render(d3d12_render_backend* Backend, const game_renderer* Renderer);
+internal void dx12_render_backend_initialize_pipeline(arena* Arena, dx12_render_backend* Backend);
+internal void d3d12_render_backend_resize_swapchain(dx12_render_backend* Backend, u32 RequestWidth, u32 RequestHeight);
+internal void d3d12_render_backend_render(dx12_render_backend* Backend, const game_renderer* Renderer);
 
-internal u64 d3d12_render_backend_signal(ID3D12CommandQueue* CommandQueue, ID3D12Fence* Fence, u64* FenceValue);
-internal void d3d12_render_backend_wait_for_fence_value(ID3D12Fence* Fence, u64 FenceValue, HANDLE FenceEvent, u32 Duration = UINT32_MAX);
-internal void d3d12_render_backend_flush(d3d12_render_backend* Backend);
+internal u64 dx12_render_backend_signal(ID3D12CommandQueue* CommandQueue, ID3D12Fence* Fence, u64* FenceValue);
+internal void dx12_render_backend_wait_for_fence_value(ID3D12Fence* Fence, u64 FenceValue, HANDLE FenceEvent, u32 Duration = UINT32_MAX);
+internal void dx12_render_backend_flush(dx12_render_backend* Backend);

@@ -4,13 +4,13 @@
 using namespace DirectX;
 
 #include "GameRenderer.h"
-#include "DX12/DX12Renderer.h"
+#include "DX12/DX12RenderBackend.h"
 #include "DX12/DX12Texture.h"
 #include "Game.h"
 
 // Source files
 #include "Game.cpp"
-#include "DX12/DX12Renderer.cpp"
+#include "DX12/DX12RenderBackend.cpp"
 
 internal u32 g_ClientWidth = 0;
 internal u32 g_ClientHeight = 0;
@@ -466,7 +466,7 @@ int main(int argc, char** argv)
     random_set_seed(FileTime.dwLowDateTime);
 
     // Initialize backend
-    d3d12_render_backend* D3D12Backend = d3d12_render_backend_create(&Arena, Win32Context->Window);
+    dx12_render_backend* D3D12Backend = dx12_render_backend_create(&Arena, Win32Context->Window);
 
     // Initialize renderer
     game_renderer* Renderer = game_renderer_create(&Arena);
@@ -556,7 +556,7 @@ int main(int argc, char** argv)
         TimeStep = bkm::Clamp(TimeStep, 0.0f, 0.01666666f);
     }
 
-    d3d12_render_backend_destroy(D3D12Backend);
+    dx12_render_backend_destroy(D3D12Backend);
 
     return 0;
 }

@@ -20,7 +20,7 @@ struct texture
     D3D12_CPU_DESCRIPTOR_HANDLE SRVDescriptor;
 };
 
-struct d3d12_render_backend;
+struct dx12_render_backend;
 
 internal texture texture_create(render_backend* Backend, u32 Width, u32 Height, buffer Pixels, texture_format Format = texture_format::RGBA8_Unorm_SRGB, const wchar_t* DebugName = L"DX12Texture");
 internal texture texture_create(render_backend* Backend, const char* Path);

@@ -308,17 +308,29 @@ namespace bkm {
         return result;
     }
 
-    inline m4 OrthoLH(f32 left, f32 right, f32 bottom, f32 top, f32 zNear, f32 zFar)
-    {
-        m4 result(1.0f);
-        result[0][0] = 2.0f / (right - left);
-        result[1][1] = 2.0f / (top - bottom);
-        result[2][2] = 1.0f / (zFar - zNear);
-        result[3][0] = -(right + left) / (right - left);
-        result[3][1] = -(top + bottom) / (top - bottom);
-        result[3][2] = -zNear / (zFar - zNear);
+    //inline m4 OrthoLH(f32 left, f32 right, f32 bottom, f32 top, f32 zNear, f32 zFar)
+    //{
+    //    m4 Result(1.0f);
+    //    Result[0][0] = 2.0f / (right - left);
+    //    Result[1][1] = 2.0f / (top - bottom);
+    //    Result[2][2] = 1.0f / (zFar - zNear);
+    //    Result[3][0] = -(right + left) / (right - left);
+    //    Result[3][1] = -(top + bottom) / (top - bottom);
+    //    Result[3][2] = -zNear / (zFar - zNear);
 
-        return result;
+    //    return Result;
+    //}
+
+    inline m4 OrthoLH_ZO(f32 left, f32 right, f32 bottom, f32 top, f32 zNear, f32 zFar)
+    {
+        m4 Result(1.0f);
+        Result[0][0] = 2.0f / (right - left);
+        Result[1][1] = 2.0f / (top - bottom);
+        Result[2][2] = 1.0f / (zFar - zNear);
+        Result[3][0] = -(right + left) / (right - left);
+        Result[3][1] = -(top + bottom) / (top - bottom);
+        Result[3][2] = -zNear / (zFar - zNear);
+        return Result;
     }
 
     inline m3 Translate(m3 m, v2 v)
@@ -511,24 +523,24 @@ namespace bkm {
 
     inline m4 LookAtLH(v3 eye, v3 center, v3 up)
     {
-        m4 result(1.0f);
-        const v3 f(Normalize(center - eye));
-        const v3 s(Normalize(Cross(f, up)));
-        const v3 u(Cross(s, f));
+        v3 f(Normalize(center - eye));
+        v3 s(Normalize(Cross(up, f)));
+        v3 u(Cross(f, s));
 
-        result[0][0] = s.x;
-        result[1][0] = s.y;
-        result[2][0] = s.z;
-        result[0][1] = u.x;
-        result[1][1] = u.y;
-        result[2][1] = u.z;
-        result[0][2] = f.x;
-        result[1][2] = f.y;
-        result[2][2] = f.z;
-        result[3][0] = -Dot(s, eye);
-        result[3][1] = -Dot(u, eye);
-        result[3][2] = -Dot(f, eye);
-        return result;
+        m4 Result(1.0f);
+        Result[0][0] = s.x;
+        Result[1][0] = s.y;
+        Result[2][0] = s.z;
+        Result[0][1] = u.x;
+        Result[1][1] = u.y;
+        Result[2][1] = u.z;
+        Result[0][2] = f.x;
+        Result[1][2] = f.y;
+        Result[2][2] = f.z;
+        Result[3][0] = -Dot(s, eye);
+        Result[3][1] = -Dot(u, eye);
+        Result[3][2] = -Dot(f, eye);
+        return Result;
     }
 
     inline v2 Rotate(const v2& v, f32 angle)
