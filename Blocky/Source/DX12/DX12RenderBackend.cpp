@@ -766,7 +766,7 @@ internal void dx12_render_backend_initialize_pipeline(arena* Arena, dx12_render_
 #endif
 }
 
-internal void d3d12_render_backend_render(dx12_render_backend* Backend, const game_renderer* Renderer)
+internal void d3d12_render_backend_render(dx12_render_backend* Backend, const game_renderer* Renderer, ImDrawData* ImGuiDrawData, ID3D12DescriptorHeap* ImGuiDescriptorHeap)
 {
     // Get current frame stuff
     auto CommandList = Backend->DirectCommandList;
@@ -1029,6 +1029,13 @@ internal void d3d12_render_backend_render(dx12_render_backend* Backend, const ga
 
         // Issue draw call
         CommandList->DrawIndexedInstanced(Renderer->HUD.IndexCount, 1, 0, 0, 0);
+    }
+
+    bool RenderImGui = true;
+    if (RenderImGui)
+    {
+        CommandList->SetDescriptorHeaps(1, &ImGuiDescriptorHeap);
+        ImGui_ImplDX12_RenderDrawData(ImGuiDrawData, CommandList);
     }
 
     // Rendered frame needs to be transitioned to present state

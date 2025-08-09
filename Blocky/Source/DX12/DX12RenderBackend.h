@@ -122,7 +122,7 @@ internal void dx12_render_backend_destroy(dx12_render_backend* Backend);
 
 internal void dx12_render_backend_initialize_pipeline(arena* Arena, dx12_render_backend* Backend);
 internal void d3d12_render_backend_resize_swapchain(dx12_render_backend* Backend, u32 RequestWidth, u32 RequestHeight);
-internal void d3d12_render_backend_render(dx12_render_backend* Backend, const game_renderer* Renderer);
+internal void d3d12_render_backend_render(dx12_render_backend* Backend, const game_renderer* Renderer, ImDrawData* ImGuiDrawData, ID3D12DescriptorHeap* ImGuiDescriptorHeap);
 
 internal u64 dx12_render_backend_signal(ID3D12CommandQueue* CommandQueue, ID3D12Fence* Fence, u64* FenceValue);
 internal void dx12_render_backend_wait_for_fence_value(ID3D12Fence* Fence, u64 FenceValue, HANDLE FenceEvent, u32 Duration = UINT32_MAX);

@@ -3,6 +3,8 @@
 #include <DirectXMath.h>
 using namespace DirectX;
 
+// Header files
+#include "Win32DX12ImGui.h"
 #include "GameRenderer.h"
 #include "DX12/DX12RenderBackend.h"
 #include "DX12/DX12Texture.h"
@@ -11,6 +13,7 @@ using namespace DirectX;
 // Source files
 #include "Game.cpp"
 #include "DX12/DX12RenderBackend.cpp"
+#include "Win32DX12ImGui.cpp"
 
 internal u32 g_ClientWidth = 0;
 internal u32 g_ClientHeight = 0;
@@ -20,6 +23,9 @@ internal bool g_IsFocused = false;
 
 LRESULT win32_procedure_handler(HWND WindowHandle, UINT Message, WPARAM WParam, LPARAM LParam)
 {
+    if (ImGui_ImplWin32_WndProcHandler(WindowHandle, Message, WParam, LParam))
+        return true;
+
     LRESULT Result = 0;
 
     switch (Message)
@@ -132,6 +138,12 @@ internal void win32_process_events(game_input* Input, HWND WindowHandle)
     // Win32 message queue
     while (PeekMessage(&Message, nullptr, 0, 0, PM_REMOVE))
     {
+        // ImGui gonna eat all events if its focused
+        if (ImGui_ImplWin32_WndProcHandler(WindowHandle, Message.message, Message.wParam, Message.lParam))
+        {
+            continue;
+        }
+
         switch (Message.message)
         {
             case WM_SYSKEYUP:
@@ -465,14 +477,17 @@ int main(int argc, char** argv)
     GetSystemTimePreciseAsFileTime(&FileTime);
     random_set_seed(FileTime.dwLowDateTime);
 
-    // Initialize backend
-    dx12_render_backend* D3D12Backend = dx12_render_backend_create(&Arena, Win32Context->Window);
+    // Initialize dx12 backend
+    dx12_render_backend* DX12Backend = dx12_render_backend_create(&Arena, Win32Context->Window);
 
     // Initialize renderer
     game_renderer* Renderer = game_renderer_create(&Arena);
 
+    // Initialize imgui 
+    win32_dx12_imgui_context* Win32Dx12ImGuiContext = win32_dx12_imgui_create(&Arena, Win32Context, DX12Backend);
+
     // Initialize game
-    game* Game = game_create(&Arena, D3D12Backend);
+    game* Game = game_create(&Arena, DX12Backend);
 
     // Show window after initialization
     ShowWindow(Win32Context->Window.Handle, SW_SHOW);
@@ -504,19 +519,25 @@ int main(int argc, char** argv)
         {
             g_DoResize = false;
 
-            d3d12_render_backend_resize_swapchain(D3D12Backend, g_ClientWidth, g_ClientHeight);
+            d3d12_render_backend_resize_swapchain(DX12Backend, g_ClientWidth, g_ClientHeight);
         }
 
         // ImGui::Begin();
         if (!IsMinimized)
         {
             //scoped_timer timer("Game update");
-            game_update(Game, Renderer,  &Input, TimeStep, g_ClientWidth, g_ClientHeight);
+
+            v2i ClientArea = { (i32)g_ClientWidth, (i32)g_ClientHeight };
+            game_update(Game, Renderer,  &Input, TimeStep, ClientArea);
+
+            win32_dx12_imgui_begin_frame(Win32Dx12ImGuiContext);
+            game_debug_ui_update(Game, Renderer, &Input, TimeStep, ClientArea);
+            win32_dx12_imgui_end_frame(Win32Dx12ImGuiContext);
         }
         // ImGui::End
 
         // Render stuff
-        d3d12_render_backend_render(D3D12Backend, Renderer);
+        d3d12_render_backend_render(DX12Backend, Renderer, Win32Dx12ImGuiContext->CurrentDrawData, Win32Dx12ImGuiContext->SrvDescHeap);
 
         // Clear old state
         game_renderer_clear(Renderer);
@@ -556,7 +577,7 @@ int main(int argc, char** argv)
         TimeStep = bkm::Clamp(TimeStep, 0.0f, 0.01666666f);
     }
 
-    dx12_render_backend_destroy(D3D12Backend);
+    dx12_render_backend_destroy(DX12Backend);
 
     return 0;
 }

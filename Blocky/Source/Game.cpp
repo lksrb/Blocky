@@ -222,7 +222,7 @@ internal void game_generate_world(arena* Arena, game* Game)
     }
 }
 
-internal void game_update(game* Game, game_renderer* Renderer, const game_input* Input, f32 TimeStep, u32 ClientAreaWidth, u32 ClientAreaHeight)
+internal void game_update(game* Game, game_renderer* Renderer, const game_input* Input, f32 TimeStep, v2i ClientArea)
 {
     //debug_cycle_counter GameUpdateCounter("GameUpdateCounter");
 
@@ -343,9 +343,9 @@ internal void game_update(game* Game, game_renderer* Renderer, const game_input*
 
         m4 InverseView = bkm::Translate(m4(1.0f), CameraPosition) * bkm::ToM4(qtn(Game->Player.Rotation));
         Game->Camera.View = bkm::Inverse(InverseView);
-        Game->Camera.recalculate_projection_persperctive(ClientAreaWidth, ClientAreaHeight);
+        Game->Camera.recalculate_projection_persperctive(ClientArea.x, ClientArea.y);
 
-        m4 HUDProjection = bkm::OrthoLH_ZO(0, (f32)ClientAreaWidth, (f32)ClientAreaHeight, 0, -1, 1);
+        m4 HUDProjection = bkm::OrthoLH_ZO(0, (f32)ClientArea.x, (f32)ClientArea.y, 0, -1, 1);
         game_renderer_set_render_data(Renderer, CameraPosition, Game->Camera.View, Game->Camera.Projection, InverseView, HUDProjection, GameTime, LightSpaceMatrix);
 
         game_renderer_submit_directional_light(Renderer, LightDirection, 1.5f, v3(1.0f));
@@ -361,12 +361,12 @@ internal void game_update(game* Game, game_renderer* Renderer, const game_input*
     // Render HUD
     if (Game->RenderHUD)
     {
-        m4 Projection = bkm::OrthoLH_ZO(0, (f32)ClientAreaWidth, (f32)ClientAreaHeight, 0, 0.0f, 1.0f);
+        m4 Projection = bkm::OrthoLH_ZO(0, (f32)ClientArea.x, (f32)ClientArea.y, 0, 0.0f, 1.0f);
 
         // Build crosshair vertices
         f32 CrosshairSize = 15.0f * 2.0f;
-        f32 CenterX = ClientAreaWidth / 2.0f - CrosshairSize / 2.0f;
-        f32 CenterY = ClientAreaHeight / 2.0f - CrosshairSize / 2.0f;
+        f32 CenterX = ClientArea.x / 2.0f - CrosshairSize / 2.0f;
+        f32 CenterY = ClientArea.y / 2.0f - CrosshairSize / 2.0f;
 
         v3 Positions[4];
         Positions[3] = { CenterX, CenterY, 0.0f };
@@ -378,6 +378,13 @@ internal void game_update(game* Game, game_renderer* Renderer, const game_input*
     }
 }
 
+internal void game_debug_ui_update(game* Game, game_renderer* Renderer, const game_input* Input, f32 TimeStep, v2i ClientArea)
+{
+    local_persist bool show_demo_window = true;
+    if (show_demo_window)
+        ImGui::ShowDemoWindow(&show_demo_window);
+}
+
 internal void game_player_update(game* Game, const game_input* Input, game_renderer* Renderer, f32 TimeStep)
 {
     auto& Player = Game->Player;
@@ -387,20 +394,20 @@ internal void game_player_update(game* Game, const game_input* Input, game_rende
     v3 Forward = { 0.0f, 0.0, -1.0f };
     f32 Speed = 15.0f;
 
-    // Rotating
-    local_persist bool TPressed = false;
+    // Very important
+    local_persist bool GameFocused = false;
 
     bool JustPressed = false;
     bool JumpKeyPressed = false;
 
     if (Input->is_key_pressed(key::T))
     {
-        TPressed = !TPressed;
+        GameFocused = !GameFocused;
 
         JustPressed = true;
     }
 
-    if (TPressed)
+    if (GameFocused)
     {
         local_persist v2i OldMousePos;
 
@@ -437,7 +444,7 @@ internal void game_player_update(game* Game, const game_input* Input, game_rende
 
     // Movement
     v3 Direction = {};
-    if (TPressed)
+    if (GameFocused)
     {
         if (Input->is_key_down(key::W))
         {
@@ -630,102 +637,106 @@ internal void game_player_update(game* Game, const game_input* Input, game_rende
 #endif
     }
 
-    // Destroy block
-    if (Input->is_mouse_pressed(mouse::Left))
+    if (GameFocused)
     {
-        ray Ray;
-        Ray.Origin = Player.Position + Game->CameraOffset; // TODO: Camera position
-        Ray.Direction = Forward; // Forward is already normalized
 
-        v3 HitPoint;
-        v3 HitNormal;
-        block HitBlock;
-        u64 HitIndex;
-        if (find_first_hit(Ray, Game->Blocks, Game->BlocksCount, &HitPoint, &HitNormal, &HitBlock, &HitIndex))
+        // Destroy block
+        if (Input->is_mouse_pressed(mouse::Left))
         {
-            auto& Block = Game->Blocks[HitIndex];
-            Block.Type = block_type::Air;
+            ray Ray;
+            Ray.Origin = Player.Position + Game->CameraOffset; // TODO: Camera position
+            Ray.Direction = Forward; // Forward is already normalized
 
-            // Color adjacent blocks
+            v3 HitPoint;
+            v3 HitNormal;
+            block HitBlock;
+            u64 HitIndex;
+            if (find_first_hit(Ray, Game->Blocks, Game->BlocksCount, &HitPoint, &HitNormal, &HitBlock, &HitIndex))
+            {
+                auto& Block = Game->Blocks[HitIndex];
+                Block.Type = block_type::Air;
+
+                // Color adjacent blocks
 #if 0
-            if (Block.Left != INT_MAX)
-            {
-                auto& Neighbour = Game->Blocks[Block.Left];
-                Neighbour.Color = v4(1.0f, 0.0f, 0.0f, 1.0f);
-                Neighbour.Right = INT_MAX;
-            }
+                if (Block.Left != INT_MAX)
+                {
+                    auto& Neighbour = Game->Blocks[Block.Left];
+                    Neighbour.Color = v4(1.0f, 0.0f, 0.0f, 1.0f);
+                    Neighbour.Right = INT_MAX;
+                }
 
-            if (Block.Right != INT_MAX)
-            {
-                auto& Neighbour = Game->Blocks[Block.Right];
-                Neighbour.Color = v4(1.0f, 0.0f, 0.0f, 1.0f);
-                Neighbour.Left = INT_MAX;
-            }
+                if (Block.Right != INT_MAX)
+                {
+                    auto& Neighbour = Game->Blocks[Block.Right];
+                    Neighbour.Color = v4(1.0f, 0.0f, 0.0f, 1.0f);
+                    Neighbour.Left = INT_MAX;
+                }
 
-            if (Block.Front != INT_MAX)
-            {
-                auto& Neighbour = Game->Blocks[Block.Front];
-                Neighbour.Color = v4(1.0f, 0.0f, 0.0f, 1.0f);
-                Neighbour.Back = INT_MAX;
-            }
+                if (Block.Front != INT_MAX)
+                {
+                    auto& Neighbour = Game->Blocks[Block.Front];
+                    Neighbour.Color = v4(1.0f, 0.0f, 0.0f, 1.0f);
+                    Neighbour.Back = INT_MAX;
+                }
 
-            if (Block.Back != INT_MAX)
-            {
-                auto& Neighbour = Game->Blocks[Block.Back];
-                Neighbour.Color = v4(1.0f, 0.0f, 0.0f, 1.0f);
-                Neighbour.Front = INT_MAX;
-            }
+                if (Block.Back != INT_MAX)
+                {
+                    auto& Neighbour = Game->Blocks[Block.Back];
+                    Neighbour.Color = v4(1.0f, 0.0f, 0.0f, 1.0f);
+                    Neighbour.Front = INT_MAX;
+                }
 
-            if (Block.Up != INT_MAX)
-            {
-                auto& Neighbour = Game->Blocks[Block.Up];
-                Neighbour.Color = v4(1.0f, 0.0f, 0.0f, 1.0f);
-                Neighbour.Down = INT_MAX;
-            }
+                if (Block.Up != INT_MAX)
+                {
+                    auto& Neighbour = Game->Blocks[Block.Up];
+                    Neighbour.Color = v4(1.0f, 0.0f, 0.0f, 1.0f);
+                    Neighbour.Down = INT_MAX;
+                }
 
-            if (Block.Down != INT_MAX)
-            {
-                auto& Neighbour = Game->Blocks[Block.Down];
-                Neighbour.Color = v4(1.0f, 0.0f, 0.0f, 1.0f);
-                Neighbour.Up = INT_MAX;
-            }
+                if (Block.Down != INT_MAX)
+                {
+                    auto& Neighbour = Game->Blocks[Block.Down];
+                    Neighbour.Color = v4(1.0f, 0.0f, 0.0f, 1.0f);
+                    Neighbour.Up = INT_MAX;
+                }
 #endif
 
-            Info("Block destroyed.");
+                Info("Block destroyed.");
+            }
         }
-    }
 
-    // Create blocks
-    if (Input->is_mouse_pressed(mouse::Right))
-    {
-        v2i PlacePos = { 0,0 };
-
-        ray Ray;
-        Ray.Origin = Player.Position + Game->CameraOffset; // TODO: Camera position
-        Ray.Direction = Forward; // Forward is already normalized
-
-        v3 HitPoint;
-        v3 HitNormal;
-        block HitBlock;
-        u64 HitIndex;
-
-        if (find_first_hit(Ray, Game->Blocks, Game->BlocksCount, &HitPoint, &HitNormal, &HitBlock, &HitIndex))
+        // Create blocks
+        if (Input->is_mouse_pressed(mouse::Right))
         {
-            v3 NewBlockPos = HitBlock.Position + HitNormal;
+            v2i PlacePos = { 0,0 };
 
-            aabb BlockAABB = aabb_from_v3(NewBlockPos, v3(1.0f));
-            aabb PlayerAABB = aabb_from_v3(Player.Position, v3(0.5f, 1.8f, 0.5f));
-            if (!AABBCheckCollision(PlayerAABB, BlockAABB))
+            ray Ray;
+            Ray.Origin = Player.Position + Game->CameraOffset; // TODO: Camera position
+            Ray.Direction = Forward; // Forward is already normalized
+
+            v3 HitPoint;
+            v3 HitNormal;
+            block HitBlock;
+            u64 HitIndex;
+
+            if (find_first_hit(Ray, Game->Blocks, Game->BlocksCount, &HitPoint, &HitNormal, &HitBlock, &HitIndex))
             {
-                i32 C = (i32)NewBlockPos.x;
-                i32 R = (i32)NewBlockPos.z;
-                i32 L = (i32)NewBlockPos.y;
-                auto Block = block_get_safe(Game, C, R, L);
+                v3 NewBlockPos = HitBlock.Position + HitNormal;
 
-                if (Block)
+                aabb BlockAABB = aabb_from_v3(NewBlockPos, v3(1.0f));
+                aabb PlayerAABB = aabb_from_v3(Player.Position, v3(0.5f, 1.8f, 0.5f));
+                if (!AABBCheckCollision(PlayerAABB, BlockAABB))
                 {
-                    Block->Color = v4(1, 0, 1, 1);
-                    Block->Type = block_type::Dirt;
+                    i32 C = (i32)NewBlockPos.x;
+                    i32 R = (i32)NewBlockPos.z;
+                    i32 L = (i32)NewBlockPos.y;
+                    auto Block = block_get_safe(Game, C, R, L);
+
+                    if (Block)
+                    {
+                        Block->Color = v4(1, 0, 1, 1);
+                        Block->Type = block_type::Dirt;
+                    }
                 }
             }
         }

@@ -20,13 +20,16 @@ workspace "Blocky"
 	solution_items {
 		".editorconfig",
 		".gitignore",
+
 		"Dependencies.lua",
 		"premake5.lua",
+		"Blocky/Blocky.lua",
+		"Blocky-ResourcePacker/Blocky-ResourcePacker.lua",
+		"Dependencies/imgui/imgui.lua",
+
 		"Resources/Quad.hlsl",
 		"Resources/Cuboid.hlsl",
 		"Resources/QuadedCuboid.hlsl",
-		"Blocky/Blocky.lua",
-		"Blocky-ResourcePacker/Blocky-ResourcePacker.lua",
 		"Resources/Light.hlsl",
 		"Resources/HUD.hlsl",
 		"Resources/Skybox.hlsl",
@@ -47,6 +50,7 @@ include "Blocky/Blocky.lua"
 
 -- Tools
 group "Tools"
+include "Dependencies/imgui/imgui.lua"
 include "Blocky-ResourcePacker/Blocky-ResourcePacker.lua"
 
 group "Common"

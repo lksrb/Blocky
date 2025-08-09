@@ -17,11 +17,12 @@ project "Blocky"
 
 	includedirs {
 		"Source",
-		"%{IncludeDir.Blocky_Common}"
+		"%{IncludeDir.Blocky_Common}",
+		"%{IncludeDir.imgui}"
 	}
 
 	links {
-		"%{Library.Vulkan}"
+		"ImGui"
 	}
 
 	defines {
