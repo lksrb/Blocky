@@ -61,7 +61,7 @@ cbuffer light_environment : register(b1)
     int u_DirectionalLightCount;
 };
 
-#define ENABLE_SHADOWS 1
+#define ENABLE_SHADOWS 0
 
 // Upper bound
 Texture2D<float4> g_Texture[32] : register(t0);
@@ -100,6 +100,7 @@ float ShadowCalculation(float4 ShadowPos, float3 Normal, directional_light Light
     return Shadow;
 }
 
+#if ENABLE_SHADOWS
 // Directional light calculation
 float3 CalculateDirectionalLight2(directional_light Light, float3 Normal, float3 ViewDir, float Shininess, float3 TextureColor, float Shadow)
 {
@@ -130,27 +131,28 @@ float3 CalculateDirectionalLight2(directional_light Light, float3 Normal, float3
     return Result;
 }
 
+#endif
+
 float4 PSMain(pixel_shader_input In) : SV_TARGET
 {
     float3 Normal = normalize(In.Normal);
     float3 ViewDir = normalize(In.ViewPosition - In.WorldPosition.xyz);
     float Shininess = 32.0;
     float ShadowValue = ShadowCalculation(In.PositionInLightSpace, Normal, u_DirectionalLights[0]);
-    float3 TextureColor = g_Texture[In.TexIndex].Sample(g_Sampler, In.TexCoord) * (1.0 - ShadowValue + 0.5);
+    float3 TextureColor = g_Texture[In.TexIndex].Sample(g_Sampler, In.TexCoord);
     
-    //float3 TextureColor = float3(1.0, 1.0, 1.0);
+    float3 Result = float3(0.0, 0.0, 0.0);
+    
     // Phase 1: Directional lights
-    float3 Result = TextureColor * In.Color.rgb;
-    
     for (int i = 0; i < u_DirectionalLightCount; i++)
     {
-        //Result += CalculateDirectionalLight2(u_DirectionalLights[i], Normal, ViewDir, Shininess, TextureColor * In.Color.rgb, ShadowValue);
+        Result += CalculateDirectionalLight(u_DirectionalLights[i], Normal, ViewDir, Shininess, TextureColor * In.Color.rgb);
     }
     
     // Phase 2: Point lights
     for (int j = 0; j < u_PointLightCount; j++)
     {
-        //Result += CalculatePointLight(u_PointLights[j], Normal, ViewDir, Shininess, In.WorldPosition.xyz, TextureColor * In.Color.rgb);
+        Result += CalculatePointLight(u_PointLights[j], Normal, ViewDir, Shininess, In.WorldPosition.xyz, TextureColor * In.Color.rgb);
     }
     
 #if 0
