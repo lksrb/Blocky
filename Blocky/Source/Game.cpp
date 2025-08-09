@@ -226,6 +226,11 @@ internal void game_update(game* Game, game_renderer* Renderer, const game_input*
 {
     //debug_cycle_counter GameUpdateCounter("GameUpdateCounter");
 
+    if (Input->is_key_pressed(key::H) || Input->is_mouse_pressed(mouse::Side1) || Input->is_mouse_pressed(mouse::Side0))
+    {
+        Game->RenderDebugUI = !Game->RenderDebugUI;
+    }
+
     // Player update
     // NOTE: I dont think we need everything to be an entity, just most dynamic stuff
     // Player and blocks are perfect examples of where we possibly dont need that flexibility
@@ -351,8 +356,8 @@ internal void game_update(game* Game, game_renderer* Renderer, const game_input*
         game_renderer_submit_directional_light(Renderer, LightDirection, 1.5f, v3(1.0f));
     }
 
-    // Render Debug UI
-    if (Game->RenderDebugUI)
+    // Render Editor UI
+    if (Game->RenderEditorUI)
     {
         // For each point lights so we know that its there
         game_renderer_submit_billboard_quad(Renderer, Eye, v2(0.5), &Game->PointLightIconTexture, v4(1.0f));
@@ -380,9 +385,17 @@ internal void game_update(game* Game, game_renderer* Renderer, const game_input*
 
 internal void game_debug_ui_update(game* Game, game_renderer* Renderer, const game_input* Input, f32 TimeStep, v2i ClientArea)
 {
-    local_persist bool show_demo_window = true;
-    if (show_demo_window)
-        ImGui::ShowDemoWindow(&show_demo_window);
+    if (!Game->RenderDebugUI)
+        return;
+
+    local_persist bool ShowDebugWindow = false;
+    if (ShowDebugWindow)
+        ImGui::ShowDemoWindow(&ShowDebugWindow);
+
+    ImGui::Begin("Shadow maps");
+    local_persist v3 TestValues(0.0f);
+    UI::DrawVec3Control("Test", &TestValues);
+    ImGui::End();
 }
 
 internal void game_player_update(game* Game, const game_input* Input, game_renderer* Renderer, f32 TimeStep)

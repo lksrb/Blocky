@@ -1,60 +1,8 @@
 #include "Win32DX12ImGui.h"
 
 // Source files
-#include "backends/imgui_impl_win32.cpp"
-#include "backends/imgui_impl_dx12.cpp"
-
-// Simple free list based allocator
-struct example_descriptor_heap_allocator
-{
-    ID3D12DescriptorHeap* Heap = nullptr;
-    D3D12_DESCRIPTOR_HEAP_TYPE  HeapType = D3D12_DESCRIPTOR_HEAP_TYPE_NUM_TYPES;
-    D3D12_CPU_DESCRIPTOR_HANDLE HeapStartCpu;
-    D3D12_GPU_DESCRIPTOR_HANDLE HeapStartGpu;
-    UINT                        HeapHandleIncrement;
-    ImVector<int>               FreeIndices;
-
-    void Create(ID3D12Device* device, ID3D12DescriptorHeap* heap)
-    {
-        IM_ASSERT(Heap == nullptr && FreeIndices.empty());
-        Heap = heap;
-        D3D12_DESCRIPTOR_HEAP_DESC desc = heap->GetDesc();
-        HeapType = desc.Type;
-        HeapStartCpu = Heap->GetCPUDescriptorHandleForHeapStart();
-        HeapStartGpu = Heap->GetGPUDescriptorHandleForHeapStart();
-        HeapHandleIncrement = device->GetDescriptorHandleIncrementSize(HeapType);
-        FreeIndices.reserve((int)desc.NumDescriptors);
-        for (int n = desc.NumDescriptors; n > 0; n--)
-            FreeIndices.push_back(n - 1);
-    }
-    void Destroy()
-    {
-        Heap = nullptr;
-        FreeIndices.clear();
-    }
-    void Alloc(D3D12_CPU_DESCRIPTOR_HANDLE* out_cpu_desc_handle, D3D12_GPU_DESCRIPTOR_HANDLE* out_gpu_desc_handle)
-    {
-        IM_ASSERT(FreeIndices.Size > 0);
-        int idx = FreeIndices.back();
-        FreeIndices.pop_back();
-        out_cpu_desc_handle->ptr = HeapStartCpu.ptr + (idx * HeapHandleIncrement);
-        out_gpu_desc_handle->ptr = HeapStartGpu.ptr + (idx * HeapHandleIncrement);
-    }
-    void Free(D3D12_CPU_DESCRIPTOR_HANDLE out_cpu_desc_handle, D3D12_GPU_DESCRIPTOR_HANDLE out_gpu_desc_handle)
-    {
-        int cpu_idx = (int)((out_cpu_desc_handle.ptr - HeapStartCpu.ptr) / HeapHandleIncrement);
-        int gpu_idx = (int)((out_gpu_desc_handle.ptr - HeapStartGpu.ptr) / HeapHandleIncrement);
-        IM_ASSERT(cpu_idx == gpu_idx);
-        FreeIndices.push_back(cpu_idx);
-    }
-};
-
-struct win32_dx12_imgui_context
-{
-    ID3D12DescriptorHeap* SrvDescHeap = nullptr;
-    ImDrawData* CurrentDrawData = nullptr;
-    example_descriptor_heap_allocator DescriptorHeapAllocator;
-};
+#include <backends/imgui_impl_win32.cpp>
+#include <backends/imgui_impl_dx12.cpp>
 
 internal win32_dx12_imgui_context* win32_dx12_imgui_create(arena* Arena, win32_context* Win32Context, dx12_render_backend* DX12Backend)
 {
@@ -119,6 +67,14 @@ internal win32_dx12_imgui_context* win32_dx12_imgui_create(arena* Arena, win32_c
     return Context;
 }
 
+internal void win32_dx12_imgui_destroy(win32_dx12_imgui_context* Context)
+{
+    // I want to call this so that imgui remembers the position of debug windows
+    ImGui_ImplDX12_Shutdown();
+    ImGui_ImplWin32_Shutdown();
+    ImGui::DestroyContext();
+}
+
 internal void win32_dx12_imgui_begin_frame(win32_dx12_imgui_context* Context)
 {
     // Start the Dear ImGui frame
@@ -131,14 +87,5 @@ internal void win32_dx12_imgui_end_frame(win32_dx12_imgui_context* Context)
 {
     // Rendering
     ImGui::Render();
-
     Context->CurrentDrawData = ImGui::GetDrawData();
-}
-
-// TODO: Do I even want to call this?
-internal void win32_dx12_imgui_destroy(win32_dx12_imgui_context* Context)
-{
-    ImGui_ImplDX12_Shutdown();
-    ImGui_ImplWin32_Shutdown();
-    ImGui::DestroyContext();
 }

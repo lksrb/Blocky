@@ -169,6 +169,7 @@ internal void win32_process_events(game_input* Input, HWND WindowHandle)
                         case 'Q': { Input->set_key_state(key::Q, IsDown); break; }
                         case 'E': { Input->set_key_state(key::E, IsDown); break; }
                         case 'G': { Input->set_key_state(key::G, IsDown); break; }
+                        case 'H': { Input->set_key_state(key::H, IsDown); break; }
                         case 'T':
                         {
                             Input->set_key_state(key::T, IsDown);
@@ -263,6 +264,33 @@ internal void win32_process_events(game_input* Input, HWND WindowHandle)
             case WM_MBUTTONUP:
             {
                 Input->set_mouse_state(mouse::Middle, false);
+                break;
+            }
+
+            case WM_XBUTTONDOWN:
+            {
+                WORD Button = GET_XBUTTON_WPARAM(Message.wParam);
+                if (Button == XBUTTON1)
+                {
+                    Input->set_mouse_state(mouse::Side0, true);
+                }
+                else if (Button == XBUTTON2)
+                {
+                    Input->set_mouse_state(mouse::Side1, true);
+                }
+                break;
+            }
+            case WM_XBUTTONUP:
+            {
+                WORD Button = GET_XBUTTON_WPARAM(Message.wParam);
+                if (Button == XBUTTON1)
+                {
+                    Input->set_mouse_state(mouse::Side0, false);
+                }
+                else if (Button == XBUTTON2)
+                {
+                    Input->set_mouse_state(mouse::Side1, false);
+                }
                 break;
             }
 
@@ -577,6 +605,7 @@ int main(int argc, char** argv)
         TimeStep = bkm::Clamp(TimeStep, 0.0f, 0.01666666f);
     }
 
+    win32_dx12_imgui_destroy(Win32Dx12ImGuiContext);
     dx12_render_backend_destroy(DX12Backend);
 
     return 0;

@@ -10,6 +10,7 @@
 // Win32 utils
 #define GET_X_LPARAM(lp) ((int)(short)LOWORD(lp))
 #define GET_Y_LPARAM(lp) ((int)(short)HIWORD(lp))
+#define GET_XBUTTON_WPARAM(wParam) (HIWORD(wParam))
 
 // Just to replace "new"s everywhere, they are slow as fuck
 //#define VmAllocArray(__type, __count) (__type*)::VirtualAlloc(nullptr, sizeof(__type) * __count, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE)
@@ -42,7 +43,7 @@ struct win32_context
 // THIS IS CROSS-PLATFORM
 enum class key : u32
 {
-    W = 0, S, A, D, Q, E, T, G, Shift, Control, BackSpace, Space, COUNT
+    W = 0, S, A, D, Q, E, T, G, H, Shift, Control, BackSpace, Space, COUNT
 };
 
 enum class mouse : u32
@@ -50,6 +51,8 @@ enum class mouse : u32
     Left = 0,
     Right,
     Middle,
+    Side0,
+    Side1,
 
     COUNT
 };

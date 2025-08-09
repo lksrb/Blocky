@@ -118,8 +118,9 @@ struct game
 
     entity_registry Registry;
 
-    bool RenderDebugUI = true;
+    bool RenderEditorUI = true;
     bool RenderHUD = true;
+    bool RenderDebugUI = true; // ImGui stuff
 };
 
 internal game* game_create(arena* Arena, render_backend* Backend);
