@@ -26,13 +26,13 @@ struct camera
         f32 OrthoRight = 0.5f * AspectRatio * OrthographicSize;
         f32 OrthoBottom = -0.5f * OrthographicSize;
         f32 OrthoTop = 0.5f * OrthographicSize;
-        Projection = bkm::Ortho(OrthoLeft, OrthoRight, OrthoBottom, OrthoTop, OrthographicNear, OrthographicFar);
+        Projection = bkm::OrthoRH_ZO(OrthoLeft, OrthoRight, OrthoBottom, OrthoTop, OrthographicNear, OrthographicFar);
     }
 
-    void recalculate_projection_persperctive(u32 Width, u32 Height)
+    void recalculate_projection_perspective(u32 Width, u32 Height)
     {
         AspectRatio = static_cast<f32>(Width) / Height;
-        Projection = bkm::Perspective(PerspectiveFOV, AspectRatio, PerspectiveNear, PerspectiveFar);
+        Projection = bkm::PerspectiveRH_ZO(PerspectiveFOV, AspectRatio, PerspectiveNear, PerspectiveFar);
     }
 
     m4 get_view_projection() const { return Projection * View; }

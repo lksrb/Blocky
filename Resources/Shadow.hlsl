@@ -2,7 +2,7 @@
 
 cbuffer root_constants : register(b0)
 {
-    row_major float4x4 LightSpaceMatrix;
+    column_major float4x4 LightSpaceMatrix;
 };
 
 struct vertex_shader_input

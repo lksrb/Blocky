@@ -268,7 +268,7 @@ namespace bkm {
         return inverse * oneOverDeterminant;
     }
 
-    inline m4 Perspective(f32 fovy, f32 aspect, f32 zNear, f32 zFar)
+    inline m4 PerspectiveRH_ZO(f32 fovy, f32 aspect, f32 zNear, f32 zFar)
     {
         m4 result(0.0f);
 
@@ -281,34 +281,34 @@ namespace bkm {
         return result;
     }
 
-    inline m4 Ortho(f32 left, f32 right, f32 bottom, f32 top, f32 zNear, f32 zFar)
-    {
-        m4 result(1.0f);
-        result[0][0] = 2.0f / (right - left);
-        result[1][1] = 2.0f / (top - bottom);
-        result[2][2] = -1.0f / (zFar - zNear);
-        result[3][0] = -(right + left) / (right - left);
-        result[3][1] = -(top + bottom) / (top - bottom);
-        result[3][2] = -zNear / (zFar - zNear);
-
-        return result;
-    }
-
     // D3D clip volume definition
-    inline m4 PerspectiveLH(f32 fovy, f32 aspect, f32 zNear, f32 zFar)
-    {
-        m4 result(0.0f);
+    //inline m4 PerspectiveLH_ZO(f32 fovy, f32 aspect, f32 zNear, f32 zFar)
+    //{
+    //    m4 Result(0.0f);
 
-        f32 tanHalfFovy = Tan(fovy / 2.0f);
-        result[0][0] = 1.0f / (aspect * tanHalfFovy);
-        result[1][1] = 1.0f / (tanHalfFovy);
-        result[2][2] = zFar / (zFar - zNear);
-        result[2][3] = 1.0f;
-        result[3][2] = -(zFar * zNear) / (zFar - zNear);
-        return result;
+    //    f32 TanHalfFovy = tan(fovy / 2.0f);
+    //    Result[0][0] = 1.0f / (aspect * TanHalfFovy);
+    //    Result[1][1] = 1.0f / (TanHalfFovy);
+    //    Result[2][2] = zFar / (zFar - zNear);
+    //    Result[2][3] = 1.0f;
+    //    Result[3][2] = -(zFar * zNear) / (zFar - zNear);
+
+    //    return Result;
+    //}
+
+    inline m4 OrthoRH_ZO(f32 left, f32 right, f32 bottom, f32 top, f32 zNear, f32 zFar)
+    {
+        m4 Result(1);
+        Result[0][0] = static_cast<f32>(2) / (right - left);
+        Result[1][1] = static_cast<f32>(2) / (top - bottom);
+        Result[2][2] = -static_cast<f32>(1) / (zFar - zNear);
+        Result[3][0] = -(right + left) / (right - left);
+        Result[3][1] = -(top + bottom) / (top - bottom);
+        Result[3][2] = -zNear / (zFar - zNear);
+        return Result;
     }
 
-    //inline m4 OrthoLH(f32 left, f32 right, f32 bottom, f32 top, f32 zNear, f32 zFar)
+    //inline m4 OrthoLH_ZO(f32 left, f32 right, f32 bottom, f32 top, f32 zNear, f32 zFar)
     //{
     //    m4 Result(1.0f);
     //    Result[0][0] = 2.0f / (right - left);
@@ -317,21 +317,8 @@ namespace bkm {
     //    Result[3][0] = -(right + left) / (right - left);
     //    Result[3][1] = -(top + bottom) / (top - bottom);
     //    Result[3][2] = -zNear / (zFar - zNear);
-
     //    return Result;
     //}
-
-    inline m4 OrthoLH_ZO(f32 left, f32 right, f32 bottom, f32 top, f32 zNear, f32 zFar)
-    {
-        m4 Result(1.0f);
-        Result[0][0] = 2.0f / (right - left);
-        Result[1][1] = 2.0f / (top - bottom);
-        Result[2][2] = 1.0f / (zFar - zNear);
-        Result[3][0] = -(right + left) / (right - left);
-        Result[3][1] = -(top + bottom) / (top - bottom);
-        Result[3][2] = -zNear / (zFar - zNear);
-        return Result;
-    }
 
     inline m3 Translate(m3 m, v2 v)
     {
@@ -497,7 +484,7 @@ namespace bkm {
         return radians * 180.0f / PI;
     }
 
-    inline m4 LookAt(v3 eye, v3 center, v3 up)
+    inline m4 LookAtRH(v3 eye, v3 center, v3 up)
     {
         m4 result(1.0f);
 
@@ -521,27 +508,27 @@ namespace bkm {
         return result;
     }
 
-    inline m4 LookAtLH(v3 eye, v3 center, v3 up)
-    {
-        v3 f(Normalize(center - eye));
-        v3 s(Normalize(Cross(up, f)));
-        v3 u(Cross(f, s));
+    //inline m4 LookAtLH(v3 eye, v3 center, v3 up)
+    //{
+    //    v3 f(Normalize(center - eye));
+    //    v3 s(Normalize(Cross(up, f)));
+    //    v3 u(Cross(f, s));
 
-        m4 Result(1.0f);
-        Result[0][0] = s.x;
-        Result[1][0] = s.y;
-        Result[2][0] = s.z;
-        Result[0][1] = u.x;
-        Result[1][1] = u.y;
-        Result[2][1] = u.z;
-        Result[0][2] = f.x;
-        Result[1][2] = f.y;
-        Result[2][2] = f.z;
-        Result[3][0] = -Dot(s, eye);
-        Result[3][1] = -Dot(u, eye);
-        Result[3][2] = -Dot(f, eye);
-        return Result;
-    }
+    //    m4 Result(1.0f);
+    //    Result[0][0] = s.x;
+    //    Result[1][0] = s.y;
+    //    Result[2][0] = s.z;
+    //    Result[0][1] = u.x;
+    //    Result[1][1] = u.y;
+    //    Result[2][1] = u.z;
+    //    Result[0][2] = f.x;
+    //    Result[1][2] = f.y;
+    //    Result[2][2] = f.z;
+    //    Result[3][0] = -Dot(s, eye);
+    //    Result[3][1] = -Dot(u, eye);
+    //    Result[3][2] = -Dot(f, eye);
+    //    return Result;
+    //}
 
     inline v2 Rotate(const v2& v, f32 angle)
     {

@@ -20,6 +20,7 @@ internal u32 g_ClientHeight = 0;
 internal bool g_DoResize = false;
 internal bool g_IsRunning = false;
 internal bool g_IsFocused = false;
+internal game_input* g_Input;
 
 LRESULT win32_procedure_handler(HWND WindowHandle, UINT Message, WPARAM WParam, LPARAM LParam)
 {
@@ -71,7 +72,7 @@ LRESULT win32_procedure_handler(HWND WindowHandle, UINT Message, WPARAM WParam, 
         case WM_KEYUP:
         case WM_KEYDOWN:
         {
-            Assert(false, "Dispached input to the procedure handler (Keyboard)!");
+            //Assert(false, "Dispached input to the procedure handler (Keyboard)!");
 
             break;
         }
@@ -91,10 +92,9 @@ LRESULT win32_procedure_handler(HWND WindowHandle, UINT Message, WPARAM WParam, 
     return Result;
 }
 
-// TODO: Move somewhere
 internal buffer win32_read_buffer(const char* Path)
 {
-    buffer Result;
+    buffer Result = {};
 
     HANDLE FileHandle = ::CreateFileA(Path, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr);
     if (FileHandle != INVALID_HANDLE_VALUE)
@@ -129,21 +129,15 @@ internal void win32_process_events(game_input* Input, HWND WindowHandle)
     bool DoSetCursorLock = false;
     bool DoSetShowCursor = false;
 
-    MSG Message;
-
     // Reset pressed states to get the "click" behaviour
     memset(Input->KeyPressed, 0, sizeof(Input->KeyPressed));
     memset(Input->MousePressed, 0, sizeof(Input->MousePressed));
 
+    // TODO: Handle everything in WndProc?
     // Win32 message queue
+    MSG Message;
     while (PeekMessage(&Message, nullptr, 0, 0, PM_REMOVE))
     {
-        // ImGui gonna eat all events if its focused
-        if (ImGui_ImplWin32_WndProcHandler(WindowHandle, Message.message, Message.wParam, Message.lParam))
-        {
-            continue;
-        }
-
         switch (Message.message)
         {
             case WM_SYSKEYUP:
@@ -203,6 +197,7 @@ internal void win32_process_events(game_input* Input, HWND WindowHandle)
                     }
                 }
 
+                goto InvokeWndProc;
                 break;
             }
             case WM_MOUSEMOVE:
@@ -223,6 +218,7 @@ internal void win32_process_events(game_input* Input, HWND WindowHandle)
                 //if (Input->VirtualMousePosition.y < 0) Input->VirtualMousePosition.y = 0;
                 //if (Input->VirtualMousePosition.x > static_cast<i32>(g_ClientWidth)) Input->VirtualMousePosition.x = g_ClientWidth;
                 //if (Input->VirtualMousePosition.y > static_cast<i32>(g_ClientHeight)) Input->VirtualMousePosition.y = g_ClientHeight;
+                goto InvokeWndProc;
 
                 break;
             }
@@ -237,33 +233,39 @@ internal void win32_process_events(game_input* Input, HWND WindowHandle)
             case WM_LBUTTONDBLCLK:
             {
                 Input->set_mouse_state(mouse::Left, true);
+                goto InvokeWndProc;
                 break;
             }
             case WM_RBUTTONDOWN:
             case WM_RBUTTONDBLCLK:
             {
                 Input->set_mouse_state(mouse::Right, true);
+                goto InvokeWndProc;
                 break;
             }
             case WM_MBUTTONDOWN:
             case WM_MBUTTONDBLCLK:
             {
                 Input->set_mouse_state(mouse::Middle, true);
+                goto InvokeWndProc;
                 break;
             }
             case WM_LBUTTONUP:
             {
                 Input->set_mouse_state(mouse::Left, false);
+                goto InvokeWndProc;
                 break;
             }
             case WM_RBUTTONUP:
             {
                 Input->set_mouse_state(mouse::Right, false);
+                goto InvokeWndProc;
                 break;
             }
             case WM_MBUTTONUP:
             {
                 Input->set_mouse_state(mouse::Middle, false);
+                goto InvokeWndProc;
                 break;
             }
 
@@ -278,6 +280,7 @@ internal void win32_process_events(game_input* Input, HWND WindowHandle)
                 {
                     Input->set_mouse_state(mouse::Side1, true);
                 }
+                goto InvokeWndProc;
                 break;
             }
             case WM_XBUTTONUP:
@@ -291,6 +294,7 @@ internal void win32_process_events(game_input* Input, HWND WindowHandle)
                 {
                     Input->set_mouse_state(mouse::Side1, false);
                 }
+                goto InvokeWndProc;
                 break;
             }
 
@@ -333,11 +337,11 @@ internal void win32_process_events(game_input* Input, HWND WindowHandle)
                         //if (io.VirtualCursorPos.y > static_cast<i32>(app.Height)) io.VirtualCursorPos.y = app.Height;
                     }
                 }
-
                 break;
             }
             default:
             {
+              InvokeWndProc:
                 TranslateMessage(&Message);
                 DispatchMessage(&Message);
                 break;
@@ -535,6 +539,7 @@ int main(int argc, char** argv)
     f32 TimeStep = 0.0f;
     g_IsRunning = true;
     game_input Input = {};
+    g_Input = &Input;
     while (g_IsRunning)
     {
         // Process events
@@ -554,11 +559,11 @@ int main(int argc, char** argv)
         if (!IsMinimized)
         {
             //scoped_timer timer("Game update");
+            win32_dx12_imgui_begin_frame(Win32Dx12ImGuiContext);
 
             v2i ClientArea = { (i32)g_ClientWidth, (i32)g_ClientHeight };
             game_update(Game, Renderer,  &Input, TimeStep, ClientArea);
 
-            win32_dx12_imgui_begin_frame(Win32Dx12ImGuiContext);
             game_debug_ui_update(Game, Renderer, &Input, TimeStep, ClientArea);
             win32_dx12_imgui_end_frame(Win32Dx12ImGuiContext);
         }

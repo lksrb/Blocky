@@ -322,23 +322,32 @@ internal void game_update(game* Game, game_renderer* Renderer, const game_input*
         //GameRendererSubmitDirectionalLight(Renderer, -SunDirection, 1.5f, v3(1.0f));
     }
 
-    local_persist v3 Eye = v3(8.0f, 12.0f, 8.0f);
+    local_persist constinit v3 Center = v3(ColumnCount / 2.0f, 0, RowCount / 2.0f);
+
+    local_persist v3 Eye = Center + v3(0, 16, 0);
+    local_persist f32 Size = 15;
+    local_persist f32 Near = 1.0f;
+    local_persist f32 Far = 15.5;
+    local_persist v3 LightDirection = bkm::Normalize(v3(0.0f, -1.0f, 0));
+
+    auto CenterBlock = block_get_safe(Game, (i32)Center.x, (i32)Center.z, (i32)Center.y);
+    if (CenterBlock)
+    {
+        CenterBlock->Color = v4(0.0f, 1.0, 1.0, 1.0f);
+    }
     // Update camera and HUD
     {
-        local_persist f32 Size = 15;
-        local_persist f32 Near = 1.0f;
-        local_persist f32 Far = 15.5;
-        //m4 LightSpaceProjection = glm::orthoLH_ZO(-Size, Size, -Size, Size, Near, Far);
-        //m4 LightSpaceView = glm::lookAtLH(Eye, v3(0, 0, 0), v3(0, 1, 0));
-        //
-        //LightSpaceMatrix = LightSpaceProjection * LightSpaceView;
-
         m4 LightSpaceMatrix;
-        v3 LightDirection = bkm::Normalize(v3(0, -1.0f, 0));
 
         {
-            m4 LightProjection = bkm::OrthoLH_ZO(-Size, Size, -Size, Size, Near, Far);
-            m4 LightView = bkm::LookAtLH(Eye, v3(0.0f), v3(0.0f, 1.0f, 0.0f));
+            m4 LightProjection = bkm::OrthoRH_ZO(-Size, Size, -Size, Size, Near, Far);
+
+            v3 forward = bkm::Normalize(Center - Eye);
+            v3 right = bkm::Normalize(bkm::Cross((fabs(forward.y) > 0.99f) ? v3(0, 0, 1) : v3(0, 1, 0), forward));
+            v3 safeUp = bkm::Cross(forward, right);
+
+            //m4 LightView = bkm::LookAtLH(Eye, Center, v3(0.0f, 1.0f, 0.0f));
+            m4 LightView = bkm::LookAtRH(Eye, Eye + forward, safeUp);
             //m4 LightView = bkm::LookAt(v3(-SunDirection), v3(0, 0, 0), v3(0.0f, 1.0f, 0.0f));
 
             LightSpaceMatrix = LightProjection * LightView; // Remove translation
@@ -348,9 +357,9 @@ internal void game_update(game* Game, game_renderer* Renderer, const game_input*
 
         m4 InverseView = bkm::Translate(m4(1.0f), CameraPosition) * bkm::ToM4(qtn(Game->Player.Rotation));
         Game->Camera.View = bkm::Inverse(InverseView);
-        Game->Camera.recalculate_projection_persperctive(ClientArea.x, ClientArea.y);
+        Game->Camera.recalculate_projection_perspective(ClientArea.x, ClientArea.y);
 
-        m4 HUDProjection = bkm::OrthoLH_ZO(0, (f32)ClientArea.x, (f32)ClientArea.y, 0, -1, 1);
+        m4 HUDProjection = bkm::OrthoRH_ZO(0, (f32)ClientArea.x, (f32)ClientArea.y, 0, -1, 1);
         game_renderer_set_render_data(Renderer, CameraPosition, Game->Camera.View, Game->Camera.Projection, InverseView, HUDProjection, GameTime, LightSpaceMatrix);
 
         game_renderer_submit_directional_light(Renderer, LightDirection, 1.5f, v3(1.0f));
@@ -363,10 +372,22 @@ internal void game_update(game* Game, game_renderer* Renderer, const game_input*
         game_renderer_submit_billboard_quad(Renderer, Eye, v2(0.5), &Game->PointLightIconTexture, v4(1.0f));
     }
 
+    // ImGui debug UI
+    if (Game->RenderDebugUI)
+    {
+        ImGui::Begin("Shadow maps");
+        UI::DrawVec3Control("Eye", &Eye);
+        ImGui::DragFloat("Size", &Size, 1.0f, 0.0f, 100.0f);
+        ImGui::DragFloat("Near", &Near, 0.1f, -100.0f, 100.0f);
+        ImGui::DragFloat("Far", &Far, 0.5f, 0.0f, 100.0f);
+
+        ImGui::End();
+    }
+
     // Render HUD
     if (Game->RenderHUD)
     {
-        m4 Projection = bkm::OrthoLH_ZO(0, (f32)ClientArea.x, (f32)ClientArea.y, 0, 0.0f, 1.0f);
+        m4 Projection = bkm::OrthoRH_ZO(0, (f32)ClientArea.x, (f32)ClientArea.y, 0, 0.0f, 1.0f);
 
         // Build crosshair vertices
         f32 CrosshairSize = 15.0f * 2.0f;
@@ -385,17 +406,7 @@ internal void game_update(game* Game, game_renderer* Renderer, const game_input*
 
 internal void game_debug_ui_update(game* Game, game_renderer* Renderer, const game_input* Input, f32 TimeStep, v2i ClientArea)
 {
-    if (!Game->RenderDebugUI)
-        return;
 
-    local_persist bool ShowDebugWindow = false;
-    if (ShowDebugWindow)
-        ImGui::ShowDemoWindow(&ShowDebugWindow);
-
-    ImGui::Begin("Shadow maps");
-    local_persist v3 TestValues(0.0f);
-    UI::DrawVec3Control("Test", &TestValues);
-    ImGui::End();
 }
 
 internal void game_player_update(game* Game, const game_input* Input, game_renderer* Renderer, f32 TimeStep)

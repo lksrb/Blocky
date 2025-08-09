@@ -4,7 +4,7 @@ cbuffer root_constants : register(b0)
 {
     column_major float4x4 ViewProjectionMatrix;
     row_major float4x4 c_ViewMatrix;
-    row_major float4x4 c_LightSpaceMatrix;
+    column_major float4x4 c_LightSpaceMatrix;
 };
 
 struct vertex_shader_input
@@ -61,6 +61,8 @@ cbuffer light_environment : register(b1)
     int u_DirectionalLightCount;
 };
 
+#define ENABLE_SHADOWS 1
+
 // Upper bound
 Texture2D<float4> g_Texture[32] : register(t0);
 SamplerState g_Sampler : register(s0);
@@ -68,31 +70,35 @@ SamplerState g_Sampler : register(s0);
 Texture2D<float> g_ShadowMap[2] : register(t32);
 SamplerState g_ShadowMapSampler : register(s1);
 
-#if 1
-float ShadowCalculation(float4 fragPosLightSpace, float3 Normal, float3 LightDirection)
+float ShadowCalculation(float4 ShadowPos, float3 Normal, directional_light Light)
 {
+    float Shadow = 0.0f;
+#if ENABLE_SHADOWS
     // perform perspective divide
-    float3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
+    ShadowPos.xyz /= ShadowPos.w;
     
     // transform to [0,1] range
-    projCoords = projCoords * 0.5 + 0.5;
-    // get closest depth value from light's perspective (using [0,1] range fragPosLight as coords)
-    float closestDepth = g_ShadowMap[0].Sample(g_ShadowMapSampler, projCoords.xy);
+    ShadowPos = ShadowPos * 0.5 + 0.5;
+    
     // get depth of current fragment from light's perspective
-    float currentDepth = projCoords.z;
+    float CurrentDepth = ShadowPos.z;
     
-    //float shadow = currentDepth > closestDepth ? 1.0 : 0.0;
+    if (CurrentDepth > 1.0)
+        return 0.0;
     
-    // check whether current frag pos is in shadow
-    float bias = max(0.05 * (1.0 - dot(Normal, LightDirection)), 0.005);
-    float shadow = currentDepth - bias > closestDepth ? 1.0 : 0.0;
-
-    if (projCoords.z > 1.0)
-        shadow = 0.0;
+    float2 FlippedShadowPos = float2(ShadowPos.x, 1.0 - ShadowPos.y);
     
-    return shadow;
-}
+    // get closest depth value from light's perspective (using [0,1] range fragPosLight as coords)
+    float ClosestDepth = g_ShadowMap[0].Sample(g_ShadowMapSampler, FlippedShadowPos);
+    
+    //float Bias = 0.005;
+    float3 LightDir = normalize(-Light.Direction);
+    //float Bias = max(0.05 * (1.0 - dot(Normal, LightDir)), 0.005);
+    float Bias = 0.005;
+    Shadow = CurrentDepth - Bias > ClosestDepth ? 1.0 : 0.0;
 #endif
+    return Shadow;
+}
 
 // Directional light calculation
 float3 CalculateDirectionalLight2(directional_light Light, float3 Normal, float3 ViewDir, float Shininess, float3 TextureColor, float Shadow)
@@ -129,18 +135,16 @@ float4 PSMain(pixel_shader_input In) : SV_TARGET
     float3 Normal = normalize(In.Normal);
     float3 ViewDir = normalize(In.ViewPosition - In.WorldPosition.xyz);
     float Shininess = 32.0;
-#if 0
-    float ShadowValue = ShadowCalculation(In.PositionInLightSpace, Normal, u_DirectionalLights[0].Direction);
-#endif
-    float3 TextureColor = g_Texture[In.TexIndex].Sample(g_Sampler, In.TexCoord);
+    float ShadowValue = ShadowCalculation(In.PositionInLightSpace, Normal, u_DirectionalLights[0]);
+    float3 TextureColor = g_Texture[In.TexIndex].Sample(g_Sampler, In.TexCoord) * (1.0 - ShadowValue + 0.5);
     
     //float3 TextureColor = float3(1.0, 1.0, 1.0);
     // Phase 1: Directional lights
-    float3 Result = float3(0, 0, 0);
+    float3 Result = TextureColor * In.Color.rgb;
     
     for (int i = 0; i < u_DirectionalLightCount; i++)
     {
-        Result += CalculateDirectionalLight(u_DirectionalLights[i], Normal, ViewDir, Shininess, TextureColor * In.Color.rgb);
+        //Result += CalculateDirectionalLight2(u_DirectionalLights[i], Normal, ViewDir, Shininess, TextureColor * In.Color.rgb, ShadowValue);
     }
     
     // Phase 2: Point lights
