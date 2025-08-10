@@ -6,7 +6,7 @@ struct dx12_pipeline
 };
 
 // TODO: Make more generic 
-internal dx12_pipeline DX12GraphicsPipelineCreate(ID3D12Device* Device, ID3D12RootSignature* RootSignature, D3D12_INPUT_ELEMENT_DESC Inputs[], u32 InputsCount, const wchar_t* ShaderPath, D3D12_CULL_MODE CullMode = D3D12_CULL_MODE_BACK, bool DepthTesting = true, DXGI_FORMAT RTVFormat = DXGI_FORMAT_R8G8B8A8_UNORM, u32 NumRenderTargets = 1)
+internal dx12_pipeline DX12GraphicsPipelineCreate(ID3D12Device* Device, ID3D12RootSignature* RootSignature, D3D12_INPUT_ELEMENT_DESC Inputs[], u32 InputsCount, const wchar_t* ShaderPath, DXGI_FORMAT RTVFormat, D3D12_CULL_MODE CullMode = D3D12_CULL_MODE_BACK, bool DepthTesting = true, u32 NumRenderTargets = 1)
 {
     dx12_pipeline Pipeline = {};
 

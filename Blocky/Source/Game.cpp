@@ -362,7 +362,7 @@ internal void game_update(game* Game, game_renderer* Renderer, const game_input*
         m4 HUDProjection = bkm::OrthoRH_ZO(0, (f32)ClientArea.x, (f32)ClientArea.y, 0, -1, 1);
         game_renderer_set_render_data(Renderer, CameraPosition, Game->Camera.View, Game->Camera.Projection, InverseView, HUDProjection, GameTime, LightSpaceMatrix);
 
-        game_renderer_submit_directional_light(Renderer, LightDirection, 1.5f, v3(1.0f));
+        game_renderer_submit_directional_light(Renderer, LightDirection, 100.5f, v3(1.0f));
     }
 
     // Render Editor UI

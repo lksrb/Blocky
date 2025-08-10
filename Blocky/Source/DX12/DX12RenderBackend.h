@@ -36,6 +36,8 @@ struct dx12_render_backend
     IDXGISwapChain4* SwapChain;
     ID3D12Resource* SwapChainBackbuffers[FIF];
     D3D12_CPU_DESCRIPTOR_HANDLE SwapChainBufferRTVHandles[FIF];
+    DXGI_FORMAT SwapChainFormat;
+
 
     ID3D12DescriptorHeap* RTVDescriptorHeap;
 
@@ -66,6 +68,8 @@ struct dx12_render_backend
         ID3D12Resource* RenderBuffers[FIF];
         ID3D12DescriptorHeap* RTVDescriptorHeap;
         D3D12_CPU_DESCRIPTOR_HANDLE RTVHandles[FIF];
+
+        DXGI_FORMAT Format;
 
         ID3D12DescriptorHeap* SRVDescriptorHeap;
     } MainPass;

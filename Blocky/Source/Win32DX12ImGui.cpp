@@ -42,7 +42,7 @@ internal win32_dx12_imgui_context* win32_dx12_imgui_create(arena* Arena, win32_c
     InitInfo.Device = DX12Backend->Device;
     InitInfo.CommandQueue = DX12Backend->DirectCommandQueue;
     InitInfo.NumFramesInFlight = FIF;
-    InitInfo.RTVFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
+    InitInfo.RTVFormat = DXGI_FORMAT_R16G16B16A16_FLOAT;
     InitInfo.DSVFormat = DXGI_FORMAT_UNKNOWN;
     //Allocating SRV descriptors (for textures) is up to the application, so we provide callbacks. (current version of the backend will only allocate one descriptor, future versions will need to allocate more)
     InitInfo.UserData = Context;

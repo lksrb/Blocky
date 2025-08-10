@@ -132,7 +132,7 @@ internal dx12_render_backend* dx12_render_backend_create(arena* Arena, const win
         SwapChain1->Release();
 
         //Backend->SwapChain->SetMaximumFrameLatency(FIF);
-
+        Backend->SwapChainFormat = Desc.Format;
         Backend->CurrentBackBufferIndex = Backend->SwapChain->GetCurrentBackBufferIndex();
     }
 
@@ -215,6 +215,8 @@ internal void dx12_render_backend_destroy(dx12_render_backend* Backend)
 internal void dx12_render_backend_initialize_pipeline(arena* Arena, dx12_render_backend* Backend)
 {
     auto Device = Backend->Device;
+    Backend->MainPass.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+    //Backend->MainPass.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
 
     // Main pass
     {
@@ -255,7 +257,7 @@ internal void dx12_render_backend_initialize_pipeline(arena* Arena, dx12_render_
             auto RtvHandle = Backend->MainPass.RTVDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
             for (u32 i = 0; i < FIF; i++)
             {
-                Backend->MainPass.RenderBuffers[i] = dx12_render_target_create(Device, DXGI_FORMAT_R8G8B8A8_UNORM, SwapChainDesc.BufferDesc.Width, SwapChainDesc.BufferDesc.Height, L"MainPassBuffer");
+                Backend->MainPass.RenderBuffers[i] = dx12_render_target_create(Device, Backend->MainPass.Format, SwapChainDesc.BufferDesc.Width, SwapChainDesc.BufferDesc.Height, L"MainPassBuffer");
 
                 Backend->Device->CreateRenderTargetView(Backend->MainPass.RenderBuffers[i], nullptr, RtvHandle);
 
@@ -272,7 +274,7 @@ internal void dx12_render_backend_initialize_pipeline(arena* Arena, dx12_render_
             {
                 D3D12_SHADER_RESOURCE_VIEW_DESC Desc = {};
                 Desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-                Desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+                Desc.Format = Backend->MainPass.Format;
                 Desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
                 Desc.Texture2D.MipLevels = 1;
                 Desc.Texture2D.MostDetailedMip = 0;
@@ -379,7 +381,7 @@ internal void dx12_render_backend_initialize_pipeline(arena* Arena, dx12_render_
             { "TEXINDEX", 0, DXGI_FORMAT_R32_UINT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
         };
 
-        Backend->Quad.Pipeline = DX12GraphicsPipelineCreate(Device, Backend->RootSignature, InputElementDescs, CountOf(InputElementDescs), L"Resources/Quad.hlsl", D3D12_CULL_MODE_NONE);
+        Backend->Quad.Pipeline = DX12GraphicsPipelineCreate(Device, Backend->RootSignature, InputElementDescs, CountOf(InputElementDescs), L"Resources/Quad.hlsl", Backend->MainPass.Format, D3D12_CULL_MODE_NONE);
 
         for (u32 i = 0; i < FIF; i++)
         {
@@ -512,7 +514,7 @@ internal void dx12_render_backend_initialize_pipeline(arena* Arena, dx12_render_
             { "TEXINDEX", 0, DXGI_FORMAT_R32_UINT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
         };
 
-        Cuboid.Pipeline = DX12GraphicsPipelineCreate(Device, Backend->Cuboid.RootSignature, InputElementDescs, CountOf(InputElementDescs), L"Resources/Cuboid.hlsl", D3D12_CULL_MODE_BACK);
+        Cuboid.Pipeline = DX12GraphicsPipelineCreate(Device, Backend->Cuboid.RootSignature, InputElementDescs, CountOf(InputElementDescs), L"Resources/Cuboid.hlsl", Backend->MainPass.Format, D3D12_CULL_MODE_BACK);
 
         Cuboid.PositionsVertexBuffer = DX12VertexBufferCreate(Device, sizeof(c_CuboidVertices));
 
@@ -539,7 +541,7 @@ internal void dx12_render_backend_initialize_pipeline(arena* Arena, dx12_render_
             { "TEXINDEX", 0, DXGI_FORMAT_R32_UINT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
         };
 
-        Backend->QuadedCuboid.Pipeline = DX12GraphicsPipelineCreate(Device, Backend->RootSignature, InputElementDescs, CountOf(InputElementDescs), L"Resources/QuadedCuboid.hlsl");
+        Backend->QuadedCuboid.Pipeline = DX12GraphicsPipelineCreate(Device, Backend->RootSignature, InputElementDescs, CountOf(InputElementDescs), L"Resources/QuadedCuboid.hlsl", Backend->MainPass.Format);
 
         for (u32 i = 0; i < FIF; i++)
         {
@@ -558,7 +560,7 @@ internal void dx12_render_backend_initialize_pipeline(arena* Arena, dx12_render_
             { "TEXINDEX", 0, DXGI_FORMAT_R32_UINT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
         };
 
-        Backend->HUD.Pipeline = DX12GraphicsPipelineCreate(Device, Backend->RootSignature, InputElementDescs, CountOf(InputElementDescs), L"Resources/HUD.hlsl");
+        Backend->HUD.Pipeline = DX12GraphicsPipelineCreate(Device, Backend->RootSignature, InputElementDescs, CountOf(InputElementDescs), L"Resources/HUD.hlsl", Backend->MainPass.Format);
 
         for (u32 i = 0; i < FIF; i++)
         {
@@ -596,7 +598,7 @@ internal void dx12_render_backend_initialize_pipeline(arena* Arena, dx12_render_
             { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
         };
 
-        Backend->Skybox.Pipeline = DX12GraphicsPipelineCreate(Device, Backend->Skybox.RootSignature, InputElementDescs, CountOf(InputElementDescs), L"Resources/Skybox.hlsl", D3D12_CULL_MODE_BACK, false);
+        Backend->Skybox.Pipeline = DX12GraphicsPipelineCreate(Device, Backend->Skybox.RootSignature, InputElementDescs, CountOf(InputElementDescs), L"Resources/Skybox.hlsl", Backend->MainPass.Format, D3D12_CULL_MODE_BACK, false);
         Backend->Skybox.VertexBuffer = DX12VertexBufferCreate(Device, sizeof(c_SkyboxVertices));
 
         DX12SubmitToQueueImmidiate(Device, Backend->DirectCommandAllocators[0], Backend->DirectCommandList, Backend->DirectCommandQueue, [Backend](ID3D12GraphicsCommandList* CommandList)
@@ -614,7 +616,7 @@ internal void dx12_render_backend_initialize_pipeline(arena* Arena, dx12_render_
             { "POSITION", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
         };
 
-        Backend->DistantQuad.Pipeline = DX12GraphicsPipelineCreate(Device, Backend->Skybox.RootSignature, InputElementDescs, CountOf(InputElementDescs), L"Resources/DistantQuad.hlsl", D3D12_CULL_MODE_NONE, false);
+        Backend->DistantQuad.Pipeline = DX12GraphicsPipelineCreate(Device, Backend->Skybox.RootSignature, InputElementDescs, CountOf(InputElementDescs), L"Resources/DistantQuad.hlsl", Backend->MainPass.Format, D3D12_CULL_MODE_NONE, false);
 
         for (u32 i = 0; i < FIF; i++)
         {
@@ -647,7 +649,7 @@ internal void dx12_render_backend_initialize_pipeline(arena* Arena, dx12_render_
     {
         D3D12_SHADER_RESOURCE_VIEW_DESC Desc = {};
         Desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-        Desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+        Desc.Format = Backend->WhiteTexture.Format;
         Desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
         Desc.Texture2D.MipLevels = 1;
         Desc.Texture2D.MostDetailedMip = 0;
@@ -710,7 +712,7 @@ internal void dx12_render_backend_initialize_pipeline(arena* Arena, dx12_render_
             DxAssert(D3D12SerializeRootSignature(&Desc, D3D_ROOT_SIGNATURE_VERSION_1, &Signature, &Error));
             DxAssert(Device->CreateRootSignature(0, Signature->GetBufferPointer(), Signature->GetBufferSize(), IID_PPV_ARGS(&Backend->ShadowPass.RootSignature)));
         }
-        Backend->ShadowPass.Pipeline = DX12GraphicsPipelineCreate(Device, Backend->ShadowPass.RootSignature, InputElementDescs, CountOf(InputElementDescs), L"Resources/Shadow.hlsl", D3D12_CULL_MODE_FRONT, true, DXGI_FORMAT_R8G8B8A8_UNORM, 0);
+        Backend->ShadowPass.Pipeline = DX12GraphicsPipelineCreate(Device, Backend->ShadowPass.RootSignature, InputElementDescs, CountOf(InputElementDescs), L"Resources/Shadow.hlsl", Backend->MainPass.Format, D3D12_CULL_MODE_FRONT, true, 0);
 
         // Create resources
         // Create resources
@@ -815,7 +817,7 @@ internal void dx12_render_backend_initialize_pipeline(arena* Arena, dx12_render_
             DxAssert(D3D12SerializeRootSignature(&Desc, D3D_ROOT_SIGNATURE_VERSION_1, &Signature, &Error));
             DxAssert(Device->CreateRootSignature(0, Signature->GetBufferPointer(), Signature->GetBufferSize(), IID_PPV_ARGS(&Backend->FullscreenPass.RootSignature)));
         }
-        Backend->FullscreenPass.Pipeline = DX12GraphicsPipelineCreate(Device, Backend->FullscreenPass.RootSignature, nullptr, 0, L"Resources/Fullscreen.hlsl", D3D12_CULL_MODE_FRONT, false, DXGI_FORMAT_R8G8B8A8_UNORM, 1);
+        Backend->FullscreenPass.Pipeline = DX12GraphicsPipelineCreate(Device, Backend->FullscreenPass.RootSignature, nullptr, 0, L"Resources/Fullscreen.hlsl", Backend->SwapChainFormat, D3D12_CULL_MODE_FRONT, false, 1);
     }
 }
 
