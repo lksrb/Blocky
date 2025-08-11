@@ -124,6 +124,7 @@ struct game
 };
 
 internal game* game_create(arena* Arena, render_backend* Backend);
+internal void game_destroy(game* Game, render_backend* Backend);
 internal void game_update(game* Game, game_renderer* Renderer, const game_input* Input, f32 TimeStep, v2i ClientArea);
 internal void game_debug_ui_update(game* Game, game_renderer* Renderer, const game_input* Input, f32 TimeStep, v2i ClientArea);
 internal void game_player_update(game* Game, const game_input* Input, game_renderer* Renderer, f32 TimeStep);

@@ -14,9 +14,9 @@
 #include "d3dx12.h"
 
 // TODO: Better approach?
-inline ID3D12InfoQueue* g_DebugInfoQueue; // Created by GameRenderer
-internal void DX12DumpInfoQueue(ID3D12InfoQueue* InfoQueue);
-#define DumpInfoQueue() DX12DumpInfoQueue(g_DebugInfoQueue)
+inline ID3D12InfoQueue* g_DebugInfoQueue;
+internal void dx12_info_queue_dump(ID3D12InfoQueue* InfoQueue);
+#define DumpInfoQueue() dx12_info_queue_dump(g_DebugInfoQueue)
 #define DxAssert(x) do { HRESULT __Result = x; if (FAILED(__Result)) { DumpInfoQueue(); Assert(false, #x); } } while(0)
 #define FIF 2
 
@@ -178,6 +178,45 @@ internal ID3D12Resource* dx12_depth_buffer_create(ID3D12Device* Device, u32 Widt
     return Resource;
 }
 
+internal IDXGISwapChain4* dx12_create_swapchain(IDXGIFactory4* Factory, ID3D12CommandQueue* CommandQueue, HWND WindowHandle, u32 Width, u32 Height, DXGI_FORMAT Format, u32 FramesInFlight)
+{
+    IDXGISwapChain4* SwapChain = nullptr;
+    DXGI_SWAP_CHAIN_DESC1 Desc = {};
+    Desc.Width = Width;
+    Desc.Height = Height;
+    Desc.Format = Format;
+    Desc.Stereo = false;
+    Desc.SampleDesc = { 1, 0 }; // Anti-aliasing needs to be done manually in D3D12
+    Desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+    Desc.BufferCount = FramesInFlight;
+    Desc.Scaling = DXGI_SCALING_STRETCH;
+    Desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD; // Default
+    Desc.AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED;
+    // It is recommended to always allow tearing if tearing support is available.
+    // TODO: More robustness needed
+    Desc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH | DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
+
+    bool WaitableSwapchain = false;
+    if (WaitableSwapchain)
+    {
+        Desc.Flags |= DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
+    }
+
+    DXGI_SWAP_CHAIN_FULLSCREEN_DESC FullScreenDesc = {};
+    FullScreenDesc.Windowed = true;
+
+    IDXGISwapChain1* TempSwapChain1;
+    HRESULT Result = (Factory->CreateSwapChainForHwnd(CommandQueue, WindowHandle, &Desc, &FullScreenDesc, nullptr, &TempSwapChain1));
+
+    // Disable the Alt+Enter fullscreen toggle feature. Switching to fullscreen
+    // will be handled manually.
+    DxAssert(Factory->MakeWindowAssociation(WindowHandle, DXGI_MWA_NO_ALT_ENTER));
+    TempSwapChain1->QueryInterface(IID_PPV_ARGS(&SwapChain));
+    TempSwapChain1->Release();
+
+    return SwapChain;
+}
+
 // Blocking API for submitting stuff to GPU
 // NOTE: Inefficient
 template<typename F>
@@ -219,7 +258,50 @@ internal void DX12SubmitToQueueImmidiate(ID3D12Device* Device, ID3D12CommandAllo
     }
 }
 
-internal void DX12DumpInfoQueue(ID3D12InfoQueue* InfoQueue)
+internal ID3D12InfoQueue* dx12_info_queue_create(ID3D12Device* Device)
+{
+    ID3D12InfoQueue* DebugInfoQueue = nullptr;
+    DxAssert(Device->QueryInterface(IID_PPV_ARGS(&DebugInfoQueue)));
+    DebugInfoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_CORRUPTION, false);
+    DebugInfoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_ERROR, false);
+    DebugInfoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_WARNING, false);
+    DebugInfoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_INFO, false);
+    //InfoQueue->Release();
+    //Backend->DebugInterface->Release();
+
+    // Suppressing some warning
+    {
+        // Suppress whole categories of messages
+        //D3D12_MESSAGE_CATEGORY Categories[] = {};
+
+        // Suppress messages based on their severity level
+        D3D12_MESSAGE_SEVERITY Severities[] =
+        {
+            D3D12_MESSAGE_SEVERITY_INFO
+        };
+
+        // Suppress individual messages by their ID
+        D3D12_MESSAGE_ID DenyIds[] = {
+            D3D12_MESSAGE_ID_CLEARRENDERTARGETVIEW_MISMATCHINGCLEARVALUE,   // I'm really not sure how to avoid this message.
+            D3D12_MESSAGE_ID_MAP_INVALID_NULLRANGE,                         // This warning occurs when using capture frame while graphics debugging.
+            D3D12_MESSAGE_ID_UNMAP_INVALID_NULLRANGE,                       // This warning occurs when using capture frame while graphics debugging.
+        };
+
+        D3D12_INFO_QUEUE_FILTER NewFilter = {};
+        //NewFilter.DenyList.NumCategories = _countof(Categories);
+        //NewFilter.DenyList.pCategoryList = Categories;
+        NewFilter.DenyList.NumSeverities = CountOf(Severities);
+        NewFilter.DenyList.pSeverityList = Severities;
+        NewFilter.DenyList.NumIDs = CountOf(DenyIds);
+        NewFilter.DenyList.pIDList = DenyIds;
+
+        DxAssert(DebugInfoQueue->PushStorageFilter(&NewFilter));
+    }
+
+    return DebugInfoQueue;
+}
+
+internal void dx12_info_queue_dump(ID3D12InfoQueue* InfoQueue)
 {
     if (!InfoQueue)
         return;
@@ -256,28 +338,28 @@ internal void DX12DumpInfoQueue(ID3D12InfoQueue* InfoQueue)
         {
             case D3D12_MESSAGE_SEVERITY_MESSAGE:
             {
-                Trace("[DX12]%s", Message->pDescription);
+                Trace("[DX12] TRACE: %s", Message->pDescription);
                 break;
             }
             case D3D12_MESSAGE_SEVERITY_INFO:
             {
-                Info("[DX12]%s", Message->pDescription);
+                Info("[DX12] INFO: %s", Message->pDescription);
                 break;
             }
             case D3D12_MESSAGE_SEVERITY_WARNING:
             {
-                Warn("[DX12]%s", Message->pDescription);
+                Warn("[DX12] WARNING: %s", Message->pDescription);
                 break;
             }
             case D3D12_MESSAGE_SEVERITY_ERROR:
             case D3D12_MESSAGE_SEVERITY_CORRUPTION:
             {
-                Err("[DX12]%s", Message->pDescription);
+                Err("[DX12] ERROR: %s", Message->pDescription);
                 break;
             }
         }
     }
 
-    // Optionally, clear the messages from the queue
+    // Clear the messages from the queue
     InfoQueue->ClearStoredMessages();
 }

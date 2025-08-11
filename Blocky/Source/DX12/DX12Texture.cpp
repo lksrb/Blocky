@@ -1,8 +1,5 @@
 #include "DX12Texture.h"
 
-internal ID3D12DescriptorHeap* g_OfflineTextureHeap = nullptr;
-internal u32 g_OfflineTextureHeapIndex = 0; // Simply increment every time a texture is created. TODO: Freelist allocator
-
 internal texture texture_create(render_backend* Backend, u32 Width, u32 Height, buffer Pixels, texture_format NewFormat, const wchar_t* DebugName)
 {
     Assert(Pixels.Data && Pixels.Size, "Cannot create texture from empty buffer!");
@@ -129,21 +126,10 @@ internal texture texture_create(render_backend* Backend, u32 Width, u32 Height, 
         UploadBuffer->Release();
     }
 
-    // Hacky but will work for some time
-    if (!g_OfflineTextureHeap)
-    {
-        D3D12_DESCRIPTOR_HEAP_DESC Desc = {};
-        Desc.NumDescriptors = 1024; // TODO: Some sufficient number
-        Desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-        Desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE; // Invisible to shaders
-        Desc.NodeMask = 0;
-        DxAssert(Device->CreateDescriptorHeap(&Desc, IID_PPV_ARGS(&g_OfflineTextureHeap)));
-    }
-
-    Assert(g_OfflineTextureHeapIndex < 1024, "Descriptor heap reached maximum capacity!");
+    Assert(Backend->OfflineTextureHeapIndex < 1024, "Descriptor heap reached maximum capacity!");
 
     // Describe and create a SRV for the white texture.
-    Texture.SRVDescriptor = g_OfflineTextureHeap->GetCPUDescriptorHandleForHeapStart();
+    Texture.SRVDescriptor = Backend->OfflineTextureHeap->GetCPUDescriptorHandleForHeapStart();
     {
         D3D12_SHADER_RESOURCE_VIEW_DESC Desc = {};
         Desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
@@ -153,10 +139,10 @@ internal texture texture_create(render_backend* Backend, u32 Width, u32 Height, 
         Desc.Texture2D.MostDetailedMip = 0;
         Desc.Texture2D.PlaneSlice = 0;
         Desc.Texture2D.ResourceMinLODClamp = 0.0f;
-        Texture.SRVDescriptor.ptr += g_OfflineTextureHeapIndex * Backend->DescriptorSizes.CBV_SRV_UAV; // Free slot
+        Texture.SRVDescriptor.ptr += Backend->OfflineTextureHeapIndex * Backend->DescriptorSizes.CBV_SRV_UAV; // Free slot
         Device->CreateShaderResourceView(Texture.Handle, &Desc, Texture.SRVDescriptor);
 
-        g_OfflineTextureHeapIndex++;
+        Backend->OfflineTextureHeapIndex++;
     }
 
     return Texture;
@@ -175,9 +161,8 @@ internal texture texture_create(render_backend* Backend, const char* Path)
     return texture_create(Backend, Width, Height, buffer{ Pixels, (u64)Width * Height * 4 });
 }
 
-internal void texture_destroy(texture* Texture)
+internal void texture_destroy(render_backend* Backend, texture* Texture)
 {
-    // TODO: Freelist
     Texture->Handle->Release();
     Texture->Handle = nullptr;
     Texture->Width = 0;

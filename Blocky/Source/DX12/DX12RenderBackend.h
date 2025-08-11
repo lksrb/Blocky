@@ -38,8 +38,10 @@ struct dx12_render_backend
     D3D12_CPU_DESCRIPTOR_HANDLE SwapChainBufferRTVHandles[FIF];
     DXGI_FORMAT SwapChainFormat;
 
-
     ID3D12DescriptorHeap* RTVDescriptorHeap;
+
+    ID3D12DescriptorHeap* OfflineTextureHeap = nullptr;
+    u32 OfflineTextureHeapIndex = 0;
 
     u32 CurrentBackBufferIndex;
 
@@ -50,6 +52,8 @@ struct dx12_render_backend
     u64 FenceValue;
     u64 FrameFenceValues[FIF];
     HANDLE DirectFenceEvent;
+
+    //HANDLE FrameLatencyEvent;
 
     // Describes resources used in the shader
     ID3D12RootSignature* RootSignature;
@@ -121,11 +125,9 @@ struct dx12_render_backend
     {
         ID3D12Resource* ShadowMaps[FIF];
         D3D12_CPU_DESCRIPTOR_HANDLE DSVHandles[FIF];
-        //D3D12_CPU_DESCRIPTOR_HANDLE OfflineSRVHandles[FIF];
         dx12_pipeline Pipeline;
         ID3D12RootSignature* RootSignature;
         ID3D12DescriptorHeap* DSVDescriptorHeap;
-        //ID3D12DescriptorHeap* OfflineDescriptorHeap;
     } ShadowPass;
 #endif
 
@@ -136,7 +138,7 @@ struct dx12_render_backend
         dx12_pipeline Pipeline;
     } HUD;
 
-    // Fullscreen pass
+    // Fullscreen Pass
     struct
     {
         dx12_pipeline Pipeline;

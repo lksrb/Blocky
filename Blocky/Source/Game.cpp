@@ -166,6 +166,20 @@ internal game* game_create(arena* Arena, render_backend* Backend)
     return Game;
 }
 
+internal void game_destroy(game* Game, render_backend* RenderBackend)
+{
+    for (u32 i = 0; i < BLOCK_TYPE_COUNT; i++)
+    {
+        //texture_destroy(&Game->BlockTextures[i]);
+    }
+
+    texture_destroy(RenderBackend, &Game->BlockTextures[(u32)block_type::Dirt]);
+    texture_destroy(RenderBackend, &Game->CowTexture);
+    texture_destroy(RenderBackend, &Game->CrosshairTexture);
+    texture_destroy(RenderBackend, &Game->PointLightIconTexture);
+    //texture_destroy(&Game->SunTexture);
+}
+
 internal void game_generate_world(arena* Arena, game* Game)
 {
     Game->BlocksCount = RowCount * ColumnCount * LayerCount;

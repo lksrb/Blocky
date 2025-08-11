@@ -33,42 +33,7 @@ internal dx12_render_backend* dx12_render_backend_create(arena* Arena, const win
     // Debug info queue
     if (DX12_ENABLE_DEBUG_LAYER)
     {
-        DxAssert(Backend->Device->QueryInterface(IID_PPV_ARGS(&g_DebugInfoQueue)));
-        g_DebugInfoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_CORRUPTION, false);
-        g_DebugInfoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_ERROR, false);
-        g_DebugInfoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_WARNING, false);
-        g_DebugInfoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_INFO, false);
-        //InfoQueue->Release();
-        //Backend->DebugInterface->Release();
-
-        // Suppressing some warning
-        {
-            // Suppress whole categories of messages
-            //D3D12_MESSAGE_CATEGORY Categories[] = {};
-
-            // Suppress messages based on their severity level
-            D3D12_MESSAGE_SEVERITY Severities[] =
-            {
-                D3D12_MESSAGE_SEVERITY_INFO
-            };
-
-            // Suppress individual messages by their ID
-            D3D12_MESSAGE_ID DenyIds[] = {
-                D3D12_MESSAGE_ID_CLEARRENDERTARGETVIEW_MISMATCHINGCLEARVALUE,   // I'm really not sure how to avoid this message.
-                D3D12_MESSAGE_ID_MAP_INVALID_NULLRANGE,                         // This warning occurs when using capture frame while graphics debugging.
-                D3D12_MESSAGE_ID_UNMAP_INVALID_NULLRANGE,                       // This warning occurs when using capture frame while graphics debugging.
-            };
-
-            D3D12_INFO_QUEUE_FILTER NewFilter = {};
-            //NewFilter.DenyList.NumCategories = _countof(Categories);
-            //NewFilter.DenyList.pCategoryList = Categories;
-            NewFilter.DenyList.NumSeverities = CountOf(Severities);
-            NewFilter.DenyList.pSeverityList = Severities;
-            NewFilter.DenyList.NumIDs = CountOf(DenyIds);
-            NewFilter.DenyList.pIDList = DenyIds;
-
-            DxAssert(g_DebugInfoQueue->PushStorageFilter(&NewFilter));
-        }
+        g_DebugInfoQueue = dx12_info_queue_create(Backend->Device);
     }
 
     // Create direct command queue
@@ -103,37 +68,13 @@ internal dx12_render_backend* dx12_render_backend_create(arena* Arena, const win
 
     // Create swapchain
     {
-        DXGI_SWAP_CHAIN_DESC1 Desc = {};
-        Desc.Width = Window.ClientAreaWidth;
-        Desc.Height = Window.ClientAreaHeight;
-        Desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-        Desc.Stereo = false;
-        Desc.SampleDesc = { 1, 0 }; // Anti-aliasing needs to be done manually in D3D12
-        Desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-        Desc.BufferCount = FIF;
-        Desc.Scaling = DXGI_SCALING_STRETCH;
-        Desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
-        Desc.AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED;
-        // It is recommended to always allow tearing if tearing support is available.
-        // TODO: More robustness needed
-        Desc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH | DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
+        Backend->SwapChainFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
+        Backend->SwapChain = dx12_create_swapchain(Backend->Factory, Backend->DirectCommandQueue, Window.Handle, Window.ClientAreaWidth, Window.ClientAreaHeight, Backend->SwapChainFormat, FIF);
 
-        DXGI_SWAP_CHAIN_FULLSCREEN_DESC FullScreenDesc = {};
-        FullScreenDesc.Windowed = true;
-
-        IDXGISwapChain1* SwapChain1;
-        HRESULT Result = (Backend->Factory->CreateSwapChainForHwnd(Backend->DirectCommandQueue, Window.Handle, &Desc, &FullScreenDesc, nullptr, &SwapChain1));
-
-        DumpInfoQueue();
-        // Disable the Alt+Enter fullscreen toggle feature. Switching to fullscreen
-        // will be handled manually.
-        DxAssert(Backend->Factory->MakeWindowAssociation(Window.Handle, DXGI_MWA_NO_ALT_ENTER));
-        SwapChain1->QueryInterface(IID_PPV_ARGS(&Backend->SwapChain));
-        SwapChain1->Release();
-
-        //Backend->SwapChain->SetMaximumFrameLatency(FIF);
-        Backend->SwapChainFormat = Desc.Format;
         Backend->CurrentBackBufferIndex = Backend->SwapChain->GetCurrentBackBufferIndex();
+
+        //Backend->SwapChain->SetMaximumFrameLatency(FIF); // TODO: This is something newer
+        //Backend->FrameLatencyEvent = Backend->SwapChain->GetFrameLatencyWaitableObject();
     }
 
     // Views are descriptors located in the GPU memory.
@@ -143,6 +84,16 @@ internal dx12_render_backend* dx12_render_backend_create(arena* Arena, const win
     Backend->DescriptorSizes.RTV = Backend->Device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
     Backend->DescriptorSizes.DSV = Backend->Device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
     Backend->DescriptorSizes.CBV_SRV_UAV = Backend->Device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+
+    // Offline texture heap
+    {
+        D3D12_DESCRIPTOR_HEAP_DESC Desc = {};
+        Desc.NumDescriptors = 1024; // TODO: Some sufficient number
+        Desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+        Desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE; // Invisible to shaders
+        Desc.NodeMask = 0;
+        DxAssert(Backend->Device->CreateDescriptorHeap(&Desc, IID_PPV_ARGS(&Backend->OfflineTextureHeap)));
+    }
 
     // Create Render Target Views
     {
@@ -181,34 +132,97 @@ internal void dx12_render_backend_destroy(dx12_render_backend* Backend)
 
     for (u32 i = 0; i < FIF; i++)
     {
-        // Command allocators
-        Backend->DirectCommandAllocators[i]->Release();
-
-        // Depth testing
+        Backend->MainPass.RenderBuffers[i]->Release();
         Backend->MainPass.DepthBuffers[i]->Release();
+
+
+        Backend->DirectCommandAllocators[i]->Release();
         Backend->SwapChainBackbuffers[i]->Release();
 
+        // Quad
         DX12VertexBufferDestroy(&Backend->Quad.VertexBuffers[i]);
+
+        // Cuboid
+        DX12VertexBufferDestroy(&Backend->Cuboid.TransformVertexBuffers[i]);
+        DX12VertexBufferDestroy(&Backend->QuadedCuboid.VertexBuffers[i]);
+
+        // Distant Quad
+        DX12VertexBufferDestroy(&Backend->DistantQuad.VertexBuffers[i]);
+
+        // Light buffers
+        DX12ConstantBufferDestroy(&Backend->LightEnvironmentConstantBuffers[i]);
+
+        // HUD
+        DX12VertexBufferDestroy(&Backend->HUD.VertexBuffers[i]);
+
+        // Shadows
+#if ENABLE_SHADOW_PASS
+        Backend->ShadowPass.ShadowMaps[i]->Release();
+#endif
     }
 
+    // Quad
     DX12PipelineDestroy(&Backend->Quad.Pipeline);
     DX12IndexBufferDestroy(&Backend->Quad.IndexBuffer);
-    texture_destroy(&Backend->WhiteTexture);
-    Backend->SwapChain->Release();
+
+    // Cuboid
+    DX12PipelineDestroy(&Backend->Cuboid.Pipeline);
+    DX12VertexBufferDestroy(&Backend->Cuboid.PositionsVertexBuffer);
+    Backend->Cuboid.RootSignature->Release();
+
+    // Quaded cuboid
+    DX12PipelineDestroy(&Backend->QuadedCuboid.Pipeline);
+
+    // Skybox
+    DX12VertexBufferDestroy(&Backend->Skybox.VertexBuffer);
+    DX12IndexBufferDestroy(&Backend->Skybox.IndexBuffer);
+    DX12PipelineDestroy(&Backend->Skybox.Pipeline);
+    Backend->Skybox.RootSignature->Release();
+
+    // Distant Quad
+    DX12PipelineDestroy(&Backend->DistantQuad.Pipeline);
+
+    // Fullscreen Pass
+    DX12PipelineDestroy(&Backend->FullscreenPass.Pipeline);
+    Backend->FullscreenPass.RootSignature->Release();
+
+    // Shadows
+#if ENABLE_SHADOW_PASS
+    DX12PipelineDestroy(&Backend->ShadowPass.Pipeline);
+    Backend->ShadowPass.RootSignature->Release();
+    Backend->ShadowPass.DSVDescriptorHeap->Release();
+#endif
+
+    // HUD
+    DX12PipelineDestroy(&Backend->HUD.Pipeline);
+
+    // Main pass
+    texture_destroy(Backend, &Backend->WhiteTexture);
+    Backend->MainPass.RTVDescriptorHeap->Release();
     Backend->MainPass.DSVDescriptorHeap->Release();
-    Backend->RTVDescriptorHeap->Release();
+    Backend->MainPass.SRVDescriptorHeap->Release();
+
     Backend->TextureDescriptorHeap->Release();
+
+    Backend->RootSignature->Release();
+
+    Backend->OfflineTextureHeap->Release();
+
+    // Swapchain
+    Backend->RTVDescriptorHeap->Release();
+    Backend->SwapChain->Release();
     Backend->Fence->Release();
     Backend->DirectCommandList->Release();
     Backend->DirectCommandQueue->Release();
-    Backend->RootSignature->Release();
     Backend->Factory->Release();
     Backend->Device->Release();
 
 #if DX12_ENABLE_DEBUG_LAYER
     // Report all memory leaks
     Backend->DxgiDebugInterface->ReportLiveObjects(DXGI_DEBUG_ALL, DXGI_DEBUG_RLO_FLAGS(DXGI_DEBUG_RLO_ALL | DXGI_DEBUG_RLO_IGNORE_INTERNAL));
-    DX12DumpInfoQueue(g_DebugInfoQueue);
+    Backend->DxgiDebugInterface->Release();
+    dx12_info_queue_dump(g_DebugInfoQueue);
+    g_DebugInfoQueue->Release();
 #endif
 }
 
@@ -1062,13 +1076,6 @@ internal void d3d12_render_backend_render(dx12_render_backend* Backend, const ga
         CommandList->DrawIndexedInstanced(Renderer->HUD.IndexCount, 1, 0, 0, 0);
     }
 
-    bool RenderImGui = true;
-    if (RenderImGui)
-    {
-        CommandList->SetDescriptorHeaps(1, &ImGuiDescriptorHeap);
-        ImGui_ImplDX12_RenderDrawData(ImGuiDrawData, CommandList);
-    }
-
     DX12CmdTransition(CommandList, MainPassRenderBuffer, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 
     //
@@ -1078,7 +1085,8 @@ internal void d3d12_render_backend_render(dx12_render_backend* Backend, const ga
     CommandList->ClearRenderTargetView(SwapChainRTV, &ClearColor.x, 0, nullptr);
     CommandList->OMSetRenderTargets(1, &SwapChainRTV, false, nullptr);
 
-    if(true)
+    bool DisplayImage = true;
+    if(DisplayImage)
     {
         DX12CmdSetViewport(CommandList, 0, 0, (FLOAT)SwapChainDesc.BufferDesc.Width, (FLOAT)SwapChainDesc.BufferDesc.Height);
         DX12CmdSetScissorRect(CommandList, 0, 0, SwapChainDesc.BufferDesc.Width, SwapChainDesc.BufferDesc.Height);
@@ -1093,7 +1101,15 @@ internal void d3d12_render_backend_render(dx12_render_backend* Backend, const ga
         SRVGPUHandle.ptr += Backend->DescriptorSizes.CBV_SRV_UAV * CurrentBackBufferIndex;
         CommandList->SetGraphicsRootDescriptorTable(0, SRVGPUHandle);
 
-        CommandList->DrawIndexedInstanced(3, 1, 0, 0, 0);
+        CommandList->DrawInstanced(3, 1, 0, 0);
+    }
+
+    // Render debug UI
+    bool RenderImGui = true;
+    if (RenderImGui)
+    {
+        CommandList->SetDescriptorHeaps(1, &ImGuiDescriptorHeap);
+        ImGui_ImplDX12_RenderDrawData(ImGuiDrawData, CommandList);
     }
 
     // Rendered frame needs to be transitioned to present state
@@ -1109,6 +1125,7 @@ internal void d3d12_render_backend_render(dx12_render_backend* Backend, const ga
     // Wait for GPU to finish presenting
     FrameFenceValue = dx12_render_backend_signal(Backend->DirectCommandQueue, Backend->Fence, &Backend->FenceValue);
     dx12_render_backend_wait_for_fence_value(Backend->Fence, FrameFenceValue, Backend->DirectFenceEvent);
+    //WaitForSingleObjectEx(Backend->FrameLatencyEvent, INFINITE, FALSE);
 
     // Move to another back buffer
     Backend->CurrentBackBufferIndex = Backend->SwapChain->GetCurrentBackBufferIndex();

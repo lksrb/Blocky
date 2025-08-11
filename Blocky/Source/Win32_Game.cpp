@@ -610,6 +610,8 @@ int main(int argc, char** argv)
         TimeStep = bkm::Clamp(TimeStep, 0.0f, 0.01666666f);
     }
 
+    game_destroy(Game, DX12Backend);
+
     win32_dx12_imgui_destroy(Win32Dx12ImGuiContext);
     dx12_render_backend_destroy(DX12Backend);
 

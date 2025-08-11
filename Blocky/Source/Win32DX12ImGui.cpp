@@ -42,7 +42,7 @@ internal win32_dx12_imgui_context* win32_dx12_imgui_create(arena* Arena, win32_c
     InitInfo.Device = DX12Backend->Device;
     InitInfo.CommandQueue = DX12Backend->DirectCommandQueue;
     InitInfo.NumFramesInFlight = FIF;
-    InitInfo.RTVFormat = DXGI_FORMAT_R16G16B16A16_FLOAT;
+    InitInfo.RTVFormat = DX12Backend->SwapChainFormat; // Same format as swapchain since we render it after main pass
     InitInfo.DSVFormat = DXGI_FORMAT_UNKNOWN;
     //Allocating SRV descriptors (for textures) is up to the application, so we provide callbacks. (current version of the backend will only allocate one descriptor, future versions will need to allocate more)
     InitInfo.UserData = Context;
@@ -68,6 +68,8 @@ internal win32_dx12_imgui_context* win32_dx12_imgui_create(arena* Arena, win32_c
 
 internal void win32_dx12_imgui_destroy(win32_dx12_imgui_context* Context)
 {
+    Context->SrvDescHeap->Release();
+
     // I want to call this so that imgui remembers the position of debug windows
     ImGui_ImplDX12_Shutdown();
     ImGui_ImplWin32_Shutdown();
