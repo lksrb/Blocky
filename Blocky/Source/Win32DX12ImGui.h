@@ -10,45 +10,53 @@
 // Simple free list based allocator
 struct example_descriptor_heap_allocator
 {
-    ID3D12DescriptorHeap* Heap = nullptr;
-    D3D12_DESCRIPTOR_HEAP_TYPE  HeapType = D3D12_DESCRIPTOR_HEAP_TYPE_NUM_TYPES;
-    D3D12_CPU_DESCRIPTOR_HANDLE HeapStartCpu;
-    D3D12_GPU_DESCRIPTOR_HANDLE HeapStartGpu;
-    UINT                        HeapHandleIncrement;
-    ImVector<int>               FreeIndices;
+    ID3D12DescriptorHeap* m_Heap = nullptr;
+    D3D12_DESCRIPTOR_HEAP_TYPE  m_HeapType = D3D12_DESCRIPTOR_HEAP_TYPE_NUM_TYPES;
+    D3D12_CPU_DESCRIPTOR_HANDLE m_HeapStartCpu;
+    D3D12_GPU_DESCRIPTOR_HANDLE m_HeapStartGpu;
+    UINT                        m_HeapHandleIncrement;
 
-    void Create(ID3D12Device* device, ID3D12DescriptorHeap* heap)
+    i32* m_FreeIndices = nullptr;
+    i32 m_FreeIndicesSize = 0;
+
+    void Create(arena* Arena, ID3D12Device* Device, ID3D12DescriptorHeap* Heap)
     {
-        IM_ASSERT(Heap == nullptr && FreeIndices.empty());
-        Heap = heap;
-        D3D12_DESCRIPTOR_HEAP_DESC desc = heap->GetDesc();
-        HeapType = desc.Type;
-        HeapStartCpu = Heap->GetCPUDescriptorHandleForHeapStart();
-        HeapStartGpu = Heap->GetGPUDescriptorHandleForHeapStart();
-        HeapHandleIncrement = device->GetDescriptorHandleIncrementSize(HeapType);
-        FreeIndices.reserve((int)desc.NumDescriptors);
-        for (int n = desc.NumDescriptors; n > 0; n--)
-            FreeIndices.push_back(n - 1);
+        m_Heap = Heap;
+        D3D12_DESCRIPTOR_HEAP_DESC Desc = Heap->GetDesc();
+        m_HeapType = Desc.Type;
+        m_HeapStartCpu = m_Heap->GetCPUDescriptorHandleForHeapStart();
+        m_HeapStartGpu = m_Heap->GetGPUDescriptorHandleForHeapStart();
+        m_HeapHandleIncrement = Device->GetDescriptorHandleIncrementSize(m_HeapType);
+        m_FreeIndices = arena_new_array(Arena, i32, Desc.NumDescriptors);
+        m_FreeIndicesSize = Desc.NumDescriptors;
+
+        i32 Index = 0;
+        for (i32 N = Desc.NumDescriptors; N > 0; N--)
+            m_FreeIndices[Index++] = N - 1;
     }
     void Destroy()
     {
-        Heap = nullptr;
-        FreeIndices.clear();
+        m_Heap = nullptr;
+        m_FreeIndices = nullptr;
+        m_FreeIndicesSize = 0;
     }
     void Alloc(D3D12_CPU_DESCRIPTOR_HANDLE* out_cpu_desc_handle, D3D12_GPU_DESCRIPTOR_HANDLE* out_gpu_desc_handle)
     {
-        IM_ASSERT(FreeIndices.Size > 0);
-        int idx = FreeIndices.back();
-        FreeIndices.pop_back();
-        out_cpu_desc_handle->ptr = HeapStartCpu.ptr + (idx * HeapHandleIncrement);
-        out_gpu_desc_handle->ptr = HeapStartGpu.ptr + (idx * HeapHandleIncrement);
+         IM_ASSERT(m_FreeIndicesSize > 0);
+         i32 Index = m_FreeIndices[m_FreeIndicesSize - 1];
+         //m_FreeIndices.back();
+         //m_FreeIndices.pop_back();
+         --m_FreeIndicesSize;
+         out_cpu_desc_handle->ptr = m_HeapStartCpu.ptr + (Index * m_HeapHandleIncrement);
+         out_gpu_desc_handle->ptr = m_HeapStartGpu.ptr + (Index * m_HeapHandleIncrement);
     }
     void Free(D3D12_CPU_DESCRIPTOR_HANDLE out_cpu_desc_handle, D3D12_GPU_DESCRIPTOR_HANDLE out_gpu_desc_handle)
     {
-        int cpu_idx = (int)((out_cpu_desc_handle.ptr - HeapStartCpu.ptr) / HeapHandleIncrement);
-        int gpu_idx = (int)((out_gpu_desc_handle.ptr - HeapStartGpu.ptr) / HeapHandleIncrement);
-        IM_ASSERT(cpu_idx == gpu_idx);
-        FreeIndices.push_back(cpu_idx);
+        i32 CPUIndex = (i32)((out_cpu_desc_handle.ptr - m_HeapStartCpu.ptr) / m_HeapHandleIncrement);
+        i32 GPUIndex = (i32)((out_gpu_desc_handle.ptr - m_HeapStartGpu.ptr) / m_HeapHandleIncrement);
+        IM_ASSERT(CPUIndex == GPUIndex);
+        m_FreeIndices[m_FreeIndicesSize++] = CPUIndex;
+        //m_FreeIndices.push_back(cpu_idx);
     }
 };
 

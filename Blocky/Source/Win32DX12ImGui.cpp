@@ -8,6 +8,21 @@ internal win32_dx12_imgui_context* win32_dx12_imgui_create(arena* Arena, win32_c
 {
     win32_dx12_imgui_context* Context = arena_new(Arena, win32_dx12_imgui_context);
 
+    ImGui::SetAllocatorFunctions([](size_t Size, void* UserData) -> void*
+    {
+        arena* Arena = (arena*)UserData;
+        //Trace("%i", Size); // TODO: probably not a good idea BUT
+        //return malloc(sz);
+        return arena_alloc(Arena, Size);
+    },
+    
+    [](void* Pointer, void* UserData)
+    {
+        arena* Arena = (arena*)UserData;
+        //Trace("NOT FREED: %p", Pointer);
+
+    }, Arena);
+
     // what is this?
     f32 MainScale = ImGui_ImplWin32_GetDpiScaleForMonitor(::MonitorFromPoint(POINT{ 0, 0 }, MONITOR_DEFAULTTOPRIMARY));
 
@@ -32,8 +47,9 @@ internal win32_dx12_imgui_context* win32_dx12_imgui_create(arena* Arena, win32_c
         desc.NumDescriptors = 64;
         desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
         DxAssert(DX12Backend->Device->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&Context->SrvDescHeap)));
-        Context->DescriptorHeapAllocator.Create(DX12Backend->Device, Context->SrvDescHeap);
+        Context->DescriptorHeapAllocator.Create(Arena, DX12Backend->Device, Context->SrvDescHeap);
     }
+
 
     // Setup Platform/Renderer backends
     ImGui_ImplWin32_Init(Win32Context->Window.Handle);
