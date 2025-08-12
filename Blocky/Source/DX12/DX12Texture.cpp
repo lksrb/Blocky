@@ -129,7 +129,7 @@ internal texture texture_create(render_backend* Backend, u32 Width, u32 Height, 
     Assert(Backend->OfflineTextureHeapIndex < 1024, "Descriptor heap reached maximum capacity!");
 
     // Describe and create a SRV for the white texture.
-    Texture.SRVDescriptor = Backend->OfflineTextureHeap->GetCPUDescriptorHandleForHeapStart();
+    Texture.SRVDescriptor = Backend->OfflineTextureHeap.Handle->GetCPUDescriptorHandleForHeapStart();
     {
         D3D12_SHADER_RESOURCE_VIEW_DESC Desc = {};
         Desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;

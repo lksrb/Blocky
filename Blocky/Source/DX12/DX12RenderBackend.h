@@ -40,7 +40,7 @@ struct dx12_render_backend
 
     ID3D12DescriptorHeap* RTVDescriptorHeap;
 
-    ID3D12DescriptorHeap* OfflineTextureHeap = nullptr;
+    dx12_descriptor_heap OfflineTextureHeap;
     u32 OfflineTextureHeapIndex = 0;
 
     u32 CurrentBackBufferIndex;

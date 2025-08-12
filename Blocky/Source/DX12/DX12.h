@@ -217,6 +217,38 @@ internal IDXGISwapChain4* dx12_create_swapchain(IDXGIFactory4* Factory, ID3D12Co
     return SwapChain;
 }
 
+struct dx12_descriptor_heap
+{
+    ID3D12DescriptorHeap* Handle;
+    u32 DescriptorHeapCapacity;
+    bool ShaderVisible;
+    D3D12_DESCRIPTOR_HEAP_TYPE Type = D3D12_DESCRIPTOR_HEAP_TYPE_NUM_TYPES;
+};
+
+internal dx12_descriptor_heap dx12_descriptor_heap_create(ID3D12Device* Device, D3D12_DESCRIPTOR_HEAP_TYPE Type, bool ShaderVisible, u32 DescriptorHeapCapacity)
+{
+    dx12_descriptor_heap Result = {};
+
+    D3D12_DESCRIPTOR_HEAP_DESC Desc = {};
+    Desc.NumDescriptors = DescriptorHeapCapacity;
+    Desc.Type = Type;
+    Desc.Flags = ShaderVisible ? D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE : D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+    Desc.NodeMask = 0; // Set this to zero, we do not have multiple D3d12 devices
+    DxAssert(Device->CreateDescriptorHeap(&Desc, IID_PPV_ARGS(&Result.Handle)));
+
+    Result.ShaderVisible = ShaderVisible;
+    Result.Type = Desc.Type;
+    Result.DescriptorHeapCapacity = Desc.NumDescriptors;
+
+    return Result;
+}
+
+internal void dx12_descriptor_heap_destroy(dx12_descriptor_heap* DescriptorHeap)
+{
+    DescriptorHeap->Handle->Release();
+    *DescriptorHeap = {};
+}
+
 // Blocking API for submitting stuff to GPU
 // NOTE: Inefficient
 template<typename F>
@@ -365,8 +397,7 @@ internal void dx12_info_queue_dump(ID3D12InfoQueue* InfoQueue)
 }
 
 struct dx12_root_signature_description
-{
-};
+{};
 
 struct dx12_root_signature
 {

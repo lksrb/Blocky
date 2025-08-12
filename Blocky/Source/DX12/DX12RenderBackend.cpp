@@ -197,7 +197,8 @@ internal void dx12_render_backend_destroy(dx12_render_backend* Backend)
 
     dx12_root_signature_destroy(&Backend->RootSignature);
 
-    Backend->OfflineTextureHeap->Release();
+    dx12_descriptor_heap_destroy(&Backend->OfflineTextureHeap);
+    //Backend->OfflineTextureHeap->Release();
 
     // Swapchain
     Backend->RTVDescriptorHeap->Release();
@@ -223,15 +224,8 @@ internal void dx12_render_backend_initialize_pipeline(arena* Arena, dx12_render_
     Backend->MainPass.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
     //Backend->MainPass.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
 
-    // Offline texture heap
-    {
-        D3D12_DESCRIPTOR_HEAP_DESC Desc = {};
-        Desc.NumDescriptors = 1024; // TODO: Some sufficient number
-        Desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-        Desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE; // Invisible to shaders
-        Desc.NodeMask = 0;
-        DxAssert(Backend->Device->CreateDescriptorHeap(&Desc, IID_PPV_ARGS(&Backend->OfflineTextureHeap)));
-    }
+    // Storage for offlines textures that the game might need, assuming that its cheaper to copy descriptor rather than creating them on the spot
+    Backend->OfflineTextureHeap = dx12_descriptor_heap_create(Device, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, false, 1024);
 
     // Main pass
     {

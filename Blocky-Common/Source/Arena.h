@@ -29,3 +29,23 @@ internal inline void* arena_alloc(arena* Arena, u64 AllocationSize, u64 Alignmen
     Arena->Size += AllocationSize;
     return Pointer;
 }
+
+
+// Temp allocator for large but temporary stuff
+
+struct temp_allocator
+{
+    arena* Arena;
+};
+
+internal temp_allocator temp_allocator_create(arena* Arena)
+{
+    temp_allocator TempAllocator;
+    TempAllocator.Arena = Arena;
+    return TempAllocator;
+}
+
+internal void temp_allocator_destroy(temp_allocator* TempAllocator)
+{
+
+}
