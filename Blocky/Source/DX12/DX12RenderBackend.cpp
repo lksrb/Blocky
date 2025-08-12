@@ -85,16 +85,6 @@ internal dx12_render_backend* dx12_render_backend_create(arena* Arena, const win
     Backend->DescriptorSizes.DSV = Backend->Device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
     Backend->DescriptorSizes.CBV_SRV_UAV = Backend->Device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
-    // Offline texture heap
-    {
-        D3D12_DESCRIPTOR_HEAP_DESC Desc = {};
-        Desc.NumDescriptors = 1024; // TODO: Some sufficient number
-        Desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-        Desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE; // Invisible to shaders
-        Desc.NodeMask = 0;
-        DxAssert(Backend->Device->CreateDescriptorHeap(&Desc, IID_PPV_ARGS(&Backend->OfflineTextureHeap)));
-    }
-
     // Create Render Target Views
     {
         // Create a Descriptor Heap
@@ -231,6 +221,16 @@ internal void dx12_render_backend_initialize_pipeline(arena* Arena, dx12_render_
     auto Device = Backend->Device;
     Backend->MainPass.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
     //Backend->MainPass.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+
+    // Offline texture heap
+    {
+        D3D12_DESCRIPTOR_HEAP_DESC Desc = {};
+        Desc.NumDescriptors = 1024; // TODO: Some sufficient number
+        Desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+        Desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE; // Invisible to shaders
+        Desc.NodeMask = 0;
+        DxAssert(Backend->Device->CreateDescriptorHeap(&Desc, IID_PPV_ARGS(&Backend->OfflineTextureHeap)));
+    }
 
     // Main pass
     {
@@ -1086,7 +1086,7 @@ internal void d3d12_render_backend_render(dx12_render_backend* Backend, const ga
     CommandList->OMSetRenderTargets(1, &SwapChainRTV, false, nullptr);
 
     bool DisplayImage = true;
-    if(DisplayImage)
+    if (DisplayImage)
     {
         DX12CmdSetViewport(CommandList, 0, 0, (FLOAT)SwapChainDesc.BufferDesc.Width, (FLOAT)SwapChainDesc.BufferDesc.Height);
         DX12CmdSetScissorRect(CommandList, 0, 0, SwapChainDesc.BufferDesc.Width, SwapChainDesc.BufferDesc.Height);
@@ -1147,53 +1147,86 @@ internal void d3d12_render_backend_resize_swapchain(dx12_render_backend* Backend
     }
 
     DXGI_SWAP_CHAIN_DESC SwapChainDesc;
-    DxAssert(Backend->SwapChain->GetDesc(&SwapChainDesc));
-    DxAssert(Backend->SwapChain->ResizeBuffers(FIF, RequestWidth, RequestHeight, SwapChainDesc.BufferDesc.Format, SwapChainDesc.Flags));
-    DxAssert(Backend->SwapChain->GetDesc(&SwapChainDesc));
 
-    Backend->CurrentBackBufferIndex = Backend->SwapChain->GetCurrentBackBufferIndex();
-
-    // Place rtv descriptor sequentially in memory
+    // Resize swapchain render buffer
     {
-        D3D12_CPU_DESCRIPTOR_HANDLE RtvHandle = Backend->RTVDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
-        for (u32 i = 0; i < FIF; ++i)
-        {
-            DxAssert(Backend->SwapChain->GetBuffer(i, IID_PPV_ARGS(&Backend->SwapChainBackbuffers[i])));
-            Backend->Device->CreateRenderTargetView(Backend->SwapChainBackbuffers[i], nullptr, RtvHandle);
+        DxAssert(Backend->SwapChain->GetDesc(&SwapChainDesc));
+        DxAssert(Backend->SwapChain->ResizeBuffers(FIF, RequestWidth, RequestHeight, SwapChainDesc.BufferDesc.Format, SwapChainDesc.Flags));
+        DxAssert(Backend->SwapChain->GetDesc(&SwapChainDesc));
 
-            Backend->SwapChainBufferRTVHandles[i] = RtvHandle;
-            RtvHandle.ptr += Backend->DescriptorSizes.RTV;
+        Backend->CurrentBackBufferIndex = Backend->SwapChain->GetCurrentBackBufferIndex();
+
+        // Place rtv descriptor sequentially in memory
+        {
+            D3D12_CPU_DESCRIPTOR_HANDLE RtvHandle = Backend->RTVDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
+            for (u32 i = 0; i < FIF; ++i)
+            {
+                DxAssert(Backend->SwapChain->GetBuffer(i, IID_PPV_ARGS(&Backend->SwapChainBackbuffers[i])));
+                Backend->Device->CreateRenderTargetView(Backend->SwapChainBackbuffers[i], nullptr, RtvHandle);
+
+                Backend->SwapChainBufferRTVHandles[i] = RtvHandle;
+                RtvHandle.ptr += Backend->DescriptorSizes.RTV;
+            }
         }
     }
 
-    // Recreate depth buffers
+    // MainPass - Resize render buffers and recreate RTV and DSV views
     {
-        D3D12_CPU_DESCRIPTOR_HANDLE DsvHandle = Backend->MainPass.DSVDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
-        const DXGI_FORMAT Format = DXGI_FORMAT_D32_FLOAT;
+        //D3D12_RENDER_TARGET_VIEW_DESC RtvDesc = {};
 
-        // Create depth buffers
+        D3D12_SHADER_RESOURCE_VIEW_DESC SrvDesc = {};
+        SrvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+        SrvDesc.Format = Backend->MainPass.Format;
+        SrvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+        SrvDesc.Texture2D.MipLevels = 1;
+        SrvDesc.Texture2D.MostDetailedMip = 0;
+        SrvDesc.Texture2D.PlaneSlice = 0;
+        SrvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
+
+        D3D12_DEPTH_STENCIL_VIEW_DESC DsvDesc = {};
+        DsvDesc.Format = DXGI_FORMAT_D32_FLOAT;
+        DsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
+        DsvDesc.Texture2D.MipSlice = 0;
+        DsvDesc.Flags = D3D12_DSV_FLAG_NONE;
+
+        auto RtvHandle = Backend->MainPass.RTVDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
+        auto SrvHandle = Backend->MainPass.SRVDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
+        auto DsvHandle = Backend->MainPass.DSVDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
+
         for (u32 i = 0; i < FIF; i++)
         {
-            // Release the old one
-            Backend->MainPass.DepthBuffers[i]->Release();
-            Backend->MainPass.DepthBuffers[i] = dx12_depth_buffer_create(Backend->Device, RequestWidth, RequestHeight, Format, Format, L"MainPassDepthBuffer");
+            // Render buffers
+            {
+                Backend->MainPass.RenderBuffers[i]->Release();
+                Backend->MainPass.RenderBuffers[i] = dx12_render_target_create(Backend->Device, SrvDesc.Format, SwapChainDesc.BufferDesc.Width, SwapChainDesc.BufferDesc.Height, L"MainPassBuffer");
 
-            // Update the depth-stencil view.
-            D3D12_DEPTH_STENCIL_VIEW_DESC dsv = {};
-            dsv.Format = DXGI_FORMAT_D32_FLOAT;
-            dsv.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
-            dsv.Texture2D.MipSlice = 0;
-            dsv.Flags = D3D12_DSV_FLAG_NONE;
+                // Render Target View
+                Backend->Device->CreateRenderTargetView(Backend->MainPass.RenderBuffers[i], nullptr, RtvHandle);
 
-            Backend->Device->CreateDepthStencilView(Backend->MainPass.DepthBuffers[i], &dsv, DsvHandle);
+                // Shader Resouces View
+                Backend->Device->CreateShaderResourceView(Backend->MainPass.RenderBuffers[i], &SrvDesc, SrvHandle);
+                SrvHandle.ptr += Backend->DescriptorSizes.CBV_SRV_UAV;
 
-            // Increment by the size of the dsv descriptor size
-            Backend->MainPass.DSVHandles[i] = DsvHandle;
-            DsvHandle.ptr += Backend->DescriptorSizes.DSV;
+                Backend->MainPass.RTVHandles[i] = RtvHandle;
+                RtvHandle.ptr += Backend->DescriptorSizes.RTV;
+            }
+
+            // Depth buffers
+            {
+                Backend->MainPass.DepthBuffers[i]->Release();
+                Backend->MainPass.DepthBuffers[i] = dx12_depth_buffer_create(Backend->Device, SwapChainDesc.BufferDesc.Width, SwapChainDesc.BufferDesc.Height, DsvDesc.Format, DsvDesc.Format, L"MainPassDepthBuffer");
+
+                Backend->Device->CreateDepthStencilView(Backend->MainPass.DepthBuffers[i], &DsvDesc, DsvHandle);
+
+                // Increment by the size of the dsv descriptor size
+                Backend->MainPass.DSVHandles[i] = DsvHandle;
+                DsvHandle.ptr += Backend->DescriptorSizes.DSV;
+            }
         }
     }
 
-    Warn("SwapChain resized to %d %d", RequestWidth, RequestHeight);
+    Warn("SwapChain resized to %d %d", SwapChainDesc.BufferDesc.Width, SwapChainDesc.BufferDesc.Height);
+    Assert(RequestWidth == SwapChainDesc.BufferDesc.Width && RequestHeight == SwapChainDesc.BufferDesc.Height, "Requested size is not equal actual swapchain size!");
 }
 
 internal u64 dx12_render_backend_signal(ID3D12CommandQueue* CommandQueue, ID3D12Fence* Fence, u64* FenceValue)
