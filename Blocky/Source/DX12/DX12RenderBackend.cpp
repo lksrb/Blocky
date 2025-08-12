@@ -130,20 +130,20 @@ internal void dx12_render_backend_destroy(dx12_render_backend* Backend)
         Backend->SwapChainBackbuffers[i]->Release();
 
         // Quad
-        DX12VertexBufferDestroy(&Backend->Quad.VertexBuffers[i]);
+        dx12_vertex_buffer_destroy(&Backend->Quad.VertexBuffers[i]);
 
         // Cuboid
-        DX12VertexBufferDestroy(&Backend->Cuboid.TransformVertexBuffers[i]);
-        DX12VertexBufferDestroy(&Backend->QuadedCuboid.VertexBuffers[i]);
+        dx12_vertex_buffer_destroy(&Backend->Cuboid.TransformVertexBuffers[i]);
+        dx12_vertex_buffer_destroy(&Backend->QuadedCuboid.VertexBuffers[i]);
 
         // Distant Quad
-        DX12VertexBufferDestroy(&Backend->DistantQuad.VertexBuffers[i]);
+        dx12_vertex_buffer_destroy(&Backend->DistantQuad.VertexBuffers[i]);
 
         // Light buffers
-        DX12ConstantBufferDestroy(&Backend->LightEnvironmentConstantBuffers[i]);
+        dx12_constant_buffer_destroy(&Backend->LightEnvironmentConstantBuffers[i]);
 
         // HUD
-        DX12VertexBufferDestroy(&Backend->HUD.VertexBuffers[i]);
+        dx12_vertex_buffer_destroy(&Backend->HUD.VertexBuffers[i]);
 
         // Shadows
 #if ENABLE_SHADOW_PASS
@@ -152,39 +152,40 @@ internal void dx12_render_backend_destroy(dx12_render_backend* Backend)
     }
 
     // Quad
-    DX12PipelineDestroy(&Backend->Quad.Pipeline);
-    DX12IndexBufferDestroy(&Backend->Quad.IndexBuffer);
+    dx12_pipeline_destroy(&Backend->Quad.Pipeline);
+    dx12_index_buffer_destroy(&Backend->Quad.IndexBuffer);
 
     // Cuboid
-    DX12PipelineDestroy(&Backend->Cuboid.Pipeline);
-    DX12VertexBufferDestroy(&Backend->Cuboid.PositionsVertexBuffer);
-    Backend->Cuboid.RootSignature->Release();
+    dx12_pipeline_destroy(&Backend->Cuboid.Pipeline);
+    dx12_vertex_buffer_destroy(&Backend->Cuboid.PositionsVertexBuffer);
+
+    dx12_root_signature_destroy(&Backend->Cuboid.RootSignature);
 
     // Quaded cuboid
-    DX12PipelineDestroy(&Backend->QuadedCuboid.Pipeline);
+    dx12_pipeline_destroy(&Backend->QuadedCuboid.Pipeline);
 
     // Skybox
-    DX12VertexBufferDestroy(&Backend->Skybox.VertexBuffer);
-    DX12IndexBufferDestroy(&Backend->Skybox.IndexBuffer);
-    DX12PipelineDestroy(&Backend->Skybox.Pipeline);
-    Backend->Skybox.RootSignature->Release();
+    dx12_vertex_buffer_destroy(&Backend->Skybox.VertexBuffer);
+    dx12_index_buffer_destroy(&Backend->Skybox.IndexBuffer);
+    dx12_pipeline_destroy(&Backend->Skybox.Pipeline);
+    dx12_root_signature_destroy(&Backend->Skybox.RootSignature);
 
     // Distant Quad
-    DX12PipelineDestroy(&Backend->DistantQuad.Pipeline);
+    dx12_pipeline_destroy(&Backend->DistantQuad.Pipeline);
 
     // Fullscreen Pass
-    DX12PipelineDestroy(&Backend->FullscreenPass.Pipeline);
-    Backend->FullscreenPass.RootSignature->Release();
+    dx12_pipeline_destroy(&Backend->FullscreenPass.Pipeline);
+    dx12_root_signature_destroy(&Backend->FullscreenPass.RootSignature);
 
     // Shadows
 #if ENABLE_SHADOW_PASS
-    DX12PipelineDestroy(&Backend->ShadowPass.Pipeline);
-    Backend->ShadowPass.RootSignature->Release();
+    dx12_pipeline_destroy(&Backend->ShadowPass.Pipeline);
+    dx12_root_signature_destroy(&Backend->ShadowPass.RootSignature);
     Backend->ShadowPass.DSVDescriptorHeap->Release();
 #endif
 
     // HUD
-    DX12PipelineDestroy(&Backend->HUD.Pipeline);
+    dx12_pipeline_destroy(&Backend->HUD.Pipeline);
 
     // Main pass
     texture_destroy(Backend, &Backend->WhiteTexture);
@@ -194,7 +195,7 @@ internal void dx12_render_backend_destroy(dx12_render_backend* Backend)
 
     Backend->TextureDescriptorHeap->Release();
 
-    Backend->RootSignature->Release();
+    dx12_root_signature_destroy(&Backend->RootSignature);
 
     Backend->OfflineTextureHeap->Release();
 
@@ -377,11 +378,7 @@ internal void dx12_render_backend_initialize_pipeline(arena* Arena, dx12_render_
         Desc.pStaticSamplers = Samplers;
         Desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
 
-        // Root signature
-        ID3DBlob* Error;
-        ID3DBlob* Signature;
-        DxAssert(D3D12SerializeRootSignature(&Desc, D3D_ROOT_SIGNATURE_VERSION_1, &Signature, &Error));
-        DxAssert(Device->CreateRootSignature(0, Signature->GetBufferPointer(), Signature->GetBufferSize(), IID_PPV_ARGS(&Backend->RootSignature)));
+        Backend->RootSignature = dx12_root_signature_create(Device, Desc);
     }
 
     // Quad Pipeline
@@ -395,11 +392,11 @@ internal void dx12_render_backend_initialize_pipeline(arena* Arena, dx12_render_
             { "TEXINDEX", 0, DXGI_FORMAT_R32_UINT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
         };
 
-        Backend->Quad.Pipeline = DX12GraphicsPipelineCreate(Device, Backend->RootSignature, InputElementDescs, CountOf(InputElementDescs), L"Resources/Quad.hlsl", Backend->MainPass.Format, D3D12_CULL_MODE_NONE);
+        Backend->Quad.Pipeline = dx12_graphics_pipeline_create(Device, Backend->RootSignature, InputElementDescs, CountOf(InputElementDescs), L"Resources/Quad.hlsl", Backend->MainPass.Format, D3D12_CULL_MODE_NONE);
 
         for (u32 i = 0; i < FIF; i++)
         {
-            Backend->Quad.VertexBuffers[i] = DX12VertexBufferCreate(Device, sizeof(quad_vertex) * c_MaxQuadVertices);
+            Backend->Quad.VertexBuffers[i] = dx12_vertex_buffer_create(Device, sizeof(quad_vertex) * c_MaxQuadVertices);
         }
 
         // Quad Index buffer
@@ -419,7 +416,7 @@ internal void dx12_render_backend_initialize_pipeline(arena* Arena, dx12_render_
 
                 Offset += 4;
             }
-            Backend->Quad.IndexBuffer = DX12IndexBufferCreate(Device, Backend->DirectCommandAllocators[0], Backend->DirectCommandList, Backend->DirectCommandQueue, QuadIndices, MaxQuadIndexCount);
+            Backend->Quad.IndexBuffer = dx12_index_buffer_create(Device, Backend->DirectCommandAllocators[0], Backend->DirectCommandList, Backend->DirectCommandQueue, QuadIndices, MaxQuadIndexCount);
         }
     }
 
@@ -504,11 +501,9 @@ internal void dx12_render_backend_initialize_pipeline(arena* Arena, dx12_render_
             Desc.pStaticSamplers = Samplers;
             Desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
 
-            // Root signature
-            ID3DBlob* Error;
-            ID3DBlob* Signature;
-            DxAssert(D3D12SerializeRootSignature(&Desc, D3D_ROOT_SIGNATURE_VERSION_1, &Signature, &Error));
-            DxAssert(Device->CreateRootSignature(0, Signature->GetBufferPointer(), Signature->GetBufferSize(), IID_PPV_ARGS(&Cuboid.RootSignature)));
+            Cuboid.RootSignature = dx12_root_signature_create(Device, Desc);
+
+            //dx12_root_signature CuboidRootSignature = dx12_root_signature_create(Device, Desc);
         }
 
         // Define the vertex input layout.
@@ -528,18 +523,18 @@ internal void dx12_render_backend_initialize_pipeline(arena* Arena, dx12_render_
             { "TEXINDEX", 0, DXGI_FORMAT_R32_UINT, 1, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
         };
 
-        Cuboid.Pipeline = DX12GraphicsPipelineCreate(Device, Backend->Cuboid.RootSignature, InputElementDescs, CountOf(InputElementDescs), L"Resources/Cuboid.hlsl", Backend->MainPass.Format, D3D12_CULL_MODE_BACK);
+        Cuboid.Pipeline = dx12_graphics_pipeline_create(Device, Backend->Cuboid.RootSignature, InputElementDescs, CountOf(InputElementDescs), L"Resources/Cuboid.hlsl", Backend->MainPass.Format, D3D12_CULL_MODE_BACK);
 
-        Cuboid.PositionsVertexBuffer = DX12VertexBufferCreate(Device, sizeof(c_CuboidVertices));
+        Cuboid.PositionsVertexBuffer = dx12_vertex_buffer_create(Device, sizeof(c_CuboidVertices));
 
-        DX12SubmitToQueueImmidiate(Device, Backend->DirectCommandAllocators[0], Backend->DirectCommandList, Backend->DirectCommandQueue, [Backend, &Cuboid](ID3D12GraphicsCommandList* CommandList)
+        dx12_submit_to_queue_immidiately(Device, Backend->DirectCommandAllocators[0], Backend->DirectCommandList, Backend->DirectCommandQueue, [Backend, &Cuboid](ID3D12GraphicsCommandList* CommandList)
         {
-            DX12VertexBufferSendData(&Cuboid.PositionsVertexBuffer, CommandList, c_CuboidVertices, sizeof(c_CuboidVertices));
+            dx12_vertex_buffer_set_data(&Cuboid.PositionsVertexBuffer, CommandList, c_CuboidVertices, sizeof(c_CuboidVertices));
         });
 
         for (u32 i = 0; i < FIF; i++)
         {
-            Cuboid.TransformVertexBuffers[i] = DX12VertexBufferCreate(Device, sizeof(cuboid_transform_vertex_data) * c_MaxCubePerBatch);
+            Cuboid.TransformVertexBuffers[i] = dx12_vertex_buffer_create(Device, sizeof(cuboid_transform_vertex_data) * c_MaxCubePerBatch);
         }
     }
 
@@ -555,11 +550,11 @@ internal void dx12_render_backend_initialize_pipeline(arena* Arena, dx12_render_
             { "TEXINDEX", 0, DXGI_FORMAT_R32_UINT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
         };
 
-        Backend->QuadedCuboid.Pipeline = DX12GraphicsPipelineCreate(Device, Backend->RootSignature, InputElementDescs, CountOf(InputElementDescs), L"Resources/QuadedCuboid.hlsl", Backend->MainPass.Format);
+        Backend->QuadedCuboid.Pipeline = dx12_graphics_pipeline_create(Device, Backend->RootSignature, InputElementDescs, CountOf(InputElementDescs), L"Resources/QuadedCuboid.hlsl", Backend->MainPass.Format);
 
         for (u32 i = 0; i < FIF; i++)
         {
-            Backend->QuadedCuboid.VertexBuffers[i] = DX12VertexBufferCreate(Device, sizeof(quaded_cuboid_vertex) * c_MaxQuadedCuboidVertices);
+            Backend->QuadedCuboid.VertexBuffers[i] = dx12_vertex_buffer_create(Device, sizeof(quaded_cuboid_vertex) * c_MaxQuadedCuboidVertices);
         }
     }
 
@@ -574,11 +569,11 @@ internal void dx12_render_backend_initialize_pipeline(arena* Arena, dx12_render_
             { "TEXINDEX", 0, DXGI_FORMAT_R32_UINT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
         };
 
-        Backend->HUD.Pipeline = DX12GraphicsPipelineCreate(Device, Backend->RootSignature, InputElementDescs, CountOf(InputElementDescs), L"Resources/HUD.hlsl", Backend->MainPass.Format);
+        Backend->HUD.Pipeline = dx12_graphics_pipeline_create(Device, Backend->RootSignature, InputElementDescs, CountOf(InputElementDescs), L"Resources/HUD.hlsl", Backend->MainPass.Format);
 
         for (u32 i = 0; i < FIF; i++)
         {
-            Backend->HUD.VertexBuffers[i] = DX12VertexBufferCreate(Device, sizeof(hud_quad_vertex) * c_MaxHUDQuadVertices);
+            Backend->HUD.VertexBuffers[i] = dx12_vertex_buffer_create(Device, sizeof(hud_quad_vertex) * c_MaxHUDQuadVertices);
         }
     }
 
@@ -600,11 +595,7 @@ internal void dx12_render_backend_initialize_pipeline(arena* Arena, dx12_render_
             Desc.pStaticSamplers = nullptr;
             Desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
 
-            // Root signature
-            ID3DBlob* Error;
-            ID3DBlob* Signature;
-            DxAssert(D3D12SerializeRootSignature(&Desc, D3D_ROOT_SIGNATURE_VERSION_1, &Signature, &Error));
-            DxAssert(Device->CreateRootSignature(0, Signature->GetBufferPointer(), Signature->GetBufferSize(), IID_PPV_ARGS(&Backend->Skybox.RootSignature)));
+            Backend->Skybox.RootSignature = dx12_root_signature_create(Device, Desc);
         }
 
         D3D12_INPUT_ELEMENT_DESC InputElementDescs[] =
@@ -612,14 +603,14 @@ internal void dx12_render_backend_initialize_pipeline(arena* Arena, dx12_render_
             { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
         };
 
-        Backend->Skybox.Pipeline = DX12GraphicsPipelineCreate(Device, Backend->Skybox.RootSignature, InputElementDescs, CountOf(InputElementDescs), L"Resources/Skybox.hlsl", Backend->MainPass.Format, D3D12_CULL_MODE_BACK, false);
-        Backend->Skybox.VertexBuffer = DX12VertexBufferCreate(Device, sizeof(c_SkyboxVertices));
+        Backend->Skybox.Pipeline = dx12_graphics_pipeline_create(Device, Backend->Skybox.RootSignature, InputElementDescs, CountOf(InputElementDescs), L"Resources/Skybox.hlsl", Backend->MainPass.Format, D3D12_CULL_MODE_BACK, false);
+        Backend->Skybox.VertexBuffer = dx12_vertex_buffer_create(Device, sizeof(c_SkyboxVertices));
 
-        DX12SubmitToQueueImmidiate(Device, Backend->DirectCommandAllocators[0], Backend->DirectCommandList, Backend->DirectCommandQueue, [Backend](ID3D12GraphicsCommandList* CommandList)
+        dx12_submit_to_queue_immidiately(Device, Backend->DirectCommandAllocators[0], Backend->DirectCommandList, Backend->DirectCommandQueue, [Backend](ID3D12GraphicsCommandList* CommandList)
         {
-            DX12VertexBufferSendData(&Backend->Skybox.VertexBuffer, CommandList, c_SkyboxVertices, sizeof(c_SkyboxVertices));
+            dx12_vertex_buffer_set_data(&Backend->Skybox.VertexBuffer, CommandList, c_SkyboxVertices, sizeof(c_SkyboxVertices));
         });
-        Backend->Skybox.IndexBuffer = DX12IndexBufferCreate(Device, Backend->DirectCommandAllocators[0], Backend->DirectCommandList, Backend->DirectCommandQueue, c_SkyboxIndices, CountOf(c_SkyboxIndices));
+        Backend->Skybox.IndexBuffer = dx12_index_buffer_create(Device, Backend->DirectCommandAllocators[0], Backend->DirectCommandList, Backend->DirectCommandQueue, c_SkyboxIndices, CountOf(c_SkyboxIndices));
     }
 
     // Distant quads
@@ -630,11 +621,11 @@ internal void dx12_render_backend_initialize_pipeline(arena* Arena, dx12_render_
             { "POSITION", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
         };
 
-        Backend->DistantQuad.Pipeline = DX12GraphicsPipelineCreate(Device, Backend->Skybox.RootSignature, InputElementDescs, CountOf(InputElementDescs), L"Resources/DistantQuad.hlsl", Backend->MainPass.Format, D3D12_CULL_MODE_NONE, false);
+        Backend->DistantQuad.Pipeline = dx12_graphics_pipeline_create(Device, Backend->Skybox.RootSignature, InputElementDescs, CountOf(InputElementDescs), L"Resources/DistantQuad.hlsl", Backend->MainPass.Format, D3D12_CULL_MODE_NONE, false);
 
         for (u32 i = 0; i < FIF; i++)
         {
-            Backend->DistantQuad.VertexBuffers[i] = DX12VertexBufferCreate(Device, sizeof(distant_quad_vertex) * c_MaxHUDQuadVertices);
+            Backend->DistantQuad.VertexBuffers[i] = dx12_vertex_buffer_create(Device, sizeof(distant_quad_vertex) * c_MaxHUDQuadVertices);
         }
     }
 
@@ -681,7 +672,7 @@ internal void dx12_render_backend_initialize_pipeline(arena* Arena, dx12_render_
     // Create light environment constant buffer for each frame
     for (u32 i = 0; i < FIF; i++)
     {
-        Backend->LightEnvironmentConstantBuffers[i] = DX12ConstantBufferCreate(Device, sizeof(light_environment));
+        Backend->LightEnvironmentConstantBuffers[i] = dx12_constant_buffer_create(Device, sizeof(light_environment));
     }
 
     // Shadow Pass
@@ -720,13 +711,9 @@ internal void dx12_render_backend_initialize_pipeline(arena* Arena, dx12_render_
             Desc.pStaticSamplers = nullptr;
             Desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
 
-            // Root signature
-            ID3DBlob* Error;
-            ID3DBlob* Signature;
-            DxAssert(D3D12SerializeRootSignature(&Desc, D3D_ROOT_SIGNATURE_VERSION_1, &Signature, &Error));
-            DxAssert(Device->CreateRootSignature(0, Signature->GetBufferPointer(), Signature->GetBufferSize(), IID_PPV_ARGS(&Backend->ShadowPass.RootSignature)));
+            Backend->ShadowPass.RootSignature = dx12_root_signature_create(Device, Desc);
         }
-        Backend->ShadowPass.Pipeline = DX12GraphicsPipelineCreate(Device, Backend->ShadowPass.RootSignature, InputElementDescs, CountOf(InputElementDescs), L"Resources/Shadow.hlsl", Backend->MainPass.Format, D3D12_CULL_MODE_FRONT, true, 0);
+        Backend->ShadowPass.Pipeline = dx12_graphics_pipeline_create(Device, Backend->ShadowPass.RootSignature, InputElementDescs, CountOf(InputElementDescs), L"Resources/Shadow.hlsl", Backend->MainPass.Format, D3D12_CULL_MODE_FRONT, true, 0);
 
         // Create resources
         // Create resources
@@ -823,15 +810,11 @@ internal void dx12_render_backend_initialize_pipeline(arena* Arena, dx12_render_
             Desc.pParameters = Parameters;
             Desc.NumStaticSamplers = CountOf(Samplers);
             Desc.pStaticSamplers = Samplers;
-            Desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
+            //Desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
 
-            // Root signature
-            ID3DBlob* Error;
-            ID3DBlob* Signature;
-            DxAssert(D3D12SerializeRootSignature(&Desc, D3D_ROOT_SIGNATURE_VERSION_1, &Signature, &Error));
-            DxAssert(Device->CreateRootSignature(0, Signature->GetBufferPointer(), Signature->GetBufferSize(), IID_PPV_ARGS(&Backend->FullscreenPass.RootSignature)));
+            Backend->FullscreenPass.RootSignature = dx12_root_signature_create(Device, Desc);
         }
-        Backend->FullscreenPass.Pipeline = DX12GraphicsPipelineCreate(Device, Backend->FullscreenPass.RootSignature, nullptr, 0, L"Resources/Fullscreen.hlsl", Backend->SwapChainFormat, D3D12_CULL_MODE_FRONT, false, 1);
+        Backend->FullscreenPass.Pipeline = dx12_graphics_pipeline_create(Device, Backend->FullscreenPass.RootSignature, nullptr, 0, L"Resources/Fullscreen.hlsl", Backend->SwapChainFormat, D3D12_CULL_MODE_FRONT, false, 1);
     }
 }
 
@@ -875,25 +858,25 @@ internal void d3d12_render_backend_render(dx12_render_backend* Backend, const ga
 
     // Set light environment data
     {
-        DX12ConstantBufferSetData(&Backend->LightEnvironmentConstantBuffers[CurrentBackBufferIndex], &Renderer->LightEnvironment, sizeof(light_environment));
+        dx12_constant_buffer_set_data(&Backend->LightEnvironmentConstantBuffers[CurrentBackBufferIndex], &Renderer->LightEnvironment, sizeof(light_environment));
     }
 
     // Copy vertex data to gpu buffer
     {
         // Quads - general purpose
-        DX12VertexBufferSendData(&Backend->Quad.VertexBuffers[CurrentBackBufferIndex], Backend->DirectCommandList, Renderer->Quad.VertexDataBase, sizeof(quad_vertex) * Renderer->Quad.IndexCount);
+        dx12_vertex_buffer_set_data(&Backend->Quad.VertexBuffers[CurrentBackBufferIndex], Backend->DirectCommandList, Renderer->Quad.VertexDataBase, sizeof(quad_vertex) * Renderer->Quad.IndexCount);
 
         // Cuboid made out of quads - alive entities
-        DX12VertexBufferSendData(&Backend->QuadedCuboid.VertexBuffers[CurrentBackBufferIndex], Backend->DirectCommandList, Renderer->QuadedCuboid.VertexDataBase, sizeof(quaded_cuboid_vertex) * Renderer->QuadedCuboid.IndexCount);
+        dx12_vertex_buffer_set_data(&Backend->QuadedCuboid.VertexBuffers[CurrentBackBufferIndex], Backend->DirectCommandList, Renderer->QuadedCuboid.VertexDataBase, sizeof(quaded_cuboid_vertex) * Renderer->QuadedCuboid.IndexCount);
 
         // Cuboid - used for blocks
-        DX12VertexBufferSendData(&Backend->Cuboid.TransformVertexBuffers[CurrentBackBufferIndex], Backend->DirectCommandList, Renderer->Cuboid.InstanceData, Renderer->Cuboid.InstanceCount * sizeof(cuboid_transform_vertex_data));
+        dx12_vertex_buffer_set_data(&Backend->Cuboid.TransformVertexBuffers[CurrentBackBufferIndex], Backend->DirectCommandList, Renderer->Cuboid.InstanceData, Renderer->Cuboid.InstanceCount * sizeof(cuboid_transform_vertex_data));
 
         // Distant quads - sun, moon, starts, etc
-        DX12VertexBufferSendData(&Backend->DistantQuad.VertexBuffers[CurrentBackBufferIndex], Backend->DirectCommandList, Renderer->DistantQuad.VertexDataBase, Renderer->DistantQuad.IndexCount * sizeof(distant_quad_vertex));
+        dx12_vertex_buffer_set_data(&Backend->DistantQuad.VertexBuffers[CurrentBackBufferIndex], Backend->DirectCommandList, Renderer->DistantQuad.VertexDataBase, Renderer->DistantQuad.IndexCount * sizeof(distant_quad_vertex));
 
         // HUD
-        DX12VertexBufferSendData(&Backend->HUD.VertexBuffers[CurrentBackBufferIndex], Backend->DirectCommandList, Renderer->HUD.VertexDataBase, sizeof(hud_quad_vertex) * Renderer->HUD.IndexCount);
+        dx12_vertex_buffer_set_data(&Backend->HUD.VertexBuffers[CurrentBackBufferIndex], Backend->DirectCommandList, Renderer->HUD.VertexDataBase, sizeof(hud_quad_vertex) * Renderer->HUD.IndexCount);
     }
 
     // MAIN PASS
@@ -912,9 +895,9 @@ internal void d3d12_render_backend_render(dx12_render_backend* Backend, const ga
         auto ShadowMap = ShadowPass.ShadowMaps[CurrentBackBufferIndex];
 
         // From resource to depth write
-        DX12CmdTransition(CommandList, ShadowMap, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_DEPTH_WRITE);
-        DX12CmdSetViewport(CommandList, 0, 0, SHADOW_MAP_SIZE, SHADOW_MAP_SIZE);
-        DX12CmdSetScissorRect(CommandList, 0, 0, SHADOW_MAP_SIZE, SHADOW_MAP_SIZE);
+        dx12_cmd_transition(CommandList, ShadowMap, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_DEPTH_WRITE);
+        dx12_cmd_set_viewport(CommandList, 0, 0, SHADOW_MAP_SIZE, SHADOW_MAP_SIZE);
+        dx12_cmd_set_scrissor_rect(CommandList, 0, 0, SHADOW_MAP_SIZE, SHADOW_MAP_SIZE);
 
         auto ShadowPassDSV = ShadowPass.DSVHandles[CurrentBackBufferIndex];
         CommandList->ClearDepthStencilView(ShadowPassDSV, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
@@ -924,7 +907,7 @@ internal void d3d12_render_backend_render(dx12_render_backend* Backend, const ga
         // Render instanced cuboids
         if (Renderer->Cuboid.InstanceCount > 0)
         {
-            CommandList->SetGraphicsRootSignature(ShadowPass.RootSignature);
+            CommandList->SetGraphicsRootSignature(ShadowPass.RootSignature.Handle);
             CommandList->SetPipelineState(ShadowPass.Pipeline.Handle);
 
             CommandList->SetGraphicsRoot32BitConstants(0, sizeof(Renderer->RenderData.ShadowPassBuffer) / 4, &Renderer->RenderData.ShadowPassBuffer, 0);
@@ -940,7 +923,7 @@ internal void d3d12_render_backend_render(dx12_render_backend* Backend, const ga
         }
 
         // From depth write to resource
-        DX12CmdTransition(CommandList, ShadowMap, D3D12_RESOURCE_STATE_DEPTH_WRITE, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+        dx12_cmd_transition(CommandList, ShadowMap, D3D12_RESOURCE_STATE_DEPTH_WRITE, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
     }
 #endif
 
@@ -951,14 +934,14 @@ internal void d3d12_render_backend_render(dx12_render_backend* Backend, const ga
     // Render rest of the scene
 
     // Frame that was presented needs to be set to render target again
-    DX12CmdTransition(CommandList, MainPassRenderBuffer, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
+    dx12_cmd_transition(CommandList, MainPassRenderBuffer, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
 
     CommandList->ClearRenderTargetView(MainPassRTV, &ClearColor.x, 0, nullptr);
     CommandList->ClearDepthStencilView(MainPassDSV, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
     CommandList->OMSetRenderTargets(1, &MainPassRTV, false, &MainPassDSV);
 
-    DX12CmdSetViewport(CommandList, 0, 0, (FLOAT)SwapChainDesc.BufferDesc.Width, (FLOAT)SwapChainDesc.BufferDesc.Height);
-    DX12CmdSetScissorRect(CommandList, 0, 0, SwapChainDesc.BufferDesc.Width, SwapChainDesc.BufferDesc.Height);
+    dx12_cmd_set_viewport(CommandList, 0, 0, (FLOAT)SwapChainDesc.BufferDesc.Width, (FLOAT)SwapChainDesc.BufferDesc.Height);
+    dx12_cmd_set_scrissor_rect(CommandList, 0, 0, SwapChainDesc.BufferDesc.Width, SwapChainDesc.BufferDesc.Height);
 
     CommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
@@ -966,7 +949,7 @@ internal void d3d12_render_backend_render(dx12_render_backend* Backend, const ga
     if (false)
     {
         auto& Skybox = Backend->Skybox;
-        CommandList->SetGraphicsRootSignature(Skybox.RootSignature);
+        CommandList->SetGraphicsRootSignature(Skybox.RootSignature.Handle);
         CommandList->SetPipelineState(Skybox.Pipeline.Handle);
 
         CommandList->SetGraphicsRoot32BitConstants(0, sizeof(Renderer->RenderData.SkyboxBuffer) / 4, &Renderer->RenderData.SkyboxBuffer, 0);
@@ -985,7 +968,7 @@ internal void d3d12_render_backend_render(dx12_render_backend* Backend, const ga
     {
         // Set root constants
         // Number of 32 bit values - 16 floats in 4x4 matrix
-        CommandList->SetGraphicsRootSignature(Backend->Cuboid.RootSignature);
+        CommandList->SetGraphicsRootSignature(Backend->Cuboid.RootSignature.Handle);
 
         CommandList->SetDescriptorHeaps(1, (ID3D12DescriptorHeap* const*)&Backend->TextureDescriptorHeap);
 
@@ -1008,7 +991,7 @@ internal void d3d12_render_backend_render(dx12_render_backend* Backend, const ga
     // Render distant objects
     if (Renderer->DistantQuad.IndexCount > 0 && false)
     {
-        CommandList->SetGraphicsRootSignature(Backend->Skybox.RootSignature);
+        CommandList->SetGraphicsRootSignature(Backend->Skybox.RootSignature.Handle);
         CommandList->SetPipelineState(Backend->DistantQuad.Pipeline.Handle);
         CommandList->SetGraphicsRoot32BitConstants(0, sizeof(distant_quad_buffer_data) / 4, &Renderer->RenderData.DistantObjectBuffer, 0);
 
@@ -1021,7 +1004,7 @@ internal void d3d12_render_backend_render(dx12_render_backend* Backend, const ga
         CommandList->DrawIndexedInstanced(Renderer->DistantQuad.IndexCount, 1, 0, 0, 0);
     }
 
-    CommandList->SetGraphicsRootSignature(Backend->RootSignature);
+    CommandList->SetGraphicsRootSignature(Backend->RootSignature.Handle);
 
     // Render quaded cuboids
     if (Renderer->QuadedCuboid.IndexCount > 0 && true)
@@ -1076,23 +1059,23 @@ internal void d3d12_render_backend_render(dx12_render_backend* Backend, const ga
         CommandList->DrawIndexedInstanced(Renderer->HUD.IndexCount, 1, 0, 0, 0);
     }
 
-    DX12CmdTransition(CommandList, MainPassRenderBuffer, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+    dx12_cmd_transition(CommandList, MainPassRenderBuffer, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 
     //
     // Copy main pass render target to swapchain target and optionally apply some post-processing
     //
-    DX12CmdTransition(CommandList, SwapChainBackBuffer, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
+    dx12_cmd_transition(CommandList, SwapChainBackBuffer, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
     CommandList->ClearRenderTargetView(SwapChainRTV, &ClearColor.x, 0, nullptr);
     CommandList->OMSetRenderTargets(1, &SwapChainRTV, false, nullptr);
 
     bool DisplayImage = true;
     if (DisplayImage)
     {
-        DX12CmdSetViewport(CommandList, 0, 0, (FLOAT)SwapChainDesc.BufferDesc.Width, (FLOAT)SwapChainDesc.BufferDesc.Height);
-        DX12CmdSetScissorRect(CommandList, 0, 0, SwapChainDesc.BufferDesc.Width, SwapChainDesc.BufferDesc.Height);
+        dx12_cmd_set_viewport(CommandList, 0, 0, (FLOAT)SwapChainDesc.BufferDesc.Width, (FLOAT)SwapChainDesc.BufferDesc.Height);
+        dx12_cmd_set_scrissor_rect(CommandList, 0, 0, SwapChainDesc.BufferDesc.Width, SwapChainDesc.BufferDesc.Height);
 
         CommandList->SetPipelineState(Backend->FullscreenPass.Pipeline.Handle);
-        CommandList->SetGraphicsRootSignature(Backend->FullscreenPass.RootSignature);
+        CommandList->SetGraphicsRootSignature(Backend->FullscreenPass.RootSignature.Handle);
 
         ID3D12DescriptorHeap* Heaps[] = { Backend->MainPass.SRVDescriptorHeap };
         CommandList->SetDescriptorHeaps(1, Heaps);
@@ -1113,7 +1096,7 @@ internal void d3d12_render_backend_render(dx12_render_backend* Backend, const ga
     }
 
     // Rendered frame needs to be transitioned to present state
-    DX12CmdTransition(CommandList, SwapChainBackBuffer, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
+    dx12_cmd_transition(CommandList, SwapChainBackBuffer, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
 
     // Finalize the command list
     DxAssert(CommandList->Close());

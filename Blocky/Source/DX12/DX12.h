@@ -47,7 +47,7 @@ internal D3D12_RESOURCE_BARRIER DX12Transition(ID3D12Resource* Resource, D3D12_R
 };
 #endif
 
-internal D3D12_RESOURCE_BARRIER DX12CmdTransition(ID3D12GraphicsCommandList* CommandList, ID3D12Resource* Resource, D3D12_RESOURCE_STATES StateBefore, D3D12_RESOURCE_STATES StateAfter, UINT Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_BARRIER_FLAGS Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE)
+internal D3D12_RESOURCE_BARRIER dx12_cmd_transition(ID3D12GraphicsCommandList* CommandList, ID3D12Resource* Resource, D3D12_RESOURCE_STATES StateBefore, D3D12_RESOURCE_STATES StateAfter, UINT Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_BARRIER_FLAGS Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE)
 {
     D3D12_RESOURCE_BARRIER Result;
     Result.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
@@ -61,7 +61,7 @@ internal D3D12_RESOURCE_BARRIER DX12CmdTransition(ID3D12GraphicsCommandList* Com
     return Result;
 };
 
-internal void DX12CmdSetViewport(ID3D12GraphicsCommandList* CommandList, f32 TopLeftX, f32 TopLeftY, f32 Width, f32 Height, f32 MinDepth = D3D12_MIN_DEPTH, f32 MaxDepth = D3D12_MAX_DEPTH)
+internal void dx12_cmd_set_viewport(ID3D12GraphicsCommandList* CommandList, f32 TopLeftX, f32 TopLeftY, f32 Width, f32 Height, f32 MinDepth = D3D12_MIN_DEPTH, f32 MaxDepth = D3D12_MAX_DEPTH)
 {
     D3D12_VIEWPORT Viewport;
     Viewport.TopLeftX = TopLeftX;
@@ -73,7 +73,7 @@ internal void DX12CmdSetViewport(ID3D12GraphicsCommandList* CommandList, f32 Top
     CommandList->RSSetViewports(1, &Viewport);
 }
 
-internal void DX12CmdSetScissorRect(ID3D12GraphicsCommandList* CommandList, i32 Left, i32 Top, i32 Right, i32 Bottom)
+internal void dx12_cmd_set_scrissor_rect(ID3D12GraphicsCommandList* CommandList, i32 Left, i32 Top, i32 Right, i32 Bottom)
 {
     D3D12_RECT ScissorRect;
     ScissorRect.left = Left;
@@ -220,7 +220,7 @@ internal IDXGISwapChain4* dx12_create_swapchain(IDXGIFactory4* Factory, ID3D12Co
 // Blocking API for submitting stuff to GPU
 // NOTE: Inefficient
 template<typename F>
-internal void DX12SubmitToQueueImmidiate(ID3D12Device* Device, ID3D12CommandAllocator* CommandAllocator, ID3D12GraphicsCommandList* CommandList, ID3D12CommandQueue* CommandQueue, F&& Func)
+internal void dx12_submit_to_queue_immidiately(ID3D12Device* Device, ID3D12CommandAllocator* CommandAllocator, ID3D12GraphicsCommandList* CommandList, ID3D12CommandQueue* CommandQueue, F&& Func)
 {
     // Reset
     DxAssert(CommandAllocator->Reset());
@@ -362,4 +362,32 @@ internal void dx12_info_queue_dump(ID3D12InfoQueue* InfoQueue)
 
     // Clear the messages from the queue
     InfoQueue->ClearStoredMessages();
+}
+
+struct dx12_root_signature_description
+{
+};
+
+struct dx12_root_signature
+{
+    ID3D12RootSignature* Handle;
+};
+
+internal dx12_root_signature dx12_root_signature_create(ID3D12Device* Device, const D3D12_ROOT_SIGNATURE_DESC& Desc)
+{
+    dx12_root_signature Result = {};
+
+    // Root signature
+    ID3DBlob* Error;
+    ID3DBlob* Signature;
+    DxAssert(D3D12SerializeRootSignature(&Desc, D3D_ROOT_SIGNATURE_VERSION_1, &Signature, &Error));
+    DxAssert(Device->CreateRootSignature(0, Signature->GetBufferPointer(), Signature->GetBufferSize(), IID_PPV_ARGS(&Result.Handle)));
+
+    return Result;
+}
+
+internal void dx12_root_signature_destroy(dx12_root_signature* RootSignature)
+{
+    RootSignature->Handle->Release();
+    RootSignature->Handle = nullptr;
 }

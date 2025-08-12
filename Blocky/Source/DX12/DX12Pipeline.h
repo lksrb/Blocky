@@ -6,7 +6,7 @@ struct dx12_pipeline
 };
 
 // TODO: Make more generic 
-internal dx12_pipeline DX12GraphicsPipelineCreate(ID3D12Device* Device, ID3D12RootSignature* RootSignature, D3D12_INPUT_ELEMENT_DESC Inputs[], u32 InputsCount, const wchar_t* ShaderPath, DXGI_FORMAT RTVFormat, D3D12_CULL_MODE CullMode = D3D12_CULL_MODE_BACK, bool DepthTesting = true, u32 NumRenderTargets = 1)
+internal dx12_pipeline dx12_graphics_pipeline_create(ID3D12Device* Device, const dx12_root_signature& RootSignature, D3D12_INPUT_ELEMENT_DESC Inputs[], u32 InputsCount, const wchar_t* ShaderPath, DXGI_FORMAT RTVFormat, D3D12_CULL_MODE CullMode = D3D12_CULL_MODE_BACK, bool DepthTesting = true, u32 NumRenderTargets = 1)
 {
     dx12_pipeline Pipeline = {};
 
@@ -160,7 +160,7 @@ internal dx12_pipeline DX12GraphicsPipelineCreate(ID3D12Device* Device, ID3D12Ro
     }
 
     PipelineDesc.InputLayout = { Inputs, InputsCount };
-    PipelineDesc.pRootSignature = RootSignature;
+    PipelineDesc.pRootSignature = RootSignature.Handle;
     PipelineDesc.VS = { VertexShader->GetBufferPointer(), VertexShader->GetBufferSize() };
     PipelineDesc.PS = { PixelShader->GetBufferPointer(), PixelShader->GetBufferSize() };
     PipelineDesc.SampleMask = UINT_MAX;
@@ -178,7 +178,7 @@ internal dx12_pipeline DX12GraphicsPipelineCreate(ID3D12Device* Device, ID3D12Ro
     return Pipeline;
 }
 
-internal dx12_pipeline DX12ComputePipelineCreate(ID3D12Device* Device, ID3D12RootSignature* RootSignature, const wchar_t* ShaderPath, const wchar_t* ShaderEntryPoint)
+internal dx12_pipeline dx12_compute_pipeline_create(ID3D12Device* Device, ID3D12RootSignature* RootSignature, const wchar_t* ShaderPath, const wchar_t* ShaderEntryPoint)
 {
     dx12_pipeline Pipeline = {};
 
@@ -246,7 +246,7 @@ internal dx12_pipeline DX12ComputePipelineCreate(ID3D12Device* Device, ID3D12Roo
     return Pipeline;
 }
 
-internal void DX12PipelineDestroy(dx12_pipeline* Pipeline)
+internal void dx12_pipeline_destroy(dx12_pipeline* Pipeline)
 {
     Pipeline->Handle->Release();
 }

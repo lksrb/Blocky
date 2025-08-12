@@ -12,9 +12,9 @@ struct example_descriptor_heap_allocator
 {
     ID3D12DescriptorHeap* m_Heap = nullptr;
     D3D12_DESCRIPTOR_HEAP_TYPE  m_HeapType = D3D12_DESCRIPTOR_HEAP_TYPE_NUM_TYPES;
-    D3D12_CPU_DESCRIPTOR_HANDLE m_HeapStartCpu;
-    D3D12_GPU_DESCRIPTOR_HANDLE m_HeapStartGpu;
-    UINT                        m_HeapHandleIncrement;
+    D3D12_CPU_DESCRIPTOR_HANDLE m_HeapStartCpu = {};
+    D3D12_GPU_DESCRIPTOR_HANDLE m_HeapStartGpu = {};
+    u32 m_HeapHandleIncrement = 0;
 
     i32* m_FreeIndices = nullptr;
     i32 m_FreeIndicesSize = 0;
@@ -36,10 +36,9 @@ struct example_descriptor_heap_allocator
     }
     void Destroy()
     {
-        m_Heap = nullptr;
-        m_FreeIndices = nullptr;
-        m_FreeIndicesSize = 0;
+        *this = example_descriptor_heap_allocator();
     }
+
     void Alloc(D3D12_CPU_DESCRIPTOR_HANDLE* out_cpu_desc_handle, D3D12_GPU_DESCRIPTOR_HANDLE* out_gpu_desc_handle)
     {
          IM_ASSERT(m_FreeIndicesSize > 0);

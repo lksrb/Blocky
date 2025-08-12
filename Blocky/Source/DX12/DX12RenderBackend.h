@@ -56,7 +56,7 @@ struct dx12_render_backend
     //HANDLE FrameLatencyEvent;
 
     // Describes resources used in the shader
-    ID3D12RootSignature* RootSignature;
+    dx12_root_signature RootSignature;
 
     // Textures
     ID3D12DescriptorHeap* TextureDescriptorHeap;
@@ -84,7 +84,7 @@ struct dx12_render_backend
         dx12_pipeline Pipeline;
         dx12_index_buffer IndexBuffer;
         dx12_vertex_buffer VertexBuffers[FIF];
-        ID3D12RootSignature* RootSignature;
+        dx12_root_signature RootSignature;
     } Quad;
 
     // Basic Cuboid - Has the same texture for each face
@@ -93,7 +93,7 @@ struct dx12_render_backend
         dx12_pipeline Pipeline = {};
         dx12_vertex_buffer TransformVertexBuffers[FIF] = {};
         dx12_vertex_buffer PositionsVertexBuffer = {};
-        ID3D12RootSignature* RootSignature;
+        dx12_root_signature RootSignature;
     } Cuboid;
 
     // Quaded Cuboid - Can have unique texture for each face
@@ -109,7 +109,7 @@ struct dx12_render_backend
         dx12_pipeline Pipeline;
         dx12_vertex_buffer VertexBuffer;
         dx12_index_buffer IndexBuffer;
-        ID3D12RootSignature* RootSignature;
+        dx12_root_signature RootSignature;
     } Skybox;
 
     // Distant quads (sun, moon, stars, ...)
@@ -126,7 +126,7 @@ struct dx12_render_backend
         ID3D12Resource* ShadowMaps[FIF];
         D3D12_CPU_DESCRIPTOR_HANDLE DSVHandles[FIF];
         dx12_pipeline Pipeline;
-        ID3D12RootSignature* RootSignature;
+        dx12_root_signature RootSignature;
         ID3D12DescriptorHeap* DSVDescriptorHeap;
     } ShadowPass;
 #endif
@@ -142,7 +142,7 @@ struct dx12_render_backend
     struct
     {
         dx12_pipeline Pipeline;
-        ID3D12RootSignature* RootSignature;
+        dx12_root_signature RootSignature;
     } FullscreenPass;
 
     dx12_constant_buffer LightEnvironmentConstantBuffers[FIF];
