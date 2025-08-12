@@ -1,6 +1,6 @@
 #include "DX12Buffer.h"
 
-internal dx12_buffer DX12BufferCreate(ID3D12Device* Device, D3D12_RESOURCE_STATES ResourceState, D3D12_HEAP_TYPE HeapType, u32 Size)
+internal dx12_buffer dx12_buffer_create(ID3D12Device* Device, D3D12_RESOURCE_STATES ResourceState, D3D12_HEAP_TYPE HeapType, u32 Size)
 {
     dx12_buffer Buffer = {};
 
@@ -37,32 +37,32 @@ internal dx12_buffer DX12BufferCreate(ID3D12Device* Device, D3D12_RESOURCE_STATE
     return Buffer;
 }
 
-internal void DX12BufferDestroy(dx12_buffer* Buffer)
+internal void dx12_buffer_destroy(dx12_buffer* Buffer)
 {
     Buffer->Handle->Release();
     Buffer->Handle = nullptr;
     Buffer->Size = 0;
 }
 
-internal dx12_vertex_buffer DX12VertexBufferCreate(ID3D12Device* Device, u32 Size)
+internal dx12_vertex_buffer dx12_vertex_buffer_create(ID3D12Device* Device, u32 Size)
 {
     dx12_vertex_buffer VertexBuffer = {};
-    VertexBuffer.Buffer = DX12BufferCreate(Device, D3D12_RESOURCE_STATE_COMMON, D3D12_HEAP_TYPE_DEFAULT, Size);
-    VertexBuffer.IntermediateBuffer = DX12BufferCreate(Device, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_HEAP_TYPE_UPLOAD, Size);
+    VertexBuffer.Buffer = dx12_buffer_create(Device, D3D12_RESOURCE_STATE_COMMON, D3D12_HEAP_TYPE_DEFAULT, Size);
+    VertexBuffer.IntermediateBuffer = dx12_buffer_create(Device, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_HEAP_TYPE_UPLOAD, Size);
 
     VertexBuffer.IntermediateBuffer.Handle->Map(0, nullptr, &VertexBuffer.MappedIntermediateData);
     return VertexBuffer;
 }
 
-internal void DX12VertexBufferDestroy(dx12_vertex_buffer* VertexBuffer)
+internal void dx12_vertex_buffer_destroy(dx12_vertex_buffer* VertexBuffer)
 {
     VertexBuffer->IntermediateBuffer.Handle->Unmap(0, nullptr);
 
-    DX12BufferDestroy(&VertexBuffer->Buffer);
-    DX12BufferDestroy(&VertexBuffer->IntermediateBuffer);
+    dx12_buffer_destroy(&VertexBuffer->Buffer);
+    dx12_buffer_destroy(&VertexBuffer->IntermediateBuffer);
 }
 
-internal void DX12VertexBufferSendData(dx12_vertex_buffer* VertexBuffer, ID3D12GraphicsCommandList* CommandList, const void* Data, u32 DataSize)
+internal void dx12_vertex_buffer_set_data(dx12_vertex_buffer* VertexBuffer, ID3D12GraphicsCommandList* CommandList, const void* Data, u32 DataSize)
 {
     Assert(VertexBuffer->Buffer.Size >= DataSize, "Buffer overload!");
 
@@ -71,52 +71,52 @@ internal void DX12VertexBufferSendData(dx12_vertex_buffer* VertexBuffer, ID3D12G
 
     memcpy(VertexBuffer->MappedIntermediateData, Data, DataSize);
 
-    DX12CmdTransition(CommandList, VertexBuffer->Buffer.Handle, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER, D3D12_RESOURCE_STATE_COPY_DEST);
+    dx12_cmd_transition(CommandList, VertexBuffer->Buffer.Handle, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER, D3D12_RESOURCE_STATE_COPY_DEST);
     CommandList->CopyBufferRegion(VertexBuffer->Buffer.Handle, 0, VertexBuffer->IntermediateBuffer.Handle, 0, DataSize);
-    DX12CmdTransition(CommandList, VertexBuffer->Buffer.Handle, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
+    dx12_cmd_transition(CommandList, VertexBuffer->Buffer.Handle, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
 }
 
-internal dx12_index_buffer DX12IndexBufferCreate(ID3D12Device* Device, ID3D12CommandAllocator* CommandAllocator, ID3D12GraphicsCommandList* CommandList, ID3D12CommandQueue* CommandQueue, const u32* Data, u32 Count)
+internal dx12_index_buffer dx12_index_buffer_create(ID3D12Device* Device, ID3D12CommandAllocator* CommandAllocator, ID3D12GraphicsCommandList* CommandList, ID3D12CommandQueue* CommandQueue, const u32* Data, u32 Count)
 {
     dx12_index_buffer IndexBuffer = {};
-    IndexBuffer.Buffer = DX12BufferCreate(Device, D3D12_RESOURCE_STATE_COMMON, D3D12_HEAP_TYPE_DEFAULT, Count * sizeof(u32));
+    IndexBuffer.Buffer = dx12_buffer_create(Device, D3D12_RESOURCE_STATE_COMMON, D3D12_HEAP_TYPE_DEFAULT, Count * sizeof(u32));
 
-    dx12_buffer Intermediate = DX12BufferCreate(Device, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_HEAP_TYPE_UPLOAD, Count * sizeof(u32));
+    dx12_buffer Intermediate = dx12_buffer_create(Device, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_HEAP_TYPE_UPLOAD, Count * sizeof(u32));
     void* MappedPtr = nullptr;
     Intermediate.Handle->Map(0, nullptr, &MappedPtr);
     memcpy(MappedPtr, Data, Count * sizeof(u32));
     Intermediate.Handle->Unmap(0, nullptr);
-    DX12SubmitToQueueImmidiate(Device, CommandAllocator, CommandList, CommandQueue,
+    dx12_submit_to_queue_immidiately(Device, CommandAllocator, CommandList, CommandQueue,
     [&IndexBuffer, &Intermediate, Count](ID3D12GraphicsCommandList* CommandList)
     {
         CommandList->CopyBufferRegion(IndexBuffer.Buffer.Handle, 0, Intermediate.Handle, 0, Count * sizeof(u32));
     });
 
-    DX12BufferDestroy(&Intermediate);
+    dx12_buffer_destroy(&Intermediate);
 
     return IndexBuffer;
 }
 
-internal void DX12IndexBufferDestroy(dx12_index_buffer* IndexBuffer)
+internal void dx12_index_buffer_destroy(dx12_index_buffer* IndexBuffer)
 {
-    DX12BufferDestroy(&IndexBuffer->Buffer);
+    dx12_buffer_destroy(&IndexBuffer->Buffer);
 }
 
-internal dx12_constant_buffer DX12ConstantBufferCreate(ID3D12Device* Device, u32 Size)
+internal dx12_constant_buffer dx12_constant_buffer_create(ID3D12Device* Device, u32 Size)
 {
     dx12_constant_buffer ConstantBuffer = {};
-    ConstantBuffer.Buffer = DX12BufferCreate(Device, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_HEAP_TYPE_UPLOAD, Size);
+    ConstantBuffer.Buffer = dx12_buffer_create(Device, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_HEAP_TYPE_UPLOAD, Size);
     ConstantBuffer.Buffer.Handle->Map(0, nullptr, &ConstantBuffer.MappedData);
     return ConstantBuffer;
 }
 
-internal void DX12ConstantBufferDestroy(dx12_constant_buffer* ConstantBuffer)
+internal void dx12_constant_buffer_destroy(dx12_constant_buffer* ConstantBuffer)
 {
     ConstantBuffer->Buffer.Handle->Unmap(0, nullptr);
-    DX12BufferDestroy(&ConstantBuffer->Buffer);
+    dx12_buffer_destroy(&ConstantBuffer->Buffer);
 }
 
-internal void DX12ConstantBufferSetData(dx12_constant_buffer* ConstantBuffer, const void* Data, u32 Size)
+internal void dx12_constant_buffer_set_data(dx12_constant_buffer* ConstantBuffer, const void* Data, u32 Size)
 {
     Assert(ConstantBuffer->Buffer.Size >= Size, "Buffer overload!");
     memcpy(ConstantBuffer->MappedData, Data, Size);

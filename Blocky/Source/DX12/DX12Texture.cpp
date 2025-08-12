@@ -117,10 +117,10 @@ internal texture texture_create(render_backend* Backend, u32 Width, u32 Height, 
         }
         UploadBuffer->Unmap(0, nullptr);
 
-        DX12SubmitToQueueImmidiate(Device, CommandAllocator, CommandList, CommandQueue, [&](ID3D12GraphicsCommandList* CommandList)
+        dx12_submit_to_queue_immidiately(Device, CommandAllocator, CommandList, CommandQueue, [&](ID3D12GraphicsCommandList* CommandList)
         {
             CommandList->CopyTextureRegion(&Dst, 0, 0, 0, &Src, nullptr);
-            DX12CmdTransition(CommandList, Texture.Handle, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+            dx12_cmd_transition(CommandList, Texture.Handle, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
         });
 
         UploadBuffer->Release();
