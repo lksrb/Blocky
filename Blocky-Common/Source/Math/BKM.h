@@ -65,6 +65,15 @@ namespace bkm {
 #endif
     }
 
+    inline f32 Log2(f32 x) noexcept
+    {
+#if USE_C_MATH
+        return log2f(x);
+#else
+#error "BKM.h no custom log2f function"
+#endif
+    }
+
     inline f32 CopySign(f32 x, f32 y) noexcept
     {
 #if USE_C_MATH

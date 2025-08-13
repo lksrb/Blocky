@@ -33,20 +33,6 @@ internal void dx12_info_queue_dump(ID3D12InfoQueue* InfoQueue);
 #pragma comment(lib, "dxguid.lib")
 #endif
 
-#if OBSOLETE
-internal D3D12_RESOURCE_BARRIER DX12Transition(ID3D12Resource* Resource, D3D12_RESOURCE_STATES StateBefore, D3D12_RESOURCE_STATES StateAfter, UINT Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_BARRIER_FLAGS Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE)
-{
-    D3D12_RESOURCE_BARRIER Result;
-    Result.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-    Result.Flags = Flags;
-    Result.Transition.pResource = Resource;
-    Result.Transition.StateBefore = StateBefore;
-    Result.Transition.StateAfter = StateAfter;
-    Result.Transition.Subresource = Subresource;
-    return Result;
-};
-#endif
-
 internal D3D12_RESOURCE_BARRIER dx12_cmd_transition(ID3D12GraphicsCommandList* CommandList, ID3D12Resource* Resource, D3D12_RESOURCE_STATES StateBefore, D3D12_RESOURCE_STATES StateAfter, UINT Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_BARRIER_FLAGS Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE)
 {
     D3D12_RESOURCE_BARRIER Result;
@@ -262,7 +248,7 @@ internal void dx12_submit_to_queue_immidiately(ID3D12Device* Device, ID3D12Comma
     Func(CommandList);
 
     // Finish recording
-    CommandList->Close();
+    DxAssert(CommandList->Close());
 
     // Execute command list
     CommandQueue->ExecuteCommandLists(1, (ID3D12CommandList* const*)&CommandList);
@@ -288,6 +274,8 @@ internal void dx12_submit_to_queue_immidiately(ID3D12Device* Device, ID3D12Comma
 
         Fence->Release();
     }
+
+    DumpInfoQueue();
 }
 
 internal ID3D12InfoQueue* dx12_info_queue_create(ID3D12Device* Device)

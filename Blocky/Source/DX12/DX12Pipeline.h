@@ -178,7 +178,7 @@ internal dx12_pipeline dx12_graphics_pipeline_create(ID3D12Device* Device, const
     return Pipeline;
 }
 
-internal dx12_pipeline dx12_compute_pipeline_create(ID3D12Device* Device, ID3D12RootSignature* RootSignature, const wchar_t* ShaderPath, const wchar_t* ShaderEntryPoint)
+internal dx12_pipeline dx12_compute_pipeline_create(ID3D12Device* Device, const dx12_root_signature& RootSignature, const wchar_t* ShaderPath, const wchar_t* ShaderEntryPoint)
 {
     dx12_pipeline Pipeline = {};
 
@@ -240,7 +240,7 @@ internal dx12_pipeline dx12_compute_pipeline_create(ID3D12Device* Device, ID3D12
     }
 
     D3D12_COMPUTE_PIPELINE_STATE_DESC PipelineDesc = {};
-    PipelineDesc.pRootSignature = RootSignature;
+    PipelineDesc.pRootSignature = RootSignature.Handle;
     PipelineDesc.CS = { ComputeShader->GetBufferPointer(), ComputeShader->GetBufferSize() };
     DxAssert(Device->CreateComputePipelineState(&PipelineDesc, IID_PPV_ARGS(&Pipeline.Handle)));
     return Pipeline;

@@ -97,13 +97,17 @@ internal dx12_render_backend* dx12_render_backend_create(arena* Arena, const win
             DxAssert(Backend->Device->CreateDescriptorHeap(&Desc, IID_PPV_ARGS(&Backend->RTVDescriptorHeap)));
         }
 
+        D3D12_RENDER_TARGET_VIEW_DESC RtvDesc = {};
+        RtvDesc.Format = Backend->SwapChainFormat;
+        RtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
+
         // Place rtv descriptor sequentially in memory
         D3D12_CPU_DESCRIPTOR_HANDLE RtvHandle = Backend->RTVDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
         for (u32 i = 0; i < FIF; ++i)
         {
             DxAssert(Backend->SwapChain->GetBuffer(i, IID_PPV_ARGS(&Backend->SwapChainBackbuffers[i])));
             Backend->SwapChainBackbuffers[i]->SetName(L"SwapchainRenderTargetTexture");
-            Backend->Device->CreateRenderTargetView(Backend->SwapChainBackbuffers[i], nullptr, RtvHandle);
+            Backend->Device->CreateRenderTargetView(Backend->SwapChainBackbuffers[i], &RtvDesc, RtvHandle);
 
             Backend->SwapChainBufferRTVHandles[i] = RtvHandle;
             RtvHandle.ptr += Backend->DescriptorSizes.RTV;
@@ -326,9 +330,9 @@ internal void dx12_render_backend_initialize_pipeline(arena* Arena, dx12_render_
 
         // Sampler
         Samplers[0].Filter = D3D12_FILTER_MIN_MAG_MIP_POINT;
-        Samplers[0].AddressU = D3D12_TEXTURE_ADDRESS_MODE_BORDER;
-        Samplers[0].AddressV = D3D12_TEXTURE_ADDRESS_MODE_BORDER;
-        Samplers[0].AddressW = D3D12_TEXTURE_ADDRESS_MODE_BORDER;
+        Samplers[0].AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+        Samplers[0].AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+        Samplers[0].AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
         Samplers[0].MipLODBias = 0;
         Samplers[0].MaxAnisotropy = 1;
         Samplers[0].ComparisonFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
@@ -1021,13 +1025,15 @@ internal void d3d12_render_backend_render(dx12_render_backend* Backend, const ga
     // Render quads
     if (Renderer->Quad.IndexCount > 0)
     {
-        CommandList->SetPipelineState(Backend->Quad.Pipeline.Handle);
+        auto& Quad = Backend->Quad;
+        CommandList->SetGraphicsRootSignature(Backend->RootSignature.Handle);
+        CommandList->SetPipelineState(Quad.Pipeline.Handle);
 
         // Bind vertex buffer
-        DX12CmdSetVertexBuffer(CommandList, 0, Backend->Quad.VertexBuffers[CurrentBackBufferIndex].Buffer.Handle, Renderer->Quad.IndexCount * sizeof(quad_vertex), sizeof(quad_vertex));
+        DX12CmdSetVertexBuffer(CommandList, 0, Quad.VertexBuffers[CurrentBackBufferIndex].Buffer.Handle, Renderer->Quad.IndexCount * sizeof(quad_vertex), sizeof(quad_vertex));
 
         // Bind index buffer
-        DX12CmdSetIndexBuffer(CommandList, Backend->Quad.IndexBuffer.Buffer.Handle, Renderer->Quad.IndexCount * sizeof(u32), DXGI_FORMAT_R32_UINT);
+        DX12CmdSetIndexBuffer(CommandList, Quad.IndexBuffer.Buffer.Handle, Renderer->Quad.IndexCount * sizeof(u32), DXGI_FORMAT_R32_UINT);
 
         // TODO: For now just share the first half of the signature buffer, this needs some sort of distinction between HUD and Game stuff
         CommandList->SetGraphicsRoot32BitConstants(0, 16, &Renderer->RenderData.CuboidBuffer.ViewProjection, 0);

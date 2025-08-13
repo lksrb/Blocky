@@ -18,5 +18,10 @@ SamplerState g_Sampler : register(s0);
 
 float4 PSMain(pixel_shader_input In) : SV_TARGET
 {
-    return g_MainPassTexture.Sample(g_Sampler, In.UV);
+    float4 Color = g_MainPassTexture.Sample(g_Sampler, In.UV);
+    
+    //float InverseGamma = 1.0 / 2.2;
+    //Color.rgb = pow(Color.rgb, float3(InverseGamma, InverseGamma, InverseGamma));
+    
+    return Color;
 }

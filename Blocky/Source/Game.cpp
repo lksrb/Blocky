@@ -72,7 +72,7 @@ internal game* game_create(arena* Arena, render_backend* Backend)
     Game->CrosshairTexture = texture_create(Backend, "Resources/Textures/MC/Crosshair.png");
     Game->BlockTextures[(u32)block_type::Dirt] = texture_create(Backend, "Resources/Textures/MC/dirt_2.png");
     Game->CowTexture = texture_create(Backend, "Resources/Textures/MC/cow.png");
-    Game->PointLightIconTexture = texture_create(Backend, "Resources/Textures/PointLight.png");
+    Game->PointLightIconTexture = texture_create(Backend, "Resources/Textures/PointLight.png", true);
 
     //Game->SunTexture = TextureCreate(Renderer->Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, "Resources/Textures/MC/environemnt/sun.png");
 
@@ -343,6 +343,7 @@ internal void game_update(game* Game, game_renderer* Renderer, const game_input*
     local_persist f32 Near = 1.0f;
     local_persist f32 Far = 15.5;
     local_persist v3 LightDirection = bkm::Normalize(v3(0.0f, -1.0f, 0));
+    local_persist f32 DirectionalLightPower = 1.0f;
 
     auto CenterBlock = block_get_safe(Game, (i32)Center.x, (i32)Center.z, (i32)Center.y);
     if (CenterBlock)
@@ -376,7 +377,7 @@ internal void game_update(game* Game, game_renderer* Renderer, const game_input*
         m4 HUDProjection = bkm::OrthoRH_ZO(0, (f32)ClientArea.x, (f32)ClientArea.y, 0, -1, 1);
         game_renderer_set_render_data(Renderer, CameraPosition, Game->Camera.View, Game->Camera.Projection, InverseView, HUDProjection, GameTime, LightSpaceMatrix);
 
-        game_renderer_submit_directional_light(Renderer, LightDirection, 100.5f, v3(1.0f));
+        game_renderer_submit_directional_light(Renderer, LightDirection, DirectionalLightPower, v3(1.0f));
     }
 
     // Render Editor UI
@@ -394,6 +395,9 @@ internal void game_update(game* Game, game_renderer* Renderer, const game_input*
         ImGui::DragFloat("Size", &Size, 1.0f, 0.0f, 100.0f);
         ImGui::DragFloat("Near", &Near, 0.1f, -100.0f, 100.0f);
         ImGui::DragFloat("Far", &Far, 0.5f, 0.0f, 100.0f);
+
+        ImGui::Separator();
+        ImGui::DragFloat("Directional Light Power", &DirectionalLightPower, 0.2f, 0.0f, 100.0f);
 
         ImGui::End();
     }

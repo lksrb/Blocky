@@ -40,6 +40,7 @@ float4 PSMain(pixel_shader_input In) : SV_TARGET
     float4 Result = In.Color * g_Texture[In.TexIndex].Sample(g_Sampler, In.TexCoord);
     //float4 Result = In.Color;
 
+    // Temp solution to semi-transparency
     if (Result.a == 0.0f)
         discard;
 
