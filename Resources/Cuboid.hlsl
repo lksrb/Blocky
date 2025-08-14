@@ -61,7 +61,7 @@ cbuffer light_environment : register(b1)
     int u_DirectionalLightCount;
 };
 
-#define ENABLE_SHADOWS 0
+#define ENABLE_SHADOWS 1
 
 // Upper bound
 Texture2D<float4> g_Texture[32] : register(t0);
@@ -146,7 +146,11 @@ float4 PSMain(pixel_shader_input In) : SV_TARGET
     // Phase 1: Directional lights
     for (int i = 0; i < u_DirectionalLightCount; i++)
     {
-        Result += CalculateDirectionalLight(u_DirectionalLights[i], Normal, ViewDir, Shininess, TextureColor * In.Color.rgb);
+#if ENABLE_SHADOWS
+        Result += CalculateDirectionalLight2(u_DirectionalLights[i], Normal, ViewDir, Shininess, TextureColor * In.Color.rgb, ShadowValue);
+#else
+        Result += CalculateDirectionalLight2(u_DirectionalLights[i], Normal, ViewDir, Shininess, TextureColor * In.Color.rgb); 
+#endif
     }
     
     // Phase 2: Point lights

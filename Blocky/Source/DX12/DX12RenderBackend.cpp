@@ -279,6 +279,11 @@ internal void dx12_render_backend_initialize_pipeline(arena* Arena, dx12_render_
             }
         }
 
+        // Generate mip maps
+        {
+
+        }
+
         // Create srv views
         {
             auto SrvHandle = Backend->MainPass.SRVDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
