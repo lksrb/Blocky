@@ -37,6 +37,7 @@ workspace "Blocky"
 		"Resources/Shadow.hlsl",
 		"Resources/Fullscreen.hlsl",
 		"Resources/MipGen.hlsl",
+		"Resources/Bloom.hlsl",
 	}
 
 	flags {

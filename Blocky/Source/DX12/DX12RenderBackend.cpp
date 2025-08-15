@@ -254,6 +254,13 @@ internal void dx12_render_backend_initialize_pipeline(arena* Arena, dx12_render_
             Desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
             Desc.NodeMask = 0;
             DxAssert(Backend->Device->CreateDescriptorHeap(&Desc, IID_PPV_ARGS(&Backend->MainPass.SRVDescriptorHeap)));
+
+            auto SRVGPUHandle = Backend->MainPass.SRVDescriptorHeap->GetGPUDescriptorHandleForHeapStart();
+            for (u32 i = 0; i < FIF; i++)
+            {
+                Backend->MainPass.GPUSRVHandles[i] = SRVGPUHandle;
+                SRVGPUHandle.ptr += Backend->DescriptorSizes.CBV_SRV_UAV;
+            }
         }
 
         // Create the descriptor heap for the depth-stencil view.
@@ -268,9 +275,10 @@ internal void dx12_render_backend_initialize_pipeline(arena* Arena, dx12_render_
         // Create render resources
         {
             auto RtvHandle = Backend->MainPass.RTVDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
+            const bool AllowUnorderedAccess = true;
             for (u32 i = 0; i < FIF; i++)
             {
-                Backend->MainPass.RenderBuffers[i] = dx12_render_target_create(Device, Backend->MainPass.Format, SwapChainDesc.BufferDesc.Width, SwapChainDesc.BufferDesc.Height, L"MainPassBuffer");
+                Backend->MainPass.RenderBuffers[i] = dx12_render_target_create(Device, Backend->MainPass.Format, SwapChainDesc.BufferDesc.Width, SwapChainDesc.BufferDesc.Height, AllowUnorderedAccess, L"MainPassBuffer");
 
                 Backend->Device->CreateRenderTargetView(Backend->MainPass.RenderBuffers[i], nullptr, RtvHandle);
 
@@ -327,6 +335,37 @@ internal void dx12_render_backend_initialize_pipeline(arena* Arena, dx12_render_
                 DsvHandle.ptr += Backend->DescriptorSizes.DSV;
             }
         }
+    }
+
+    // Bloom Pass
+    {
+        auto& BloomPass = Backend->BloomPass;
+
+        // Descriptor range for one UAV (u0)
+        D3D12_DESCRIPTOR_RANGE Range = {};
+        Range.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
+        Range.NumDescriptors = 1;
+        Range.BaseShaderRegister = 0;
+        Range.RegisterSpace = 0;
+        Range.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+        // Root parameter: descriptor table with one range
+        D3D12_ROOT_PARAMETER RootParam = {};
+        RootParam.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+        RootParam.DescriptorTable.NumDescriptorRanges = 1;
+        RootParam.DescriptorTable.pDescriptorRanges = &Range;
+        RootParam.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+
+        // Root signature description
+        D3D12_ROOT_SIGNATURE_DESC RootSigDesc = {};
+        RootSigDesc.NumParameters = 1;
+        RootSigDesc.pParameters = &RootParam;
+        RootSigDesc.NumStaticSamplers = 0;
+        RootSigDesc.pStaticSamplers = nullptr;
+        RootSigDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE;
+
+        BloomPass.RootSignature = dx12_root_signature_create(Backend->Device, RootSigDesc);
+        BloomPass.PipelineCompute = dx12_compute_pipeline_create(Backend->Device, BloomPass.RootSignature, L"Resources/Bloom.hlsl", L"CSMain");
     }
 
     // Root Signature
@@ -943,7 +982,7 @@ internal void d3d12_render_backend_render(dx12_render_backend* Backend, const ga
     CommandList->ClearDepthStencilView(MainPassDSV, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
     CommandList->OMSetRenderTargets(1, &MainPassRTV, false, &MainPassDSV);
 
-    dx12_cmd_set_viewport(CommandList, 0, 0, (FLOAT)SwapChainDesc.BufferDesc.Width, (FLOAT)SwapChainDesc.BufferDesc.Height);
+    dx12_cmd_set_viewport(CommandList, 0, 0, (f32)SwapChainDesc.BufferDesc.Width, (f32)SwapChainDesc.BufferDesc.Height);
     dx12_cmd_set_scrissor_rect(CommandList, 0, 0, SwapChainDesc.BufferDesc.Width, SwapChainDesc.BufferDesc.Height);
 
     CommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
@@ -1064,19 +1103,45 @@ internal void d3d12_render_backend_render(dx12_render_backend* Backend, const ga
         CommandList->DrawIndexedInstanced(Renderer->HUD.IndexCount, 1, 0, 0, 0);
     }
 
-    dx12_cmd_transition(CommandList, MainPassRenderBuffer, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+    bool EnableBloomPass = true;
+    dx12_cmd_transition(CommandList, MainPassRenderBuffer, D3D12_RESOURCE_STATE_RENDER_TARGET, EnableBloomPass ? D3D12_RESOURCE_STATE_UNORDERED_ACCESS : D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+
+    // Bloom Pass
+    if (EnableBloomPass)
+    {
+        auto& BloomPass = Backend->BloomPass;
+        // Take MainPassRenderBuffer, do magic and output it 
+
+        //Set root signature, pso and descriptor heap
+        CommandList->SetPipelineState(BloomPass.PipelineCompute.Handle);
+        CommandList->SetComputeRootSignature(BloomPass.RootSignature.Handle);
+
+        ID3D12DescriptorHeap* Heaps[] = { Backend->MainPass.SRVDescriptorHeap };
+        CommandList->SetDescriptorHeaps(1, Heaps);
+        CommandList->SetComputeRootDescriptorTable(0, Backend->MainPass.GPUSRVHandles[CurrentBackBufferIndex]);
+
+        // Dispatch the compute shader with one thread per 8x8 pixels
+        u32 Width = SwapChainDesc.BufferDesc.Width;
+        u32 Height = SwapChainDesc.BufferDesc.Height;
+        u32 ThreadGroupX = (Width + 16 - 1) / 16; // ceil division
+        u32 ThreadGroupY = (Height + 16 - 1) / 16;
+        CommandList->Dispatch(ThreadGroupX, ThreadGroupY, 1);
+
+        dx12_cmd_transition(CommandList, MainPassRenderBuffer, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+    }
 
     //
     // Copy main pass render target to swapchain target and optionally apply some post-processing
     //
     dx12_cmd_transition(CommandList, SwapChainBackBuffer, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
-    CommandList->ClearRenderTargetView(SwapChainRTV, &ClearColor.x, 0, nullptr);
+    // Clearning not needed
+    //CommandList->ClearRenderTargetView(SwapChainRTV, &ClearColor.x, 0, nullptr);
     CommandList->OMSetRenderTargets(1, &SwapChainRTV, false, nullptr);
 
     bool DisplayImage = true;
     if (DisplayImage)
     {
-        dx12_cmd_set_viewport(CommandList, 0, 0, (FLOAT)SwapChainDesc.BufferDesc.Width, (FLOAT)SwapChainDesc.BufferDesc.Height);
+        dx12_cmd_set_viewport(CommandList, 0, 0, (f32)SwapChainDesc.BufferDesc.Width, (f32)SwapChainDesc.BufferDesc.Height);
         dx12_cmd_set_scrissor_rect(CommandList, 0, 0, SwapChainDesc.BufferDesc.Width, SwapChainDesc.BufferDesc.Height);
 
         CommandList->SetPipelineState(Backend->FullscreenPass.Pipeline.Handle);
@@ -1085,9 +1150,7 @@ internal void d3d12_render_backend_render(dx12_render_backend* Backend, const ga
         ID3D12DescriptorHeap* Heaps[] = { Backend->MainPass.SRVDescriptorHeap };
         CommandList->SetDescriptorHeaps(1, Heaps);
 
-        auto SRVGPUHandle = Backend->MainPass.SRVDescriptorHeap->GetGPUDescriptorHandleForHeapStart();
-        SRVGPUHandle.ptr += Backend->DescriptorSizes.CBV_SRV_UAV * CurrentBackBufferIndex;
-        CommandList->SetGraphicsRootDescriptorTable(0, SRVGPUHandle);
+        CommandList->SetGraphicsRootDescriptorTable(0, Backend->MainPass.GPUSRVHandles[CurrentBackBufferIndex]);
 
         CommandList->DrawInstanced(3, 1, 0, 0);
     }
@@ -1160,6 +1223,7 @@ internal void d3d12_render_backend_resize_swapchain(dx12_render_backend* Backend
 
     // MainPass - Resize render buffers and recreate RTV and DSV views
     {
+        auto& MainPass = Backend->MainPass;
         //D3D12_RENDER_TARGET_VIEW_DESC RtvDesc = {};
 
         D3D12_SHADER_RESOURCE_VIEW_DESC SrvDesc = {};
@@ -1177,37 +1241,44 @@ internal void d3d12_render_backend_resize_swapchain(dx12_render_backend* Backend
         DsvDesc.Texture2D.MipSlice = 0;
         DsvDesc.Flags = D3D12_DSV_FLAG_NONE;
 
-        auto RtvHandle = Backend->MainPass.RTVDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
-        auto SrvHandle = Backend->MainPass.SRVDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
-        auto DsvHandle = Backend->MainPass.DSVDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
+        auto RtvHandle = MainPass.RTVDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
+        auto SrvHandle = MainPass.SRVDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
+        auto GPUSrvHandle = MainPass.SRVDescriptorHeap->GetGPUDescriptorHandleForHeapStart();
+        auto DsvHandle = MainPass.DSVDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
 
+        const bool AllowUnorderedAccess = true;
         for (u32 i = 0; i < FIF; i++)
         {
             // Render buffers
             {
-                Backend->MainPass.RenderBuffers[i]->Release();
-                Backend->MainPass.RenderBuffers[i] = dx12_render_target_create(Backend->Device, SrvDesc.Format, SwapChainDesc.BufferDesc.Width, SwapChainDesc.BufferDesc.Height, L"MainPassBuffer");
+                MainPass.RenderBuffers[i]->Release();
+                MainPass.RenderBuffers[i] = dx12_render_target_create(Backend->Device, SrvDesc.Format, SwapChainDesc.BufferDesc.Width, SwapChainDesc.BufferDesc.Height, AllowUnorderedAccess, L"MainPassBuffer");
 
                 // Render Target View
-                Backend->Device->CreateRenderTargetView(Backend->MainPass.RenderBuffers[i], nullptr, RtvHandle);
+                Backend->Device->CreateRenderTargetView(MainPass.RenderBuffers[i], nullptr, RtvHandle);
 
                 // Shader Resouces View
-                Backend->Device->CreateShaderResourceView(Backend->MainPass.RenderBuffers[i], &SrvDesc, SrvHandle);
-                SrvHandle.ptr += Backend->DescriptorSizes.CBV_SRV_UAV;
+                Backend->Device->CreateShaderResourceView(MainPass.RenderBuffers[i], &SrvDesc, SrvHandle);
 
-                Backend->MainPass.RTVHandles[i] = RtvHandle;
+                // GPU handles
+                MainPass.GPUSRVHandles[i] = GPUSrvHandle;
+                GPUSrvHandle.ptr += Backend->DescriptorSizes.CBV_SRV_UAV;
+
+                // CPU handles
+                SrvHandle.ptr += Backend->DescriptorSizes.CBV_SRV_UAV;
+                MainPass.RTVHandles[i] = RtvHandle;
                 RtvHandle.ptr += Backend->DescriptorSizes.RTV;
             }
 
             // Depth buffers
             {
-                Backend->MainPass.DepthBuffers[i]->Release();
-                Backend->MainPass.DepthBuffers[i] = dx12_depth_buffer_create(Backend->Device, SwapChainDesc.BufferDesc.Width, SwapChainDesc.BufferDesc.Height, DsvDesc.Format, DsvDesc.Format, L"MainPassDepthBuffer");
+                MainPass.DepthBuffers[i]->Release();
+                MainPass.DepthBuffers[i] = dx12_depth_buffer_create(Backend->Device, SwapChainDesc.BufferDesc.Width, SwapChainDesc.BufferDesc.Height, DsvDesc.Format, DsvDesc.Format, L"MainPassDepthBuffer");
 
-                Backend->Device->CreateDepthStencilView(Backend->MainPass.DepthBuffers[i], &DsvDesc, DsvHandle);
+                Backend->Device->CreateDepthStencilView(MainPass.DepthBuffers[i], &DsvDesc, DsvHandle);
 
                 // Increment by the size of the dsv descriptor size
-                Backend->MainPass.DSVHandles[i] = DsvHandle;
+                MainPass.DSVHandles[i] = DsvHandle;
                 DsvHandle.ptr += Backend->DescriptorSizes.DSV;
             }
         }

@@ -104,7 +104,7 @@ internal void DX12CmdSetVertexBuffers2(ID3D12GraphicsCommandList* CommandList, u
     CommandList->IASetVertexBuffers(0, 2, VertexBufferViews);
 }
 
-internal ID3D12Resource* dx12_render_target_create(ID3D12Device* Device, DXGI_FORMAT Format, u32 Width, u32 Height, const wchar_t* DebugName = L"RenderTarget")
+internal ID3D12Resource* dx12_render_target_create(ID3D12Device* Device, DXGI_FORMAT Format, u32 Width, u32 Height, bool AllowUnorderedAccess = false, const wchar_t* DebugName = L"RenderTarget")
 {
     ID3D12Resource* Resource = nullptr;
 
@@ -119,6 +119,11 @@ internal ID3D12Resource* dx12_render_target_create(ID3D12Device* Device, DXGI_FO
     Desc.SampleDesc.Quality = 0;
     Desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
     Desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+
+    if (AllowUnorderedAccess)
+    {
+        Desc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+    }
 
     D3D12_HEAP_PROPERTIES HeapProperties = {};
     HeapProperties.Type = D3D12_HEAP_TYPE_DEFAULT;

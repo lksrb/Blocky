@@ -66,9 +66,9 @@ ENABLE_BITWISE_OPERATORS(entity_flags, u32);
 
 struct player
 {
-    v3 Position = v3(0.0f, 10, 1.0f);
+    v3 Position = v3(-2.0f, 10.0f, -2.0f);
     //v3 Position = v3(2.5f, 0.0f, 0.0f);
-    v3 Rotation = v3(0.0f, bkm::PI_HALF / 2, 0.0f);
+    v3 Rotation = v3(-0.655001104, 4.02360773, 0);
     v3 Velocity = v3(0.0f);
     bool IsPhysicsObject = false;
     bool Grounded = false;

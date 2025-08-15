@@ -76,7 +76,15 @@ struct dx12_render_backend
         DXGI_FORMAT Format;
 
         ID3D12DescriptorHeap* SRVDescriptorHeap;
+        D3D12_GPU_DESCRIPTOR_HANDLE GPUSRVHandles[FIF];
     } MainPass;
+
+    // Bloom pass needs to be added, fullscreen pass does not cut it
+    struct
+    {
+        dx12_root_signature RootSignature;
+        dx12_pipeline PipelineCompute;
+    } BloomPass;
 
     // Quad
     struct
