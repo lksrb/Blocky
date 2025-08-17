@@ -214,6 +214,9 @@ struct dx12_descriptor_heap
     u32 DescriptorHeapCapacity;
     bool ShaderVisible;
     D3D12_DESCRIPTOR_HEAP_TYPE Type = D3D12_DESCRIPTOR_HEAP_TYPE_NUM_TYPES;
+
+    auto gpu_base() { return Handle->GetGPUDescriptorHandleForHeapStart(); }
+    auto cpu_base() { return Handle->GetCPUDescriptorHandleForHeapStart(); }
 };
 
 internal dx12_descriptor_heap dx12_descriptor_heap_create(ID3D12Device* Device, D3D12_DESCRIPTOR_HEAP_TYPE Type, bool ShaderVisible, u32 DescriptorHeapCapacity)
@@ -389,9 +392,6 @@ internal void dx12_info_queue_dump(ID3D12InfoQueue* InfoQueue)
     InfoQueue->ClearStoredMessages();
 }
 
-struct dx12_root_signature_description
-{};
-
 struct dx12_root_signature
 {
     ID3D12RootSignature* Handle;
@@ -415,3 +415,67 @@ internal void dx12_root_signature_destroy(dx12_root_signature* RootSignature)
     RootSignature->Handle->Release();
     RootSignature->Handle = nullptr;
 }
+
+struct dx12_descriptor_handle
+{
+    D3D12_CPU_DESCRIPTOR_HANDLE CPU;
+    D3D12_GPU_DESCRIPTOR_HANDLE GPU;
+};
+
+// Simple free list based allocator
+struct dx12_descriptor_heap_free_list_allocator
+{
+    dx12_descriptor_heap m_Heap;
+    D3D12_CPU_DESCRIPTOR_HANDLE m_HeapStartCpu = {};
+    D3D12_GPU_DESCRIPTOR_HANDLE m_HeapStartGpu = {};
+    u32 m_HeapHandleIncrement = 0;
+
+    i32* m_FreeIndices = nullptr;
+    i32 m_FreeIndicesSize = 0;
+
+    void Create(arena* Arena, ID3D12Device* Device, D3D12_DESCRIPTOR_HEAP_TYPE HeapType, bool ShaderVisible, u32 Capacity)
+    {
+        m_Heap = dx12_descriptor_heap_create(Device, HeapType, ShaderVisible, Capacity);
+
+        m_HeapStartCpu = m_Heap.cpu_base();
+        m_HeapStartGpu = m_Heap.gpu_base();
+        m_HeapHandleIncrement = Device->GetDescriptorHandleIncrementSize(HeapType);
+        m_FreeIndices = arena_new_array(Arena, i32, Capacity);
+        m_FreeIndicesSize = Capacity;
+
+        // Quite expensive
+        i32 Index = 0;
+        for (i32 N = Capacity; N > 0; N--)
+            m_FreeIndices[Index++] = N - 1;
+    }
+    void Destroy()
+    {
+        dx12_descriptor_heap_destroy(&m_Heap);
+        *this = dx12_descriptor_heap_free_list_allocator();
+    }
+
+    dx12_descriptor_handle Alloc()
+    {
+        IM_ASSERT(m_FreeIndicesSize > 0);
+        i32 Index = m_FreeIndices[m_FreeIndicesSize - 1];
+
+        D3D12_CPU_DESCRIPTOR_HANDLE out_cpu_desc_handle;
+        D3D12_GPU_DESCRIPTOR_HANDLE out_gpu_desc_handle;
+        //m_FreeIndices.back();
+        //m_FreeIndices.pop_back();
+        --m_FreeIndicesSize;
+        out_cpu_desc_handle.ptr = m_HeapStartCpu.ptr + (Index * m_HeapHandleIncrement);
+        out_gpu_desc_handle.ptr = m_HeapStartGpu.ptr + (Index * m_HeapHandleIncrement);
+
+        return dx12_descriptor_handle{ out_cpu_desc_handle, out_gpu_desc_handle };
+    }
+    void Free(dx12_descriptor_handle Handle)
+    {
+        i32 CPUIndex = (i32)((Handle.CPU.ptr - m_HeapStartCpu.ptr) / m_HeapHandleIncrement);
+        i32 GPUIndex = (i32)((Handle.GPU.ptr - m_HeapStartGpu.ptr) / m_HeapHandleIncrement);
+        // No need for this check anymore but let it be
+        IM_ASSERT(CPUIndex == GPUIndex);
+        m_FreeIndices[m_FreeIndicesSize++] = CPUIndex;
+        //m_FreeIndices.push_back(cpu_idx);
+    }
+};

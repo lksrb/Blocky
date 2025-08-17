@@ -41,16 +41,6 @@ internal win32_dx12_imgui_context* win32_dx12_imgui_create(arena* Arena, win32_c
     Style.ScaleAllSizes(MainScale);        // Bake a fixed style scale. (until we have a solution for dynamic style scaling, changing this requires resetting Style + calling this again)
     Style.FontScaleDpi = MainScale;        // Set initial font scale. (using io.ConfigDpiScaleFonts=true makes this unnecessary. We leave both here for documentation purpose)
 
-    {
-        D3D12_DESCRIPTOR_HEAP_DESC desc = {};
-        desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-        desc.NumDescriptors = 64;
-        desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-        DxAssert(DX12Backend->Device->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&Context->SrvDescHeap)));
-        Context->DescriptorHeapAllocator.Create(Arena, DX12Backend->Device, Context->SrvDescHeap);
-    }
-
-
     // Setup Platform/Renderer backends
     ImGui_ImplWin32_Init(Win32Context->Window.Handle);
 
@@ -61,21 +51,24 @@ internal win32_dx12_imgui_context* win32_dx12_imgui_create(arena* Arena, win32_c
     InitInfo.RTVFormat = DX12Backend->SwapChainFormat; // Same format as swapchain since we render it after main pass
     InitInfo.DSVFormat = DXGI_FORMAT_UNKNOWN;
     //Allocating SRV descriptors (for textures) is up to the application, so we provide callbacks. (current version of the backend will only allocate one descriptor, future versions will need to allocate more)
-    InitInfo.UserData = Context;
-    InitInfo.SrvDescriptorHeap = Context->SrvDescHeap;
+    InitInfo.UserData = DX12Backend;
+    InitInfo.SrvDescriptorHeap = DX12Backend->SRVCBVUAV_Allocator.m_Heap.Handle;
+    //InitInfo.SrvDescriptorHeap = nullptr;
     InitInfo.SrvDescriptorAllocFn = [](ImGui_ImplDX12_InitInfo* InitInfo,
         D3D12_CPU_DESCRIPTOR_HANDLE* out_cpu_handle,
         D3D12_GPU_DESCRIPTOR_HANDLE* out_gpu_handle)
     {
-        auto Context = ((win32_dx12_imgui_context*)InitInfo->UserData);
-        return Context->DescriptorHeapAllocator.Alloc(out_cpu_handle, out_gpu_handle);
+        auto Backend = ((dx12_render_backend*)InitInfo->UserData);
+        auto Handle = Backend->SRVCBVUAV_Allocator.Alloc();
+        *out_cpu_handle = Handle.CPU;
+        *out_gpu_handle = Handle.GPU;
     };
     InitInfo.SrvDescriptorFreeFn = [](ImGui_ImplDX12_InitInfo* InitInfo,
         D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle,
         D3D12_GPU_DESCRIPTOR_HANDLE gpu_handle) 
     { 
-        auto Context = ((win32_dx12_imgui_context*)InitInfo->UserData);
-        return Context->DescriptorHeapAllocator.Free(cpu_handle, gpu_handle);
+        auto Backend = ((dx12_render_backend*)InitInfo->UserData);
+        Backend->SRVCBVUAV_Allocator.Free(dx12_descriptor_handle{ cpu_handle, gpu_handle });
     };
     ImGui_ImplDX12_Init(&InitInfo);
 
@@ -84,8 +77,6 @@ internal win32_dx12_imgui_context* win32_dx12_imgui_create(arena* Arena, win32_c
 
 internal void win32_dx12_imgui_destroy(win32_dx12_imgui_context* Context)
 {
-    Context->SrvDescHeap->Release();
-
     // I want to call this so that imgui remembers the position of debug windows
     ImGui_ImplDX12_Shutdown();
     ImGui_ImplWin32_Shutdown();

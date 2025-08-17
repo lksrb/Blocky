@@ -6,11 +6,11 @@
 RWTexture2D<float4> o_Image : register(u0);
 
 // samplers
-SamplerState g_TextureSampler;
-Texture2D<float4> g_Texture : register(t0);
-
-SamplerState g_BloomTextureSampler;
-Texture2D<float4> g_BloomTexture : register(t0);
+// SamplerState g_TextureSampler;
+// Texture2D<float4> g_Texture : register(t0);
+// 
+// SamplerState g_BloomTextureSampler;
+// Texture2D<float4> g_BloomTexture : register(t0);
 
 #define MODE_PREFILTER      0
 #define MODE_DOWNSAMPLE     1

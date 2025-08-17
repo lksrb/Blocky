@@ -35,18 +35,18 @@ struct dx12_render_backend
 
     IDXGISwapChain4* SwapChain;
     ID3D12Resource* SwapChainBackbuffers[FIF];
-    D3D12_CPU_DESCRIPTOR_HANDLE SwapChainBufferRTVHandles[FIF];
+    dx12_descriptor_handle SwapChainBufferRTVViews[FIF];
     DXGI_FORMAT SwapChainFormat;
 
-    ID3D12DescriptorHeap* RTVDescriptorHeap;
-
-    dx12_descriptor_heap OfflineTextureHeap;
-    u32 OfflineTextureHeapIndex = 0;
+    dx12_descriptor_heap_free_list_allocator RTVAllocator;
+    dx12_descriptor_heap_free_list_allocator DSVAllocator;
+    dx12_descriptor_heap_free_list_allocator SRVCBVUAV_Allocator;
 
     u32 CurrentBackBufferIndex;
 
     bool DepthTesting = true;
     bool VSync = true;
+
     // Fence
     ID3D12Fence* Fence;
     u64 FenceValue;
@@ -59,24 +59,21 @@ struct dx12_render_backend
     dx12_root_signature RootSignature;
 
     // Textures
-    ID3D12DescriptorHeap* TextureDescriptorHeap;
     texture WhiteTexture;
+    dx12_descriptor_handle WhiteTextureDescriptorHandle;
 
     // These will be rendered to and then copied via fullscreen pass to swapchain buffers
     struct
     {
         ID3D12Resource* DepthBuffers[FIF];
-        ID3D12DescriptorHeap* DSVDescriptorHeap;
-        D3D12_CPU_DESCRIPTOR_HANDLE DSVHandles[FIF];
+        dx12_descriptor_handle DepthBuffersViews[FIF];
 
         ID3D12Resource* RenderBuffers[FIF];
-        ID3D12DescriptorHeap* RTVDescriptorHeap;
-        D3D12_CPU_DESCRIPTOR_HANDLE RTVHandles[FIF];
+        dx12_descriptor_handle RenderBuffersRTVViews[FIF];
 
         DXGI_FORMAT Format;
 
-        ID3D12DescriptorHeap* SRVDescriptorHeap;
-        D3D12_GPU_DESCRIPTOR_HANDLE GPUSRVHandles[FIF];
+        dx12_descriptor_handle RenderBuffersSRVViews[FIF];
     } MainPass;
 
     // Bloom pass needs to be added, fullscreen pass does not cut it
@@ -132,10 +129,10 @@ struct dx12_render_backend
     struct
     {
         ID3D12Resource* ShadowMaps[FIF];
-        D3D12_CPU_DESCRIPTOR_HANDLE DSVHandles[FIF];
+        dx12_descriptor_handle ShadowMapsDSVViews[FIF];
+        dx12_descriptor_handle ShadowMapsSRVViews[FIF];
         dx12_pipeline Pipeline;
         dx12_root_signature RootSignature;
-        ID3D12DescriptorHeap* DSVDescriptorHeap;
     } ShadowPass;
 #endif
 
