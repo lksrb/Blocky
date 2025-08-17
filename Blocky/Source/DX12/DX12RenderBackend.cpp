@@ -23,7 +23,6 @@ internal dx12_render_backend* dx12_render_backend_create(arena* Arena, const win
     }
 
     // Create device
-
     // This takes ~300 ms, insane
     DxAssert(D3D12CreateDevice(nullptr, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&Backend->Device)));
 
@@ -53,7 +52,7 @@ internal dx12_render_backend* dx12_render_backend_create(arena* Arena, const win
 
         // Create direct command list
         {
-            DxAssert(Backend->Device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, Backend->DirectCommandAllocators[Backend->CurrentBackBufferIndex], nullptr, IID_PPV_ARGS(&Backend->DirectCommandList)));
+            DxAssert(Backend->Device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, Backend->DirectCommandAllocators[0], nullptr, IID_PPV_ARGS(&Backend->DirectCommandList)));
 
             // Command lists are created in the recording state, but there is nothing
             // to record yet. The main loop expects it to be closed, so close it now.
@@ -77,9 +76,6 @@ internal dx12_render_backend* dx12_render_backend_create(arena* Arena, const win
         //Backend->FrameLatencyEvent = Backend->SwapChain->GetFrameLatencyWaitableObject();
     }
 
-    // Views are descriptors located in the GPU memory.
-    // They describe how memory of particular resource is layed out
-
     // Cache descriptor sizes, they should never change unless ID3D12 is recreated.
     Backend->DescriptorSizes.RTV = Backend->Device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
     Backend->DescriptorSizes.DSV = Backend->Device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
@@ -90,17 +86,17 @@ internal dx12_render_backend* dx12_render_backend_create(arena* Arena, const win
     Backend->DSVAllocator.Create(Arena, Backend->Device, D3D12_DESCRIPTOR_HEAP_TYPE_DSV, false, 1024);
     Backend->SRVCBVUAV_Allocator.Create(Arena, Backend->Device, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, true, 1024);
 
+    // CPU-Only, for dynamic textures
+    Backend->SRVCBVUAV_CPU_ONLY_Allocator.Create(Arena, Backend->Device, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, false, 1024);
+
     // Create Render Target Views
     {
-        D3D12_RENDER_TARGET_VIEW_DESC RtvDesc = {};
-        RtvDesc.Format = Backend->SwapChainFormat;
-        RtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
         for (u32 i = 0; i < FIF; ++i)
         {
             DxAssert(Backend->SwapChain->GetBuffer(i, IID_PPV_ARGS(&Backend->SwapChainBackbuffers[i])));
             Backend->SwapChainBackbuffers[i]->SetName(L"SwapchainRenderTargetTexture");
             Backend->SwapChainBufferRTVViews[i] = Backend->RTVAllocator.Alloc();
-            Backend->Device->CreateRenderTargetView(Backend->SwapChainBackbuffers[i], &RtvDesc, Backend->SwapChainBufferRTVViews[i].CPU);
+            Backend->Device->CreateRenderTargetView(Backend->SwapChainBackbuffers[i], nullptr, Backend->SwapChainBufferRTVViews[i].CPU);
         }
     }
 
@@ -118,7 +114,6 @@ internal void dx12_render_backend_destroy(dx12_render_backend* Backend)
     {
         Backend->MainPass.RenderBuffers[i]->Release();
         Backend->MainPass.DepthBuffers[i]->Release();
-
 
         Backend->DirectCommandAllocators[i]->Release();
         Backend->SwapChainBackbuffers[i]->Release();
@@ -167,6 +162,10 @@ internal void dx12_render_backend_destroy(dx12_render_backend* Backend)
     // Distant Quad
     dx12_pipeline_destroy(&Backend->DistantQuad.Pipeline);
 
+    // Bloom
+    dx12_pipeline_destroy(&Backend->BloomPass.PipelineCompute);
+    dx12_root_signature_destroy(&Backend->BloomPass.RootSignature);
+
     // Fullscreen Pass
     dx12_pipeline_destroy(&Backend->FullscreenPass.Pipeline);
     dx12_root_signature_destroy(&Backend->FullscreenPass.RootSignature);
@@ -175,7 +174,6 @@ internal void dx12_render_backend_destroy(dx12_render_backend* Backend)
 #if ENABLE_SHADOW_PASS
     dx12_pipeline_destroy(&Backend->ShadowPass.Pipeline);
     dx12_root_signature_destroy(&Backend->ShadowPass.RootSignature);
-    //dx12_descriptor_heap_destroy(&Backend->ShadowPass.DSVDescriptorHeap);
 #endif
 
     // HUD
@@ -183,18 +181,16 @@ internal void dx12_render_backend_destroy(dx12_render_backend* Backend)
 
     // Main pass
     texture_destroy(Backend, &Backend->WhiteTexture);
-    //dx12_descriptor_heap_destroy(&Backend->MainPass.RTVDescriptorHeap);
-    //dx12_descriptor_heap_destroy(&Backend->MainPass.DSVDescriptorHeap);
-    //dx12_descriptor_heap_destroy(&Backend->MainPass.SRVDescriptorHeap);
-
-    //dx12_descriptor_heap_destroy(&Backend->TextureDescriptorHeap);
 
     dx12_root_signature_destroy(&Backend->RootSignature);
 
-    // dx12_descriptor_heap_destroy(&Backend->OfflineTextureHeap);
+    // Views
+    Backend->SRVCBVUAV_Allocator.Destroy();
+    Backend->SRVCBVUAV_CPU_ONLY_Allocator.Destroy();
+    Backend->RTVAllocator.Destroy();
+    Backend->DSVAllocator.Destroy();
 
     // Swapchain
-    //dx12_descriptor_heap_destroy(&Backend->RTVDescriptorHeap);
     Backend->SwapChain->Release();
     Backend->Fence->Release();
     Backend->DirectCommandList->Release();
@@ -220,37 +216,25 @@ internal void dx12_render_backend_initialize_pipeline(arena* Arena, dx12_render_
     DXGI_SWAP_CHAIN_DESC SwapChainDesc;
     DxAssert(Backend->SwapChain->GetDesc(&SwapChainDesc));
 
-    // Storage for offlines textures that the game might need, assuming that its cheaper to copy descriptor rather than creating them on the spot
-    //Backend->OfflineTextureHeap = dx12_descriptor_heap_create(Device, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, false, 1024);
-
     // Main pass
     {
         auto& MainPass = Backend->MainPass;
 
         // Create render resources
         {
-            D3D12_SHADER_RESOURCE_VIEW_DESC Desc = {};
-            Desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-            Desc.Format = MainPass.Format;
-            Desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-            Desc.Texture2D.MipLevels = 1;
-            Desc.Texture2D.MostDetailedMip = 0;
-            Desc.Texture2D.PlaneSlice = 0;
-            Desc.Texture2D.ResourceMinLODClamp = 0.0f;
-
             const bool AllowUnorderedAccess = true;
             for (u32 i = 0; i < FIF; i++)
             {
-                MainPass.RenderBuffers[i] = dx12_render_target_create(Device, MainPass.Format, 
+                MainPass.RenderBuffers[i] = dx12_render_target_create(Device, MainPass.Format,
                     SwapChainDesc.BufferDesc.Width, SwapChainDesc.BufferDesc.Height, AllowUnorderedAccess, L"MainPassBuffer");
 
                 // RTV
                 MainPass.RenderBuffersRTVViews[i] = Backend->RTVAllocator.Alloc();
                 Backend->Device->CreateRenderTargetView(MainPass.RenderBuffers[i], nullptr, MainPass.RenderBuffersRTVViews[i].CPU);
-                
+
                 // SRV
                 MainPass.RenderBuffersSRVViews[i] = Backend->SRVCBVUAV_Allocator.Alloc();
-                Backend->Device->CreateShaderResourceView(MainPass.RenderBuffers[i], &Desc, MainPass.RenderBuffersSRVViews[i].CPU);
+                Backend->Device->CreateShaderResourceView(MainPass.RenderBuffers[i], nullptr, MainPass.RenderBuffersSRVViews[i].CPU);
             }
         }
 
@@ -261,23 +245,13 @@ internal void dx12_render_backend_initialize_pipeline(arena* Arena, dx12_render_
 
         // Create depth resources 
         {
-            const DXGI_FORMAT Format = DXGI_FORMAT_D32_FLOAT;
-
             // Create depth buffers
             for (u32 i = 0; i < FIF; i++)
             {
-                MainPass.DepthBuffers[i] = dx12_depth_buffer_create(Device, SwapChainDesc.BufferDesc.Width, SwapChainDesc.BufferDesc.Height, Format, Format, L"MainPassDepthBuffer");
+                MainPass.DepthBuffers[i] = dx12_depth_buffer_create(Device, SwapChainDesc.BufferDesc.Width, SwapChainDesc.BufferDesc.Height, DXGI_FORMAT_D32_FLOAT, DXGI_FORMAT_D32_FLOAT, L"MainPassDepthBuffer");
 
-                // Create depth-stencil view
-                D3D12_DEPTH_STENCIL_VIEW_DESC Desc = {};
-                Desc.Format = Format;
-                Desc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
-                Desc.Texture2D.MipSlice = 0;
-                Desc.Flags = D3D12_DSV_FLAG_NONE;
-                // AAAAAAAAA these are inferred I think
-                
                 MainPass.DepthBuffersViews[i] = Backend->DSVAllocator.Alloc();
-                Backend->Device->CreateDepthStencilView(MainPass.DepthBuffers[i], &Desc, MainPass.DepthBuffersViews[i].CPU);
+                Backend->Device->CreateDepthStencilView(MainPass.DepthBuffers[i], nullptr, MainPass.DepthBuffersViews[i].CPU);
             }
         }
     }
@@ -645,23 +619,25 @@ internal void dx12_render_backend_initialize_pipeline(arena* Arena, dx12_render_
         }
     }
 
-    // Create white texture
+    // Temp allocator for dynamic textures given from game_renderer
     {
+        // White texture
         u32 WhiteColor = 0xffffffff;
         buffer Buffer = { &WhiteColor, sizeof(u32) };
         Backend->WhiteTexture = texture_create(Backend, 1, 1, Buffer);
 
-        D3D12_SHADER_RESOURCE_VIEW_DESC Desc = {};
-        Desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-        Desc.Format = Backend->WhiteTexture.Format;
-        Desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-        Desc.Texture2D.MipLevels = 1;
-        Desc.Texture2D.MostDetailedMip = 0;
-        Desc.Texture2D.PlaneSlice = 0;
-        Desc.Texture2D.ResourceMinLODClamp = 0.0f;
+        // View at index 0 contains white texture
+        Backend->BaseTextureDescriptorHandle = Backend->SRVCBVUAV_Allocator.Alloc();
+        Device->CreateShaderResourceView(Backend->WhiteTexture.Handle, nullptr, Backend->BaseTextureDescriptorHandle.CPU);
 
-        Backend->WhiteTextureDescriptorHandle = Backend->SRVCBVUAV_Allocator.Alloc();
-        Device->CreateShaderResourceView(Backend->WhiteTexture.Handle, &Desc, Backend->WhiteTextureDescriptorHandle.CPU);
+        // Filling in white texture as a default
+        // NOTE: These allocations needs to be sequential, if not, we're gonna have a big problem
+        for (u32 i = 1; i < c_MaxTexturesPerDrawCall; i++)
+        {
+            auto Handle = Backend->SRVCBVUAV_Allocator.Alloc();
+            Device->CreateShaderResourceView(Backend->WhiteTexture.Handle, nullptr, Handle.CPU);
+        }
+
     }
 
     // Shadow Pass
@@ -715,7 +691,7 @@ internal void dx12_render_backend_initialize_pipeline(arena* Arena, dx12_render_
         {
             Backend->ShadowPass.ShadowMaps[i] = dx12_depth_buffer_create(Device, SHADOW_MAP_SIZE, SHADOW_MAP_SIZE, DXGI_FORMAT_R32_TYPELESS, DXGI_FORMAT_D32_FLOAT, DebugNames[i], D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 
-            // Update the depth-stencil view.
+            // This description is needed since shadow maps are created typeless.
             D3D12_DEPTH_STENCIL_VIEW_DESC DSV = {};
             DSV.Format = DXGI_FORMAT_D32_FLOAT;
             DSV.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
@@ -729,6 +705,7 @@ internal void dx12_render_backend_initialize_pipeline(arena* Arena, dx12_render_
         // Shadow map
         for (u32 i = 0; i < FIF; i++)
         {
+            // This description is needed since shadow maps are created typeless.
             D3D12_SHADER_RESOURCE_VIEW_DESC Desc = {};
             Desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
             Desc.Format = DXGI_FORMAT_R32_FLOAT;
@@ -794,7 +771,7 @@ internal void dx12_render_backend_initialize_pipeline(arena* Arena, dx12_render_
     }
 }
 
-internal void d3d12_render_backend_render(dx12_render_backend* Backend, const game_renderer* Renderer, ImDrawData* ImGuiDrawData, ID3D12DescriptorHeap* ImGuiDescriptorHeap)
+internal void d3d12_render_backend_render(dx12_render_backend* Backend, const game_renderer* Renderer, ImDrawData* ImGuiDrawData)
 {
     // Set and clear render target view
     const v4 ClearColor = { 0.2f, 0.3f, 0.8f, 1.0f };
@@ -815,27 +792,10 @@ internal void d3d12_render_backend_render(dx12_render_backend* Backend, const ga
     // Reset state
     DxAssert(DirectCommandAllocator->Reset());
 
-    // Copy texture's descriptor to our renderer's descriptor
-    if (true)
-    {
-        auto DstSRV = Backend->TextureDescriptorHeap.cpu_base();
-
-        // Skip white texture
-        DstSRV.ptr += Backend->DescriptorSizes.CBV_SRV_UAV;
-        // Textures
-        for (u32 i = 1; i < Renderer->CurrentTextureStackIndex; i++)
-        {
-            Backend->Device->CopyDescriptorsSimple(1, DstSRV, Renderer->TextureStack[i]->SRVDescriptor, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-            DstSRV.ptr += Backend->DescriptorSizes.CBV_SRV_UAV;
-        }
-    }
-
     DxAssert(CommandList->Reset(DirectCommandAllocator, Backend->Cuboid.Pipeline.Handle));
 
     // Set light environment data
-    {
-        dx12_constant_buffer_set_data(&Backend->LightEnvironmentConstantBuffers[CurrentBackBufferIndex], &Renderer->LightEnvironment, sizeof(light_environment));
-    }
+    dx12_constant_buffer_set_data(&Backend->LightEnvironmentConstantBuffers[CurrentBackBufferIndex], &Renderer->LightEnvironment, sizeof(light_environment));
 
     // Copy vertex data to gpu buffer
     {
@@ -855,17 +815,39 @@ internal void d3d12_render_backend_render(dx12_render_backend* Backend, const ga
         dx12_vertex_buffer_set_data(&Backend->HUD.VertexBuffers[CurrentBackBufferIndex], Backend->DirectCommandList, Renderer->HUD.VertexDataBase, sizeof(hud_quad_vertex) * Renderer->HUD.IndexCount);
     }
 
-    // MAIN PASS
-    // MAIN PASS
-    // MAIN PASS
+    // Copy texture's descriptor to our renderer's descriptor
+    {
+        auto Base = Backend->BaseTextureDescriptorHandle;
 
-    auto MainPassRTV = Backend->MainPass.RTVHandles[CurrentBackBufferIndex];
-    auto MainPassDSV = Backend->MainPass.DSVHandles[CurrentBackBufferIndex];
+        // Skip white texture
+        Base.CPU.ptr += Backend->DescriptorSizes.CBV_SRV_UAV;
+
+        // Copy descriptors from "offline" heap to "online" heap. 
+        for (u32 i = 1; i < Renderer->CurrentTextureStackIndex; i++)
+        {
+            auto Src = Renderer->TextureStack[i]->View.CPU;
+            Backend->Device->CopyDescriptorsSimple(1, Base.CPU, Src, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+            Base.CPU.ptr += Backend->DescriptorSizes.CBV_SRV_UAV;
+        }
+    }
+
+    // Bind all available heaps
+    ID3D12DescriptorHeap* Heaps[] = { Backend->SRVCBVUAV_Allocator.m_Heap.Handle };
+    CommandList->SetDescriptorHeaps(CountOf(Heaps), Heaps);
+
+    //
+    // Main Pass
+    // Major rendering is happening here
+    //
+
+    auto MainPassRTV = Backend->MainPass.RenderBuffersRTVViews[CurrentBackBufferIndex];
+    auto MainPassDSV = Backend->MainPass.DepthBuffersViews[CurrentBackBufferIndex];
     auto MainPassRenderBuffer = Backend->MainPass.RenderBuffers[CurrentBackBufferIndex];
 
+    // Render shadows
 #if ENABLE_SHADOW_PASS
-    // Render shadow maps
-    if (true)
+    bool EnableShadowPass = Renderer->EnableShadows;
+    if (EnableShadowPass)
     {
         auto& ShadowPass = Backend->ShadowPass;
         auto ShadowMap = ShadowPass.ShadowMaps[CurrentBackBufferIndex];
@@ -875,9 +857,9 @@ internal void d3d12_render_backend_render(dx12_render_backend* Backend, const ga
         dx12_cmd_set_viewport(CommandList, 0, 0, SHADOW_MAP_SIZE, SHADOW_MAP_SIZE);
         dx12_cmd_set_scrissor_rect(CommandList, 0, 0, SHADOW_MAP_SIZE, SHADOW_MAP_SIZE);
 
-        auto ShadowPassDSV = ShadowPass.DSVHandles[CurrentBackBufferIndex];
-        CommandList->ClearDepthStencilView(ShadowPassDSV, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
-        CommandList->OMSetRenderTargets(0, nullptr, false, &ShadowPassDSV);
+        auto ShadowPassDSV = ShadowPass.ShadowMapsDSVViews[CurrentBackBufferIndex];
+        CommandList->ClearDepthStencilView(ShadowPassDSV.CPU, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
+        CommandList->OMSetRenderTargets(0, nullptr, false, &ShadowPassDSV.CPU);
         CommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
         // Render instanced cuboids
@@ -889,10 +871,10 @@ internal void d3d12_render_backend_render(dx12_render_backend* Backend, const ga
             CommandList->SetGraphicsRoot32BitConstants(0, sizeof(Renderer->RenderData.ShadowPassBuffer) / 4, &Renderer->RenderData.ShadowPassBuffer, 0);
 
             // Bind vertex positions and transforms
-            DX12CmdSetVertexBuffers2(CommandList, 0, Backend->Cuboid.PositionsVertexBuffer.Buffer.Handle, Backend->Cuboid.PositionsVertexBuffer.Buffer.Size, sizeof(cuboid_vertex), Backend->Cuboid.TransformVertexBuffers[CurrentBackBufferIndex].Buffer.Handle, Renderer->Cuboid.InstanceCount * sizeof(cuboid_transform_vertex_data), sizeof(cuboid_transform_vertex_data));
+            dx12_cmd_set_2_vertex_buffers(CommandList, 0, Backend->Cuboid.PositionsVertexBuffer.Buffer.Handle, Backend->Cuboid.PositionsVertexBuffer.Buffer.Size, sizeof(cuboid_vertex), Backend->Cuboid.TransformVertexBuffers[CurrentBackBufferIndex].Buffer.Handle, Renderer->Cuboid.InstanceCount * sizeof(cuboid_transform_vertex_data), sizeof(cuboid_transform_vertex_data));
 
             // Bind index buffer
-            DX12CmdSetIndexBuffer(CommandList, Backend->Quad.IndexBuffer.Buffer.Handle, 36 * sizeof(u32), DXGI_FORMAT_R32_UINT);
+            dx12_cmd_set_index_buffer(CommandList, Backend->Quad.IndexBuffer.Buffer.Handle, 36 * sizeof(u32), DXGI_FORMAT_R32_UINT);
 
             // Issue draw call
             CommandList->DrawIndexedInstanced(36, Renderer->Cuboid.InstanceCount, 0, 0, 0);
@@ -901,28 +883,35 @@ internal void d3d12_render_backend_render(dx12_render_backend* Backend, const ga
         // From depth write to resource
         dx12_cmd_transition(CommandList, ShadowMap, D3D12_RESOURCE_STATE_DEPTH_WRITE, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
     }
+    else // For the sake of simplicity, just clear it
+    {
+        auto ShadowMap = Backend->ShadowPass.ShadowMaps[CurrentBackBufferIndex];
+        dx12_cmd_transition(CommandList, ShadowMap, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_DEPTH_WRITE);
+        auto ShadowPassDSV = Backend->ShadowPass.ShadowMapsDSVViews[CurrentBackBufferIndex];
+        CommandList->ClearDepthStencilView(ShadowPassDSV.CPU, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
+        dx12_cmd_transition(CommandList, ShadowMap, D3D12_RESOURCE_STATE_DEPTH_WRITE, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+    }
+
 #endif
 
+    // 
     // Render rest of the scene
-    // Render rest of the scene
-    // Render rest of the scene
-    // Render rest of the scene
-    // Render rest of the scene
+    // 
 
     // Frame that was presented needs to be set to render target again
     dx12_cmd_transition(CommandList, MainPassRenderBuffer, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
 
-    CommandList->ClearRenderTargetView(MainPassRTV, &ClearColor.x, 0, nullptr);
-    CommandList->ClearDepthStencilView(MainPassDSV, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
-    CommandList->OMSetRenderTargets(1, &MainPassRTV, false, &MainPassDSV);
+    CommandList->ClearRenderTargetView(MainPassRTV.CPU, &ClearColor.x, 0, nullptr);
+    CommandList->ClearDepthStencilView(MainPassDSV.CPU, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
+    CommandList->OMSetRenderTargets(1, &MainPassRTV.CPU, false, &MainPassDSV.CPU);
 
     dx12_cmd_set_viewport(CommandList, 0, 0, (f32)SwapChainDesc.BufferDesc.Width, (f32)SwapChainDesc.BufferDesc.Height);
     dx12_cmd_set_scrissor_rect(CommandList, 0, 0, SwapChainDesc.BufferDesc.Width, SwapChainDesc.BufferDesc.Height);
 
     CommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-    // Render a skybox
-    if (false)
+    const bool RenderSkybox = false;
+    if (RenderSkybox)
     {
         auto& Skybox = Backend->Skybox;
         CommandList->SetGraphicsRootSignature(Skybox.RootSignature.Handle);
@@ -931,51 +920,50 @@ internal void d3d12_render_backend_render(dx12_render_backend* Backend, const ga
         CommandList->SetGraphicsRoot32BitConstants(0, sizeof(Renderer->RenderData.SkyboxBuffer) / 4, &Renderer->RenderData.SkyboxBuffer, 0);
 
         // Bind vertex positions
-        DX12CmdSetVertexBuffer(CommandList, 0, Skybox.VertexBuffer.Buffer.Handle, Skybox.VertexBuffer.Buffer.Size, sizeof(v3));
+        dx12_cmd_set_vertex_buffer(CommandList, 0, Skybox.VertexBuffer.Buffer.Handle, Skybox.VertexBuffer.Buffer.Size, sizeof(v3));
 
         // Bind index buffer
-        DX12CmdSetIndexBuffer(CommandList, Skybox.IndexBuffer.Buffer.Handle, sizeof(c_SkyboxIndices), DXGI_FORMAT_R32_UINT);
+        dx12_cmd_set_index_buffer(CommandList, Skybox.IndexBuffer.Buffer.Handle, sizeof(c_SkyboxIndices), DXGI_FORMAT_R32_UINT);
 
         CommandList->DrawIndexedInstanced(36, 1, 0, 0, 0);
     }
 
-    // Render instanced cuboids
-    if (Renderer->Cuboid.InstanceCount > 0)
+    const bool RenderInstancedCuboids = true;
+    if (RenderInstancedCuboids && Renderer->Cuboid.InstanceCount > 0)
     {
         // Set root constants
         // Number of 32 bit values - 16 floats in 4x4 matrix
         CommandList->SetGraphicsRootSignature(Backend->Cuboid.RootSignature.Handle);
-
-        CommandList->SetDescriptorHeaps(1, (ID3D12DescriptorHeap* const*)&Backend->TextureDescriptorHeap);
 
         CommandList->SetPipelineState(Backend->Cuboid.Pipeline.Handle);
 
         CommandList->SetGraphicsRoot32BitConstants(0, sizeof(cuboid_buffer_data) / 4, &Renderer->RenderData.CuboidBuffer, 0);
         CommandList->SetGraphicsRootConstantBufferView(1, Backend->LightEnvironmentConstantBuffers[CurrentBackBufferIndex].Buffer.Handle->GetGPUVirtualAddress());
 
-        CommandList->SetGraphicsRootDescriptorTable(2, Backend->TextureDescriptorHeap.gpu_base());
+        CommandList->SetGraphicsRootDescriptorTable(2, Backend->BaseTextureDescriptorHandle.GPU);
 
-        DX12CmdSetVertexBuffers2(CommandList, 0, Backend->Cuboid.PositionsVertexBuffer.Buffer.Handle, Backend->Cuboid.PositionsVertexBuffer.Buffer.Size, sizeof(cuboid_vertex), Backend->Cuboid.TransformVertexBuffers[CurrentBackBufferIndex].Buffer.Handle, Renderer->Cuboid.InstanceCount * sizeof(cuboid_transform_vertex_data), sizeof(cuboid_transform_vertex_data));
+        dx12_cmd_set_2_vertex_buffers(CommandList, 0, Backend->Cuboid.PositionsVertexBuffer.Buffer.Handle, Backend->Cuboid.PositionsVertexBuffer.Buffer.Size, sizeof(cuboid_vertex), Backend->Cuboid.TransformVertexBuffers[CurrentBackBufferIndex].Buffer.Handle, Renderer->Cuboid.InstanceCount * sizeof(cuboid_transform_vertex_data), sizeof(cuboid_transform_vertex_data));
 
         // Bind index buffer
-        DX12CmdSetIndexBuffer(CommandList, Backend->Quad.IndexBuffer.Buffer.Handle, 36 * sizeof(u32), DXGI_FORMAT_R32_UINT);
+        dx12_cmd_set_index_buffer(CommandList, Backend->Quad.IndexBuffer.Buffer.Handle, 36 * sizeof(u32), DXGI_FORMAT_R32_UINT);
 
         // Issue draw call
         CommandList->DrawIndexedInstanced(36, Renderer->Cuboid.InstanceCount, 0, 0, 0);
     }
 
     // Render distant objects
-    if (Renderer->DistantQuad.IndexCount > 0 && false)
+    const bool RenderDistantObjects = false;
+    if (RenderDistantObjects && Renderer->DistantQuad.IndexCount > 0)
     {
         CommandList->SetGraphicsRootSignature(Backend->Skybox.RootSignature.Handle);
         CommandList->SetPipelineState(Backend->DistantQuad.Pipeline.Handle);
         CommandList->SetGraphicsRoot32BitConstants(0, sizeof(distant_quad_buffer_data) / 4, &Renderer->RenderData.DistantObjectBuffer, 0);
 
         // Bind vertex positions
-        DX12CmdSetVertexBuffer(CommandList, 0, Backend->DistantQuad.VertexBuffers[CurrentBackBufferIndex].Buffer.Handle, Renderer->DistantQuad.IndexCount * sizeof(distant_quad_vertex), sizeof(distant_quad_vertex));
+        dx12_cmd_set_vertex_buffer(CommandList, 0, Backend->DistantQuad.VertexBuffers[CurrentBackBufferIndex].Buffer.Handle, Renderer->DistantQuad.IndexCount * sizeof(distant_quad_vertex), sizeof(distant_quad_vertex));
 
         // Bind index buffer
-        DX12CmdSetIndexBuffer(CommandList, Backend->Quad.IndexBuffer.Buffer.Handle, Renderer->DistantQuad.IndexCount * sizeof(u32), DXGI_FORMAT_R32_UINT);
+        dx12_cmd_set_index_buffer(CommandList, Backend->Quad.IndexBuffer.Buffer.Handle, Renderer->DistantQuad.IndexCount * sizeof(u32), DXGI_FORMAT_R32_UINT);
 
         CommandList->DrawIndexedInstanced(Renderer->DistantQuad.IndexCount, 1, 0, 0, 0);
     }
@@ -983,7 +971,8 @@ internal void d3d12_render_backend_render(dx12_render_backend* Backend, const ga
     CommandList->SetGraphicsRootSignature(Backend->RootSignature.Handle);
 
     // Render quaded cuboids
-    if (Renderer->QuadedCuboid.IndexCount > 0 && true)
+    const bool RenderQuadedCuboid = true;
+    if (RenderQuadedCuboid && Renderer->QuadedCuboid.IndexCount > 0)
     {
         CommandList->SetPipelineState(Backend->QuadedCuboid.Pipeline.Handle);
 
@@ -991,27 +980,28 @@ internal void d3d12_render_backend_render(dx12_render_backend* Backend, const ga
         CommandList->SetGraphicsRootConstantBufferView(1, Backend->LightEnvironmentConstantBuffers[CurrentBackBufferIndex].Buffer.Handle->GetGPUVirtualAddress());
 
         // Bind vertex buffer
-        DX12CmdSetVertexBuffer(CommandList, 0, Backend->QuadedCuboid.VertexBuffers[CurrentBackBufferIndex].Buffer.Handle, Backend->QuadedCuboid.VertexBuffers[CurrentBackBufferIndex].Buffer.Size, sizeof(quaded_cuboid_vertex));
+        dx12_cmd_set_vertex_buffer(CommandList, 0, Backend->QuadedCuboid.VertexBuffers[CurrentBackBufferIndex].Buffer.Handle, Backend->QuadedCuboid.VertexBuffers[CurrentBackBufferIndex].Buffer.Size, sizeof(quaded_cuboid_vertex));
 
         // Bind index buffer
-        DX12CmdSetIndexBuffer(CommandList, Backend->Quad.IndexBuffer.Buffer.Handle, Renderer->QuadedCuboid.IndexCount * sizeof(u32), DXGI_FORMAT_R32_UINT);
+        dx12_cmd_set_index_buffer(CommandList, Backend->Quad.IndexBuffer.Buffer.Handle, Renderer->QuadedCuboid.IndexCount * sizeof(u32), DXGI_FORMAT_R32_UINT);
 
         // Issue draw call
         CommandList->DrawIndexedInstanced(Renderer->QuadedCuboid.IndexCount, 1, 0, 0, 0);
     }
 
     // Render quads
-    if (Renderer->Quad.IndexCount > 0)
+    const bool RenderQuads = true;
+    if (RenderQuads && Renderer->Quad.IndexCount > 0)
     {
         auto& Quad = Backend->Quad;
         CommandList->SetGraphicsRootSignature(Backend->RootSignature.Handle);
         CommandList->SetPipelineState(Quad.Pipeline.Handle);
 
         // Bind vertex buffer
-        DX12CmdSetVertexBuffer(CommandList, 0, Quad.VertexBuffers[CurrentBackBufferIndex].Buffer.Handle, Renderer->Quad.IndexCount * sizeof(quad_vertex), sizeof(quad_vertex));
+        dx12_cmd_set_vertex_buffer(CommandList, 0, Quad.VertexBuffers[CurrentBackBufferIndex].Buffer.Handle, Renderer->Quad.IndexCount * sizeof(quad_vertex), sizeof(quad_vertex));
 
         // Bind index buffer
-        DX12CmdSetIndexBuffer(CommandList, Quad.IndexBuffer.Buffer.Handle, Renderer->Quad.IndexCount * sizeof(u32), DXGI_FORMAT_R32_UINT);
+        dx12_cmd_set_index_buffer(CommandList, Quad.IndexBuffer.Buffer.Handle, Renderer->Quad.IndexCount * sizeof(u32), DXGI_FORMAT_R32_UINT);
 
         // TODO: For now just share the first half of the signature buffer, this needs some sort of distinction between HUD and Game stuff
         CommandList->SetGraphicsRoot32BitConstants(0, 16, &Renderer->RenderData.CuboidBuffer.ViewProjection, 0);
@@ -1021,15 +1011,16 @@ internal void d3d12_render_backend_render(dx12_render_backend* Backend, const ga
     }
 
     // Render HUD
-    if (Renderer->HUD.IndexCount > 0 && true)
+    const bool RenderHUD = true;
+    if (RenderHUD && Renderer->HUD.IndexCount > 0)
     {
         CommandList->SetPipelineState(Backend->HUD.Pipeline.Handle);
 
         // Bind vertex buffer
-        DX12CmdSetVertexBuffer(CommandList, 0, Backend->HUD.VertexBuffers[CurrentBackBufferIndex].Buffer.Handle, Renderer->HUD.IndexCount * sizeof(hud_quad_vertex), sizeof(hud_quad_vertex));
+        dx12_cmd_set_vertex_buffer(CommandList, 0, Backend->HUD.VertexBuffers[CurrentBackBufferIndex].Buffer.Handle, Renderer->HUD.IndexCount * sizeof(hud_quad_vertex), sizeof(hud_quad_vertex));
 
         // Bind index buffer
-        DX12CmdSetIndexBuffer(CommandList, Backend->Quad.IndexBuffer.Buffer.Handle, Renderer->HUD.IndexCount * sizeof(u32), DXGI_FORMAT_R32_UINT);
+        dx12_cmd_set_index_buffer(CommandList, Backend->Quad.IndexBuffer.Buffer.Handle, Renderer->HUD.IndexCount * sizeof(u32), DXGI_FORMAT_R32_UINT);
 
         CommandList->SetGraphicsRoot32BitConstants(0, 16, &Renderer->RenderData.HUDBuffer.Projection, 0);
 
@@ -1037,22 +1028,20 @@ internal void d3d12_render_backend_render(dx12_render_backend* Backend, const ga
         CommandList->DrawIndexedInstanced(Renderer->HUD.IndexCount, 1, 0, 0, 0);
     }
 
-    bool EnableBloomPass = true;
+    const bool EnableBloomPass = Renderer->EnableBloom;
     dx12_cmd_transition(CommandList, MainPassRenderBuffer, D3D12_RESOURCE_STATE_RENDER_TARGET, EnableBloomPass ? D3D12_RESOURCE_STATE_UNORDERED_ACCESS : D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 
     // Bloom Pass
+    // Take MainPassRenderBuffer, do magic and output it 
     if (EnableBloomPass)
     {
         auto& BloomPass = Backend->BloomPass;
-        // Take MainPassRenderBuffer, do magic and output it 
 
         //Set root signature, pso and descriptor heap
         CommandList->SetPipelineState(BloomPass.PipelineCompute.Handle);
         CommandList->SetComputeRootSignature(BloomPass.RootSignature.Handle);
 
-        ID3D12DescriptorHeap* Heaps[] = { Backend->MainPass.SRVDescriptorHeap.Handle };
-        CommandList->SetDescriptorHeaps(1, Heaps);
-        CommandList->SetComputeRootDescriptorTable(0, Backend->MainPass.GPUSRVHandles[CurrentBackBufferIndex]);
+        CommandList->SetComputeRootDescriptorTable(0, Backend->MainPass.RenderBuffersSRVViews[CurrentBackBufferIndex].GPU);
 
         // Dispatch the compute shader with one thread per 8x8 pixels
         u32 Width = SwapChainDesc.BufferDesc.Width;
@@ -1068,32 +1057,27 @@ internal void d3d12_render_backend_render(dx12_render_backend* Backend, const ga
     // Copy main pass render target to swapchain target and optionally apply some post-processing
     //
     dx12_cmd_transition(CommandList, SwapChainBackBuffer, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
-    // Clearning not needed
-    //CommandList->ClearRenderTargetView(SwapChainRTV, &ClearColor.x, 0, nullptr);
-    CommandList->OMSetRenderTargets(1, &SwapChainRTV, false, nullptr);
 
-    bool DisplayImage = true;
+    const bool DisplayImage = true;
     if (DisplayImage)
     {
+        CommandList->OMSetRenderTargets(1, &SwapChainRTV.CPU, false, nullptr);
         dx12_cmd_set_viewport(CommandList, 0, 0, (f32)SwapChainDesc.BufferDesc.Width, (f32)SwapChainDesc.BufferDesc.Height);
         dx12_cmd_set_scrissor_rect(CommandList, 0, 0, SwapChainDesc.BufferDesc.Width, SwapChainDesc.BufferDesc.Height);
 
         CommandList->SetPipelineState(Backend->FullscreenPass.Pipeline.Handle);
         CommandList->SetGraphicsRootSignature(Backend->FullscreenPass.RootSignature.Handle);
 
-        ID3D12DescriptorHeap* Heaps[] = { Backend->MainPass.SRVDescriptorHeap.Handle };
-        CommandList->SetDescriptorHeaps(1, Heaps);
-
-        CommandList->SetGraphicsRootDescriptorTable(0, Backend->MainPass.GPUSRVHandles[CurrentBackBufferIndex]);
+        CommandList->SetGraphicsRootDescriptorTable(0, Backend->MainPass.RenderBuffersSRVViews[CurrentBackBufferIndex].GPU);
 
         CommandList->DrawInstanced(3, 1, 0, 0);
     }
 
     // Render debug UI
-    bool RenderImGui = true;
+    const bool RenderImGui = true;
     if (RenderImGui)
     {
-        CommandList->SetDescriptorHeaps(1, &ImGuiDescriptorHeap);
+        // ImGui uses our SRV heap
         ImGui_ImplDX12_RenderDrawData(ImGuiDrawData, CommandList);
     }
 
@@ -1119,7 +1103,7 @@ internal void d3d12_render_backend_render(dx12_render_backend* Backend, const ga
     DumpInfoQueue();
 }
 
-internal void d3d12_render_backend_resize_swapchain(dx12_render_backend* Backend, u32 RequestWidth, u32 RequestHeight)
+internal void d3d12_render_backend_resize_buffers(dx12_render_backend* Backend, u32 RequestWidth, u32 RequestHeight)
 {
     // Flush the GPU queue to make sure the swap chain's back buffers are not being referenced by an in-flight command list.
     dx12_render_backend_flush(Backend);
@@ -1141,44 +1125,18 @@ internal void d3d12_render_backend_resize_swapchain(dx12_render_backend* Backend
 
         Backend->CurrentBackBufferIndex = Backend->SwapChain->GetCurrentBackBufferIndex();
 
-        // Place rtv descriptor sequentially in memory
+        // Rebind existing views
+        for (u32 i = 0; i < FIF; ++i)
         {
-            D3D12_CPU_DESCRIPTOR_HANDLE RtvHandle = Backend->RTVDescriptorHeap.cpu_base();
-            for (u32 i = 0; i < FIF; ++i)
-            {
-                DxAssert(Backend->SwapChain->GetBuffer(i, IID_PPV_ARGS(&Backend->SwapChainBackbuffers[i])));
-                Backend->Device->CreateRenderTargetView(Backend->SwapChainBackbuffers[i], nullptr, RtvHandle);
-
-                Backend->SwapChainBufferRTVCPUHandles[i] = RtvHandle;
-                RtvHandle.ptr += Backend->DescriptorSizes.RTV;
-            }
+            // There is no need to free the views since they do the description of the resource does not change at all
+            DxAssert(Backend->SwapChain->GetBuffer(i, IID_PPV_ARGS(&Backend->SwapChainBackbuffers[i])));
+            Backend->Device->CreateRenderTargetView(Backend->SwapChainBackbuffers[i], nullptr, Backend->SwapChainBufferRTVViews[i].CPU);
         }
     }
 
     // MainPass - Resize render buffers and recreate RTV and DSV views
     {
         auto& MainPass = Backend->MainPass;
-        //D3D12_RENDER_TARGET_VIEW_DESC RtvDesc = {};
-
-        D3D12_SHADER_RESOURCE_VIEW_DESC SrvDesc = {};
-        SrvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-        SrvDesc.Format = Backend->MainPass.Format;
-        SrvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-        SrvDesc.Texture2D.MipLevels = 1;
-        SrvDesc.Texture2D.MostDetailedMip = 0;
-        SrvDesc.Texture2D.PlaneSlice = 0;
-        SrvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
-
-        D3D12_DEPTH_STENCIL_VIEW_DESC DsvDesc = {};
-        DsvDesc.Format = DXGI_FORMAT_D32_FLOAT;
-        DsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
-        DsvDesc.Texture2D.MipSlice = 0;
-        DsvDesc.Flags = D3D12_DSV_FLAG_NONE;
-
-        auto RtvHandle = MainPass.RTVDescriptorHeap.cpu_base();
-        auto SrvHandle = MainPass.SRVDescriptorHeap.cpu_base();
-        auto GPUSrvHandle = MainPass.SRVDescriptorHeap.gpu_base();
-        auto DsvHandle = MainPass.DSVDescriptorHeap.cpu_base();;
 
         const bool AllowUnorderedAccess = true;
         for (u32 i = 0; i < FIF; i++)
@@ -1186,34 +1144,20 @@ internal void d3d12_render_backend_resize_swapchain(dx12_render_backend* Backend
             // Render buffers
             {
                 MainPass.RenderBuffers[i]->Release();
-                MainPass.RenderBuffers[i] = dx12_render_target_create(Backend->Device, SrvDesc.Format, SwapChainDesc.BufferDesc.Width, SwapChainDesc.BufferDesc.Height, AllowUnorderedAccess, L"MainPassBuffer");
+                MainPass.RenderBuffers[i] = dx12_render_target_create(Backend->Device, Backend->MainPass.Format, SwapChainDesc.BufferDesc.Width, SwapChainDesc.BufferDesc.Height, AllowUnorderedAccess, L"MainPassBuffer");
 
                 // Render Target View
-                Backend->Device->CreateRenderTargetView(MainPass.RenderBuffers[i], nullptr, RtvHandle);
+                Backend->Device->CreateRenderTargetView(MainPass.RenderBuffers[i], nullptr, MainPass.RenderBuffersRTVViews[i].CPU);
 
                 // Shader Resouces View
-                Backend->Device->CreateShaderResourceView(MainPass.RenderBuffers[i], &SrvDesc, SrvHandle);
-
-                // GPU handles
-                MainPass.GPUSRVHandles[i] = GPUSrvHandle;
-                GPUSrvHandle.ptr += Backend->DescriptorSizes.CBV_SRV_UAV;
-
-                // CPU handles
-                SrvHandle.ptr += Backend->DescriptorSizes.CBV_SRV_UAV;
-                MainPass.RTVHandles[i] = RtvHandle;
-                RtvHandle.ptr += Backend->DescriptorSizes.RTV;
+                Backend->Device->CreateShaderResourceView(MainPass.RenderBuffers[i], nullptr, MainPass.RenderBuffersSRVViews[i].CPU);
             }
 
             // Depth buffers
             {
                 MainPass.DepthBuffers[i]->Release();
-                MainPass.DepthBuffers[i] = dx12_depth_buffer_create(Backend->Device, SwapChainDesc.BufferDesc.Width, SwapChainDesc.BufferDesc.Height, DsvDesc.Format, DsvDesc.Format, L"MainPassDepthBuffer");
-
-                Backend->Device->CreateDepthStencilView(MainPass.DepthBuffers[i], &DsvDesc, DsvHandle);
-
-                // Increment by the size of the dsv descriptor size
-                MainPass.DSVHandles[i] = DsvHandle;
-                DsvHandle.ptr += Backend->DescriptorSizes.DSV;
+                MainPass.DepthBuffers[i] = dx12_depth_buffer_create(Backend->Device, SwapChainDesc.BufferDesc.Width, SwapChainDesc.BufferDesc.Height, DXGI_FORMAT_D32_FLOAT, DXGI_FORMAT_D32_FLOAT, L"MainPassDepthBuffer");
+                Backend->Device->CreateDepthStencilView(MainPass.DepthBuffers[i], nullptr, MainPass.DepthBuffersViews[i].CPU);
             }
         }
     }

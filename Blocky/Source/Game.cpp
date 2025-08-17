@@ -398,6 +398,9 @@ internal void game_update(game* Game, game_renderer* Renderer, const game_input*
 
         ImGui::Separator();
         ImGui::DragFloat("Directional Light Power", &DirectionalLightPower, 0.2f, 0.0f, 100.0f);
+        ImGui::Separator();
+        ImGui::Checkbox("Bloom", &Renderer->EnableBloom);
+        ImGui::Checkbox("Shadows", &Renderer->EnableShadows);
 
         ImGui::End();
     }

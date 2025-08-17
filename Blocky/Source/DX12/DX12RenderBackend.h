@@ -42,6 +42,9 @@ struct dx12_render_backend
     dx12_descriptor_heap_free_list_allocator DSVAllocator;
     dx12_descriptor_heap_free_list_allocator SRVCBVUAV_Allocator;
 
+    // CPU-Only views
+    dx12_descriptor_heap_free_list_allocator SRVCBVUAV_CPU_ONLY_Allocator;
+
     u32 CurrentBackBufferIndex;
 
     bool DepthTesting = true;
@@ -60,7 +63,7 @@ struct dx12_render_backend
 
     // Textures
     texture WhiteTexture;
-    dx12_descriptor_handle WhiteTextureDescriptorHandle;
+    dx12_descriptor_handle BaseTextureDescriptorHandle; // Allocated from SRVCBVUAV_Allocator, contains 'c_MaxTexturesPerDrawCall' views
 
     // These will be rendered to and then copied via fullscreen pass to swapchain buffers
     struct
@@ -157,8 +160,8 @@ internal dx12_render_backend* dx12_render_backend_create(arena* Arena, const win
 internal void dx12_render_backend_destroy(dx12_render_backend* Backend);
 
 internal void dx12_render_backend_initialize_pipeline(arena* Arena, dx12_render_backend* Backend);
-internal void d3d12_render_backend_resize_swapchain(dx12_render_backend* Backend, u32 RequestWidth, u32 RequestHeight);
-internal void d3d12_render_backend_render(dx12_render_backend* Backend, const game_renderer* Renderer, ImDrawData* ImGuiDrawData, ID3D12DescriptorHeap* ImGuiDescriptorHeap);
+internal void d3d12_render_backend_resize_buffers(dx12_render_backend* Backend, u32 RequestWidth, u32 RequestHeight);
+internal void d3d12_render_backend_render(dx12_render_backend* Backend, const game_renderer* Renderer, ImDrawData* ImGuiDrawData);
 
 internal u64 dx12_render_backend_signal(ID3D12CommandQueue* CommandQueue, ID3D12Fence* Fence, u64* FenceValue);
 internal void dx12_render_backend_wait_for_fence_value(ID3D12Fence* Fence, u64 FenceValue, HANDLE FenceEvent, u32 Duration = UINT32_MAX);

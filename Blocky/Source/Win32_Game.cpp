@@ -552,7 +552,7 @@ int main(int argc, char** argv)
         {
             g_DoResize = false;
 
-            d3d12_render_backend_resize_swapchain(DX12Backend, g_ClientWidth, g_ClientHeight);
+            d3d12_render_backend_resize_buffers(DX12Backend, g_ClientWidth, g_ClientHeight);
         }
 
         // ImGui::Begin();
@@ -570,7 +570,7 @@ int main(int argc, char** argv)
         // ImGui::End
 
         // Render stuff
-        d3d12_render_backend_render(DX12Backend, Renderer, Win32Dx12ImGuiContext->CurrentDrawData, Win32Dx12ImGuiContext->SrvDescHeap);
+        d3d12_render_backend_render(DX12Backend, Renderer, Win32Dx12ImGuiContext->CurrentDrawData);
 
         // Clear old state
         game_renderer_clear(Renderer);

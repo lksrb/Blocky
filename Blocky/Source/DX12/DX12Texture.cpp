@@ -273,15 +273,12 @@ internal texture texture_create(render_backend* Backend, u32 Width, u32 Height, 
         UploadBuffer->Release();
     }
 
-    Assert(Backend->OfflineTextureHeapIndex < 1024, "Descriptor heap reached maximum capacity!");
-
     if (TextureDesc.MipLevels > 1)
     {
         texture_generate_mips(Backend, Texture.Handle, Width, Height, TextureDesc.MipLevels, Format);
     }
 
     // Describe and create a SRV for the white texture.
-    Texture.SRVDescriptor = Backend->OfflineTextureHeap.Handle->GetCPUDescriptorHandleForHeapStart();
     {
         D3D12_SHADER_RESOURCE_VIEW_DESC Desc = {};
         Desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
@@ -291,11 +288,11 @@ internal texture texture_create(render_backend* Backend, u32 Width, u32 Height, 
         Desc.Texture2D.MostDetailedMip = 0;
         Desc.Texture2D.PlaneSlice = 0;
         Desc.Texture2D.ResourceMinLODClamp = 0.0f;
-        Texture.SRVDescriptor.ptr += Backend->OfflineTextureHeapIndex * Backend->DescriptorSizes.CBV_SRV_UAV; // Free slot
-        Device->CreateShaderResourceView(Texture.Handle, &Desc, Texture.SRVDescriptor);
-
-        Backend->OfflineTextureHeapIndex++;
+        Texture.View = Backend->SRVCBVUAV_CPU_ONLY_Allocator.Alloc();
+        Device->CreateShaderResourceView(Texture.Handle, &Desc, Texture.View.CPU);
     }
+
+    Texture.Mips = TextureDesc.MipLevels;
 
     return Texture;
 }
@@ -315,6 +312,8 @@ internal texture texture_create(render_backend* Backend, const char* Path, bool 
 
 internal void texture_destroy(render_backend* Backend, texture* Texture)
 {
+    Backend->SRVCBVUAV_CPU_ONLY_Allocator.Free(Texture->View);
+
     Texture->Handle->Release();
     Texture->Handle = nullptr;
     Texture->Width = 0;

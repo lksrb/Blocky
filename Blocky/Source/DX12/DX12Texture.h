@@ -14,11 +14,12 @@ enum class texture_format : u32
 struct texture
 {
     ID3D12Resource* Handle;
+    dx12_descriptor_handle View;
+
     u32 Width;
     u32 Height;
     DXGI_FORMAT Format;
-    D3D12_CPU_DESCRIPTOR_HANDLE SRVDescriptor;
-    u32 Mips = 1;
+    u32 Mips;
 };
 
 struct dx12_render_backend;

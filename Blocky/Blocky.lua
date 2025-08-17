@@ -30,6 +30,10 @@ project "Blocky"
 		"NOMINMAX"
 	}
 
+	disablewarnings { 
+		"4756" 
+	}
+
 	flags {
 		"NoIncrementalLink"
 	}

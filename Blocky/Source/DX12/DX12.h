@@ -69,7 +69,7 @@ internal void dx12_cmd_set_scrissor_rect(ID3D12GraphicsCommandList* CommandList,
     CommandList->RSSetScissorRects(1, &ScissorRect);
 }
 
-internal void DX12CmdSetIndexBuffer(ID3D12GraphicsCommandList* CommandList, ID3D12Resource* BufferHandle, u32 SizeInBytes, DXGI_FORMAT Format)
+internal void dx12_cmd_set_index_buffer(ID3D12GraphicsCommandList* CommandList, ID3D12Resource* BufferHandle, u32 SizeInBytes, DXGI_FORMAT Format)
 {
     // Bind index buffer
     local_persist D3D12_INDEX_BUFFER_VIEW IndexBufferView;
@@ -79,7 +79,7 @@ internal void DX12CmdSetIndexBuffer(ID3D12GraphicsCommandList* CommandList, ID3D
     CommandList->IASetIndexBuffer(&IndexBufferView);
 }
 
-internal void DX12CmdSetVertexBuffer(ID3D12GraphicsCommandList* CommandList, u32 StartSlot, ID3D12Resource* BufferHandle, u32 SizeInBytes, u32 StrideInBytes)
+internal void dx12_cmd_set_vertex_buffer(ID3D12GraphicsCommandList* CommandList, u32 StartSlot, ID3D12Resource* BufferHandle, u32 SizeInBytes, u32 StrideInBytes)
 {
     local_persist D3D12_VERTEX_BUFFER_VIEW VertexBufferView;
     VertexBufferView.BufferLocation = BufferHandle->GetGPUVirtualAddress();
@@ -88,7 +88,7 @@ internal void DX12CmdSetVertexBuffer(ID3D12GraphicsCommandList* CommandList, u32
     CommandList->IASetVertexBuffers(StartSlot, 1, &VertexBufferView);
 }
 
-internal void DX12CmdSetVertexBuffers2(ID3D12GraphicsCommandList* CommandList, u32 StartSlot, ID3D12Resource* BufferHandle0, u32 SizeInBytes0, u32 StrideInBytes0, ID3D12Resource* BufferHandle1, u32 SizeInBytes1, u32 StrideInBytes1)
+internal void dx12_cmd_set_2_vertex_buffers(ID3D12GraphicsCommandList* CommandList, u32 StartSlot, ID3D12Resource* BufferHandle0, u32 SizeInBytes0, u32 StrideInBytes0, ID3D12Resource* BufferHandle1, u32 SizeInBytes1, u32 StrideInBytes1)
 {
     // Bind vertex positions
     local_persist D3D12_VERTEX_BUFFER_VIEW VertexBufferViews[2];
@@ -458,6 +458,8 @@ struct dx12_descriptor_heap_free_list_allocator
     {
         IM_ASSERT(m_FreeIndicesSize > 0);
         i32 Index = m_FreeIndices[m_FreeIndicesSize - 1];
+
+        auto Desc = m_Heap.Handle->GetDesc();
 
         D3D12_CPU_DESCRIPTOR_HANDLE out_cpu_desc_handle;
         D3D12_GPU_DESCRIPTOR_HANDLE out_gpu_desc_handle;

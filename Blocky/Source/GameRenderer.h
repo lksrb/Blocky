@@ -246,6 +246,10 @@ struct game_renderer
         hud_quad_vertex* VertexDataBase;
         u32 IndexCount = 0;
     } HUD;
+
+    // Render feature enabling
+    bool EnableShadows = true;
+    bool EnableBloom = true;
 };
 
 internal constexpr v3 c_SkyboxVertices[8] =
