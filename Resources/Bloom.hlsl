@@ -2,15 +2,21 @@
 // Bloom shader
 //
 
+cbuffer root_constants : register(b0)
+{
+    float4 c_Params;
+    float c_LOD;
+    int c_Mode; // 0 = prefilter, 1 = downsample, 2 = firstUpsample, 3 = upsample
+};
+
 // This texture is used was writing
 RWTexture2D<float4> o_Image : register(u0);
 
-// samplers
-// SamplerState g_TextureSampler;
-// Texture2D<float4> g_Texture : register(t0);
-// 
-// SamplerState g_BloomTextureSampler;
-// Texture2D<float4> g_BloomTexture : register(t0);
+Texture2D<float4> g_Texture : register(t0);
+
+Texture2D<float4> g_BloomTexture : register(t1);
+
+SamplerState g_Sampler : register(s0);
 
 #define MODE_PREFILTER      0
 #define MODE_DOWNSAMPLE     1
@@ -88,7 +94,7 @@ float3 DownsampleBox13(Texture2D<float4> Texture, SamplerState Sampler, float lo
     return result;
 }
 
-[numthreads(16, 16, 1)]
+[numthreads(4, 4, 1)]
 void CSMain(uint3 DTid : SV_DispatchThreadID)
 {
     // DTid.xy is the pixel coordinate
@@ -99,12 +105,10 @@ void CSMain(uint3 DTid : SV_DispatchThreadID)
     float2 UV = float2(float(DTid.x) / TextureSize.x, float(DTid.y) / TextureSize.y);
     UV += (1.0f / TextureSize) * 0.5f;
     
-    uint RenderMode = MODE_PREFILTER;
-    
-    float4 Color = o_Image[DTid.xy];
-    if (RenderMode == MODE_PREFILTER)
+    float4 Color = float4(1.0, 0.0, 1.0, 1.0);
+    if (c_Mode == MODE_PREFILTER)
     {
-        //Color.rgb = DownsampleBox13(texture, g_Sampler, 0, In.UV, 1.0f / TextureSize);
+        Color.rgb = DownsampleBox13(g_Texture, g_Sampler, 0, UV, 1.0f / TextureSize);
         Color = Prefilter(Color, UV);
         Color.a = 1.0f;
     }

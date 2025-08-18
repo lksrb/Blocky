@@ -20,7 +20,7 @@ inline v2b<T> operator*(const v2b<T>& v0, const v2b<T>& v1)
 }
 
 template<typename T>
-inline v2b<T> operator*(f32 scalar, const v2b<T>& v0)
+inline v2b<T> operator*(T scalar, const v2b<T>& v0)
 {
     return v0 * scalar;
 }
@@ -30,11 +30,21 @@ inline v2b<T> operator/(const v2b<T>& v0, const v2b<T>& v1)
 {
     return v2b<T>(v0.x / v1.x, v0.y / v1.y);
 }
+template<typename T> 
+inline v2b<T> operator/(const v2b<T>& v0, T scalar)
+{
+    return v2b<T>(v0.x / scalar, v0.y / scalar);
+}
 
 template<typename T>
-inline v2b<T> operator*(const v2b<T>& v0, f32 scalar)
+inline v2b<T> operator*(const v2b<T>& v0, T scalar)
 {
     return v2b<T>(v0.x * scalar, v0.y * scalar);
+}
+
+template<typename T> inline v2b<T> operator%(const v2b<T>& v0, i32 scalar)
+{
+    return v2b<T>(v0.x % scalar, v0.y % scalar);
 }
 
 // Vector3

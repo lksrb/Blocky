@@ -135,6 +135,21 @@ struct cuboid_buffer_data
     m4 LightSpaceMatrix;
 };
 
+struct bloom_pass_buffer_data
+{
+    enum class mode : i32
+    {
+        PreFilter = 0,
+        DownSample = 1,
+        FirstUpSample = 2,
+        UpSample = 3,
+    };
+
+    v4 Params;
+    f32 LOD;
+    mode Mode;
+};
+
 struct shadow_pass_buffer_data
 {
     m4 LightSpaceMatrix;

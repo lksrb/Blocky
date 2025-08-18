@@ -492,8 +492,11 @@ template<typename T> inline v2b<T> operator+(const v2b<T>& v0, const v2b<T>& v1)
 template<typename T> inline v2b<T> operator-(const v2b<T>& v0, const v2b<T>& v1);
 template<typename T> inline v2b<T> operator*(const v2b<T>& v0, const v2b<T>& v1);
 template<typename T> inline v2b<T> operator/(const v2b<T>& v0, const v2b<T>& v1);
-template<typename T> inline v2b<T> operator*(const v2b<T>& v0, f32 scalar);
-template<typename T> inline v2b<T> operator*(f32 scalar, const v2b<T>& v0);
+
+template<typename T> inline v2b<T> operator/(const v2b<T>& v0, const v2b<T>& v1);
+template<typename T> inline v2b<T> operator*(const v2b<T>& v0, T scalar);
+template<typename T> inline v2b<T> operator*(T scalar, const v2b<T>& v0);
+template<typename T> inline v2b<T> operator%(const v2b<T>& v0, i32 scalar);
 
 // Vector3
 inline v3 operator+(const v3& v0, const v3& v1);
