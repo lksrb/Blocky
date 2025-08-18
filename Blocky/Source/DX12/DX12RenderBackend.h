@@ -84,6 +84,12 @@ struct dx12_render_backend
     {
         dx12_root_signature RootSignature;
         dx12_pipeline PipelineCompute;
+
+        const i32 BloomComputeWorkgroupSize = 4;
+
+        // Bloom Textures
+        ID3D12Resource* BloomTextures[FIF][3];
+        dx12_descriptor_handle BloomTexturesViews[FIF][3];
     } BloomPass;
 
     // Quad
@@ -160,9 +166,7 @@ internal dx12_render_backend* dx12_render_backend_create(arena* Arena, const win
 internal void dx12_render_backend_destroy(dx12_render_backend* Backend);
 
 internal void dx12_render_backend_initialize_pipeline(arena* Arena, dx12_render_backend* Backend);
+internal void dx12_render_backend_generate_mips(dx12_render_backend* Backend, ID3D12Resource* TextureResource, u32 Width, u32 Height, u32 MipCount, DXGI_FORMAT Format);
 internal void d3d12_render_backend_resize_buffers(dx12_render_backend* Backend, u32 RequestWidth, u32 RequestHeight);
 internal void d3d12_render_backend_render(dx12_render_backend* Backend, const game_renderer* Renderer, ImDrawData* ImGuiDrawData);
-
-internal u64 dx12_render_backend_signal(ID3D12CommandQueue* CommandQueue, ID3D12Fence* Fence, u64* FenceValue);
-internal void dx12_render_backend_wait_for_fence_value(ID3D12Fence* Fence, u64 FenceValue, HANDLE FenceEvent, u32 Duration = UINT32_MAX);
 internal void dx12_render_backend_flush(dx12_render_backend* Backend);

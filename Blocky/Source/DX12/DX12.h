@@ -14,7 +14,7 @@
 #include "d3dx12.h"
 
 // TODO: Better approach?
-inline ID3D12InfoQueue* g_DebugInfoQueue;
+internal ID3D12InfoQueue* g_DebugInfoQueue;
 internal void dx12_info_queue_dump(ID3D12InfoQueue* InfoQueue);
 #define DumpInfoQueue() dx12_info_queue_dump(g_DebugInfoQueue)
 #define DxAssert(x) do { HRESULT __Result = x; if (FAILED(__Result)) { DumpInfoQueue(); Assert(false, #x); } } while(0)
@@ -104,13 +104,13 @@ internal void dx12_cmd_set_2_vertex_buffers(ID3D12GraphicsCommandList* CommandLi
     CommandList->IASetVertexBuffers(0, 2, VertexBufferViews);
 }
 
-internal ID3D12Resource* dx12_render_target_create(ID3D12Device* Device, DXGI_FORMAT Format, u32 Width, u32 Height, bool AllowUnorderedAccess = false, const wchar_t* DebugName = L"RenderTarget")
+internal ID3D12Resource* dx12_render_target_create(ID3D12Device* Device, DXGI_FORMAT Format, u32 Width, u32 Height, u32 Mips, bool AllowUnorderedAccess = false, const wchar_t* DebugName = L"RenderTarget")
 {
     ID3D12Resource* Resource = nullptr;
 
     D3D12_RESOURCE_DESC Desc = {};
     Desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-    Desc.MipLevels = 1;
+    Desc.MipLevels = Mips;
     Desc.Format = Format;
     Desc.Width = Width;
     Desc.Height = Height;
@@ -481,3 +481,26 @@ struct dx12_descriptor_heap_free_list_allocator
         //m_FreeIndices.push_back(cpu_idx);
     }
 };
+
+internal u64 dx12_signal(ID3D12CommandQueue* CommandQueue, ID3D12Fence* Fence, u64* FenceValue)
+{
+    u64& RefFenceValue = *FenceValue;
+    u64 FenceValueForSignal = ++RefFenceValue;
+    DxAssert(CommandQueue->Signal(Fence, FenceValueForSignal));
+    return FenceValueForSignal;
+}
+
+internal void dx12_wait_for_fence_value(ID3D12Fence* Fence, u64 FenceValue, HANDLE FenceEvent, u32 Duration = UINT32_MAX)
+{
+    if (Fence->GetCompletedValue() < FenceValue)
+    {
+        Fence->SetEventOnCompletion(FenceValue, FenceEvent);
+        WaitForSingleObject(FenceEvent, Duration);
+    }
+}
+
+// TODO: Move to cross-platform renderer
+internal u32 dx12_calculate_mip_count(u32 width, u32 height)
+{
+    return (u32)bkm::Floor(bkm::Log2((f32)bkm::Min(width, height))) + 1;
+}

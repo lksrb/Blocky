@@ -261,19 +261,25 @@ internal void dx12_render_backend_initialize_pipeline(arena* Arena, dx12_render_
         auto& BloomPass = Backend->BloomPass;
 
         // Descriptor range for one UAV (u0)
-        D3D12_DESCRIPTOR_RANGE Ranges[2] = {};
+        D3D12_DESCRIPTOR_RANGE Ranges[3] = {};
         Ranges[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
         Ranges[0].NumDescriptors = 1;
         Ranges[0].BaseShaderRegister = 0;
         Ranges[0].RegisterSpace = 0;
         Ranges[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
-        // Descriptor range for two SRV (t0, t1)
-        Ranges[1].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
-        Ranges[1].NumDescriptors = 2; // u_Texture, u_BloomTexture
+        // Descriptor range for first RV (t0)
+        Ranges[1].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+        Ranges[1].NumDescriptors = 1; // u_Texture
         Ranges[1].BaseShaderRegister = 0;
         Ranges[1].RegisterSpace = 0;
         Ranges[1].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+        Ranges[2].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+        Ranges[2].NumDescriptors = 1; // u_BloomTexture
+        Ranges[2].BaseShaderRegister = 1;
+        Ranges[2].RegisterSpace = 0;
+        Ranges[2].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
         // One sampler (s0)
         D3D12_STATIC_SAMPLER_DESC Samplers[1] = {};
@@ -281,9 +287,9 @@ internal void dx12_render_backend_initialize_pipeline(arena* Arena, dx12_render_
         // Sampler
         //Samplers[0].Filter = D3D12_FILTER_MIN_MAG_MIP_POINT;
         Samplers[0].Filter = D3D12_FILTER_MIN_MAG_POINT_MIP_LINEAR; // TODO: Check which one
-        Samplers[0].AddressU = D3D12_TEXTURE_ADDRESS_MODE_BORDER;
-        Samplers[0].AddressV = D3D12_TEXTURE_ADDRESS_MODE_BORDER;
-        Samplers[0].AddressW = D3D12_TEXTURE_ADDRESS_MODE_BORDER;
+        Samplers[0].AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+        Samplers[0].AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+        Samplers[0].AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
         Samplers[0].MipLODBias = 0;
         Samplers[0].MaxAnisotropy = 1;
         Samplers[0].ComparisonFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
@@ -292,28 +298,70 @@ internal void dx12_render_backend_initialize_pipeline(arena* Arena, dx12_render_
         Samplers[0].MaxLOD = D3D12_FLOAT32_MAX;
         Samplers[0].ShaderRegister = 0;
         Samplers[0].RegisterSpace = 0;
-        Samplers[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+        Samplers[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
 
-        // Root parameter: descriptor table with one range
-        D3D12_ROOT_PARAMETER RootParam = {};
-        RootParam.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-        RootParam.DescriptorTable.NumDescriptorRanges = CountOf(Ranges) - 1;
-        RootParam.DescriptorTable.pDescriptorRanges = Ranges;
-        RootParam.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+        D3D12_ROOT_PARAMETER Parameters[4] = {};
+        Parameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
+        Parameters[0].Constants.Num32BitValues = sizeof(bloom_pass_buffer_data) / 4;
+        Parameters[0].Constants.ShaderRegister = 0;  // b0
+        Parameters[0].Constants.RegisterSpace = 0;
+        Parameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+
+        Parameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+        Parameters[1].DescriptorTable.NumDescriptorRanges = 1;
+        Parameters[1].DescriptorTable.pDescriptorRanges = &Ranges[0];
+        Parameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+
+        Parameters[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+        Parameters[2].DescriptorTable.NumDescriptorRanges = 1;
+        Parameters[2].DescriptorTable.pDescriptorRanges = &Ranges[1];
+        Parameters[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+
+        Parameters[3].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+        Parameters[3].DescriptorTable.NumDescriptorRanges = 1;
+        Parameters[3].DescriptorTable.pDescriptorRanges = &Ranges[2];
+        Parameters[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
 
         // Root signature description
         D3D12_ROOT_SIGNATURE_DESC RootSigDesc = {};
-        RootSigDesc.NumParameters = 1;
-        RootSigDesc.pParameters = &RootParam;
-        RootSigDesc.NumStaticSamplers = CountOf(Samplers) - 1;
+        RootSigDesc.NumParameters = CountOf(Parameters);
+        RootSigDesc.pParameters = Parameters;
+        RootSigDesc.NumStaticSamplers = CountOf(Samplers);
         RootSigDesc.pStaticSamplers = Samplers;
         RootSigDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE;
 
         BloomPass.RootSignature = dx12_root_signature_create(Backend->Device, RootSigDesc);
         BloomPass.PipelineCompute = dx12_compute_pipeline_create(Backend->Device, BloomPass.RootSignature, L"Resources/Bloom.hlsl", L"CSMain");
 
-        //auto Texture1 = dx12_render_target_create(Device, MainPass.Format, SwapChainDesc.BufferDesc.Width, SwapChainDesc.BufferDesc.Height, false, L"BloomTexture1");
-        //auto Texture2 = dx12_render_target_create(Device, MainPass.Format, SwapChainDesc.BufferDesc.Width, SwapChainDesc.BufferDesc.Height, false, L"BloomTexture2");
+        const wchar_t* DebugNames[]{
+            L"BloomTexture0",
+            L"BloomTexture1",
+            L"BloomTexture2"
+        };
+
+        // Calculate bloom size
+        v2i ViewportSize = v2i((i32)SwapChainDesc.BufferDesc.Width, (i32)SwapChainDesc.BufferDesc.Height);
+        v2i BloomTextureSize = v2i(ViewportSize + v2i(1)) / 2;
+        BloomTextureSize += v2i(BloomPass.BloomComputeWorkgroupSize) - (BloomTextureSize % BloomPass.BloomComputeWorkgroupSize);
+        const u32 Mips = 6; // Fixed size for now
+        // Bloom textures
+        for (u32 i = 0; i < FIF; i++)
+        {
+            for (u32 j = 0; j < 3; j++)
+            {
+                auto Format = Backend->MainPass.Format;
+                //u32 Mips = dx12_calculate_mip_count(BloomTextureSize.x, BloomTextureSize.y);
+                auto BloomTexture = dx12_render_target_create(Device, Format, BloomTextureSize.x, BloomTextureSize.y, Mips, true, DebugNames[j]);
+                auto BloomTextureView = Backend->SRVCBVUAV_Allocator.Alloc();
+
+                dx12_render_backend_generate_mips(Backend, BloomTexture, SwapChainDesc.BufferDesc.Width, SwapChainDesc.BufferDesc.Height, Mips, Format);
+
+                Backend->Device->CreateShaderResourceView(BloomTexture, nullptr, BloomTextureView.CPU);
+
+                BloomPass.BloomTexturesViews[i][j] = BloomTextureView;
+                BloomPass.BloomTextures[i][j] = BloomTexture;
+            }
+        }
     }
 
     // Root Signature
@@ -1035,20 +1083,48 @@ internal void d3d12_render_backend_render(dx12_render_backend* Backend, const ga
     // Take MainPassRenderBuffer, do magic and output it 
     if (EnableBloomPass)
     {
+        local_persist bloom_pass_buffer_data BloomPassData;
+
         auto& BloomPass = Backend->BloomPass;
+
+        auto BloomTextureViews = &BloomPass.BloomTexturesViews[CurrentBackBufferIndex];
+        v2i BloomTextureSize = { (i32)BloomPass.BloomTextures[0][0]->GetDesc().Width, (i32)BloomPass.BloomTextures[0][0]->GetDesc().Height };
 
         //Set root signature, pso and descriptor heap
         CommandList->SetPipelineState(BloomPass.PipelineCompute.Handle);
         CommandList->SetComputeRootSignature(BloomPass.RootSignature.Handle);
+        CommandList->SetComputeRoot32BitConstants(0, sizeof(BloomPassData) / 4, &BloomPassData, 0);
 
-        CommandList->SetComputeRootDescriptorTable(0, Backend->MainPass.RenderBuffersSRVViews[CurrentBackBufferIndex].GPU);
+        // First we need to copy main pass render target to the bloom texture, downsample it and prefilter it to separate bright pixels from darker ones
+        {
+            BloomPassData.Mode = bloom_pass_buffer_data::mode::PreFilter;
+            BloomPassData.Params = v4(1.0f, 1.0f, 1.0f, 1.0f);
+            BloomPassData.LOD = 0.0f;
+            CommandList->SetComputeRootDescriptorTable(1, BloomPass.BloomTexturesViews[0]->GPU);
+            CommandList->SetComputeRootDescriptorTable(2, Backend->MainPass.RenderBuffersSRVViews[CurrentBackBufferIndex].GPU);
 
-        // Dispatch the compute shader with one thread per 8x8 pixels
-        u32 Width = SwapChainDesc.BufferDesc.Width;
-        u32 Height = SwapChainDesc.BufferDesc.Height;
-        u32 ThreadGroupX = (Width + 16 - 1) / 16; // ceil division
-        u32 ThreadGroupY = (Height + 16 - 1) / 16;
-        CommandList->Dispatch(ThreadGroupX, ThreadGroupY, 1);
+            // Unused
+            CommandList->SetComputeRootDescriptorTable(3, Backend->MainPass.RenderBuffersSRVViews[CurrentBackBufferIndex].GPU);
+
+            u32 workGroupsX = BloomTextureSize.x / BloomPass.BloomComputeWorkgroupSize;
+            u32 workGroupsY = BloomTextureSize.y / BloomPass.BloomComputeWorkgroupSize;
+
+            CommandList->Dispatch(workGroupsX, workGroupsY, 1);
+        }
+
+        // Then downsample
+        {
+            BloomPassData.Mode = bloom_pass_buffer_data::mode::DownSample;
+            BloomPassData.Params = v4(1.0f, 1.0f, 1.0f, 1.0f);
+            BloomPassData.LOD = 0.0f;
+
+            const u32 Mips = 6;
+
+            for (u32 i = 0; i < Mips; i++)
+            {
+
+            }
+        }
 
         dx12_cmd_transition(CommandList, MainPassRenderBuffer, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
     }
@@ -1092,8 +1168,8 @@ internal void d3d12_render_backend_render(dx12_render_backend* Backend, const ga
     DxAssert(Backend->SwapChain->Present(Backend->VSync, 0));
 
     // Wait for GPU to finish presenting
-    FrameFenceValue = dx12_render_backend_signal(Backend->DirectCommandQueue, Backend->Fence, &Backend->FenceValue);
-    dx12_render_backend_wait_for_fence_value(Backend->Fence, FrameFenceValue, Backend->DirectFenceEvent);
+    FrameFenceValue = dx12_signal(Backend->DirectCommandQueue, Backend->Fence, &Backend->FenceValue);
+    dx12_wait_for_fence_value(Backend->Fence, FrameFenceValue, Backend->DirectFenceEvent);
     //WaitForSingleObjectEx(Backend->FrameLatencyEvent, INFINITE, FALSE);
 
     // Move to another back buffer
@@ -1166,25 +1242,149 @@ internal void d3d12_render_backend_resize_buffers(dx12_render_backend* Backend, 
     Assert(RequestWidth == SwapChainDesc.BufferDesc.Width && RequestHeight == SwapChainDesc.BufferDesc.Height, "Requested size is not equal actual swapchain size!");
 }
 
-internal u64 dx12_render_backend_signal(ID3D12CommandQueue* CommandQueue, ID3D12Fence* Fence, u64* FenceValue)
-{
-    u64& RefFenceValue = *FenceValue;
-    u64 FenceValueForSignal = ++RefFenceValue;
-    DxAssert(CommandQueue->Signal(Fence, FenceValueForSignal));
-    return FenceValueForSignal;
-}
-
-internal void dx12_render_backend_wait_for_fence_value(ID3D12Fence* Fence, u64 FenceValue, HANDLE FenceEvent, u32 Duration)
-{
-    if (Fence->GetCompletedValue() < FenceValue)
-    {
-        Fence->SetEventOnCompletion(FenceValue, FenceEvent);
-        WaitForSingleObject(FenceEvent, Duration);
-    }
-}
-
 internal void dx12_render_backend_flush(dx12_render_backend* Renderer)
 {
-    u64 FenceValueForSignal = dx12_render_backend_signal(Renderer->DirectCommandQueue, Renderer->Fence, &Renderer->FenceValue);
-    dx12_render_backend_wait_for_fence_value(Renderer->Fence, FenceValueForSignal, Renderer->DirectFenceEvent);
+    u64 FenceValueForSignal = dx12_signal(Renderer->DirectCommandQueue, Renderer->Fence, &Renderer->FenceValue);
+    dx12_wait_for_fence_value(Renderer->Fence, FenceValueForSignal, Renderer->DirectFenceEvent);
+}
+
+internal void dx12_render_backend_generate_mips(dx12_render_backend* Backend, ID3D12Resource* TextureResource, u32 Width, u32 Height, u32 MipCount, DXGI_FORMAT Format)
+{
+    //Union used for shader constants
+    struct DWParam
+    {
+        DWParam(FLOAT f) : Float(f) {}
+        DWParam(UINT u) : Uint(u) {}
+
+        void operator= (FLOAT f) { Float = f; }
+        void operator= (UINT u) { Uint = u; }
+
+        union
+        {
+            FLOAT Float;
+            UINT Uint;
+        };
+    };
+
+    Assert(MipCount > 1, "No mips to generate.");
+    auto Device = Backend->Device;
+
+    // KNOWN ISSUE: We create this every time we generate mips but whatever
+    dx12_pipeline MipMapPipeline;
+    ID3D12DescriptorHeap* descriptorHeap;
+    dx12_root_signature MipMapRootSignature;
+    const u32 DescriptorSize = Backend->DescriptorSizes.CBV_SRV_UAV;
+
+    {
+        //The compute shader expects 2 floats, the source texture and the destination texture
+        CD3DX12_DESCRIPTOR_RANGE srvCbvRanges[2];
+        CD3DX12_ROOT_PARAMETER rootParameters[3];
+        srvCbvRanges[0].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0, 0);
+        srvCbvRanges[1].Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0, 0);
+        rootParameters[0].InitAsConstants(2, 0);
+        rootParameters[1].InitAsDescriptorTable(1, &srvCbvRanges[0]);
+        rootParameters[2].InitAsDescriptorTable(1, &srvCbvRanges[1]);
+
+        //Static sampler used to get the linearly interpolated color for the mipmaps
+        D3D12_STATIC_SAMPLER_DESC samplerDesc = {};
+        samplerDesc.Filter = D3D12_FILTER_MIN_MAG_LINEAR_MIP_POINT;
+        samplerDesc.AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+        samplerDesc.AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+        samplerDesc.AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+        samplerDesc.MipLODBias = 0.0f;
+        samplerDesc.ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
+        samplerDesc.MinLOD = 0.0f;
+        samplerDesc.MaxLOD = D3D12_FLOAT32_MAX;
+        samplerDesc.MaxAnisotropy = 0;
+        samplerDesc.BorderColor = D3D12_STATIC_BORDER_COLOR_OPAQUE_BLACK;
+        samplerDesc.ShaderRegister = 0;
+        samplerDesc.RegisterSpace = 0;
+        samplerDesc.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+
+        //Create the root signature for the mipmap compute shader from the parameters and sampler above
+        CD3DX12_ROOT_SIGNATURE_DESC rootSignatureDesc;
+        rootSignatureDesc.Init(CountOf(rootParameters), rootParameters, 1, &samplerDesc, D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+        MipMapRootSignature = dx12_root_signature_create(Device, rootSignatureDesc);
+
+        //Create the descriptor heap with layout: source texture - destination texture
+        D3D12_DESCRIPTOR_HEAP_DESC heapDesc = {};
+        heapDesc.NumDescriptors = 2 * (MipCount - 1);
+        heapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+        heapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+
+        Device->CreateDescriptorHeap(&heapDesc, IID_PPV_ARGS(&descriptorHeap));
+
+        // Create mipgen pipeline 
+        MipMapPipeline = dx12_compute_pipeline_create(Device, MipMapRootSignature, L"Resources/MipGen.hlsl", L"CSMain");
+    }
+
+    dx12_submit_to_queue_immidiately(Device, Backend->DirectCommandAllocators[0], Backend->DirectCommandList, Backend->DirectCommandQueue, [&](ID3D12GraphicsCommandList* CommandList)
+    {
+        //Prepare the shader resource view description for the source texture
+        D3D12_SHADER_RESOURCE_VIEW_DESC srcTextureSRVDesc = {};
+        srcTextureSRVDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+        srcTextureSRVDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+
+        //Prepare the unordered access view description for the destination texture
+        D3D12_UNORDERED_ACCESS_VIEW_DESC destTextureUAVDesc = {};
+        destTextureUAVDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+
+        //Set root signature, pso and descriptor heap
+        CommandList->SetComputeRootSignature(MipMapRootSignature.Handle);
+        CommandList->SetPipelineState(MipMapPipeline.Handle);
+        CommandList->SetDescriptorHeaps(1, &descriptorHeap);
+
+        //CPU handle for the first descriptor on the descriptor heap, used to fill the heap
+        CD3DX12_CPU_DESCRIPTOR_HANDLE currentCPUHandle(descriptorHeap->GetCPUDescriptorHandleForHeapStart(), 0, DescriptorSize);
+
+        //GPU handle for the first descriptor on the descriptor heap, used to initialize the descriptor tables
+        CD3DX12_GPU_DESCRIPTOR_HANDLE currentGPUHandle(descriptorHeap->GetGPUDescriptorHandleForHeapStart(), 0, DescriptorSize);
+
+        //Transition from pixel shader resource to unordered access
+        dx12_cmd_transition(CommandList, TextureResource, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
+        //Loop through the mipmaps copying from the bigger mipmap to the smaller one with downsampling in a compute shader
+        for (uint32_t TopMip = 0; TopMip < MipCount - 1; TopMip++)
+        {
+            //Get mipmap dimensions
+            uint32_t dstWidth = std::max(Width >> (TopMip + 1), 1u);
+            uint32_t dstHeight = std::max(Height >> (TopMip + 1), 1u);
+
+            //Create shader resource view for the source texture in the descriptor heap
+            srcTextureSRVDesc.Format = Format;
+            srcTextureSRVDesc.Texture2D.MipLevels = 1;
+            srcTextureSRVDesc.Texture2D.MostDetailedMip = TopMip;
+            Device->CreateShaderResourceView(TextureResource, &srcTextureSRVDesc, currentCPUHandle);
+            currentCPUHandle.Offset(1, DescriptorSize);
+
+            //Create unordered access view for the destination texture in the descriptor heap
+            destTextureUAVDesc.Format = Format;
+            destTextureUAVDesc.Texture2D.MipSlice = TopMip + 1;
+            Device->CreateUnorderedAccessView(TextureResource, nullptr, &destTextureUAVDesc, currentCPUHandle);
+            currentCPUHandle.Offset(1, DescriptorSize);
+
+            //Pass the destination texture pixel size to the shader as constants
+            CommandList->SetComputeRoot32BitConstant(0, DWParam(1.0f / dstWidth).Uint, 0);
+            CommandList->SetComputeRoot32BitConstant(0, DWParam(1.0f / dstHeight).Uint, 1);
+
+            //Pass the source and destination texture views to the shader via descriptor tables
+            CommandList->SetComputeRootDescriptorTable(1, currentGPUHandle);
+            currentGPUHandle.Offset(1, DescriptorSize);
+            CommandList->SetComputeRootDescriptorTable(2, currentGPUHandle);
+            currentGPUHandle.Offset(1, DescriptorSize);
+
+            //Dispatch the compute shader with one thread per 8x8 pixels
+            CommandList->Dispatch(std::max(dstWidth / 8, 1u), std::max(dstHeight / 8, 1u), 1);
+
+            //Wait for all accesses to the destination texture UAV to be finished before generating the next mipmap, as it will be the source texture for the next mipmap
+            auto UAVRB = CD3DX12_RESOURCE_BARRIER::UAV(TextureResource);
+            CommandList->ResourceBarrier(1, &UAVRB);
+        }
+
+        dx12_cmd_transition(CommandList, TextureResource, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+    });
+
+    dx12_pipeline_destroy(&MipMapPipeline);
+    dx12_root_signature_destroy(&MipMapRootSignature);
+    descriptorHeap->Release();
 }
