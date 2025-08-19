@@ -120,6 +120,15 @@ namespace bkm {
         return Normalize(value, 0, 1);
     }
 
+    inline f32 Ceil(f32 value)
+    {
+#if USE_C_MATH
+        return ceilf(value);
+#else
+#error Ceil not implemented
+#endif
+    }
+
     // Goniometric functions
     inline f32 Cos(f32 x) noexcept
     {

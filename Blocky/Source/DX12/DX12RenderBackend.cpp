@@ -344,22 +344,35 @@ internal void dx12_render_backend_initialize_pipeline(arena* Arena, dx12_render_
         v2i BloomTextureSize = v2i(ViewportSize + v2i(1)) / 2;
         BloomTextureSize += v2i(BloomPass.BloomComputeWorkgroupSize) - (BloomTextureSize % BloomPass.BloomComputeWorkgroupSize);
         const u32 Mips = 6; // Fixed size for now
+
         // Bloom textures
-        for (u32 i = 0; i < FIF; i++)
+        for (u32 FrameIndex = 0; FrameIndex < FIF; FrameIndex++)
         {
-            for (u32 j = 0; j < 3; j++)
+            for (u32 TextureIndex = 0; TextureIndex < 3; TextureIndex++)
             {
                 auto Format = Backend->MainPass.Format;
                 //u32 Mips = dx12_calculate_mip_count(BloomTextureSize.x, BloomTextureSize.y);
-                auto BloomTexture = dx12_render_target_create(Device, Format, BloomTextureSize.x, BloomTextureSize.y, Mips, true, DebugNames[j]);
-                auto BloomTextureView = Backend->SRVCBVUAV_Allocator.Alloc();
+                auto BloomTexture = dx12_render_target_create(Device, Format, BloomTextureSize.x, BloomTextureSize.y, Mips, true, DebugNames[TextureIndex]);
+                auto BloomTextureShaderResourceView = Backend->SRVCBVUAV_Allocator.Alloc();
 
                 dx12_render_backend_generate_mips(Backend, BloomTexture, SwapChainDesc.BufferDesc.Width, SwapChainDesc.BufferDesc.Height, Mips, Format);
 
-                Backend->Device->CreateShaderResourceView(BloomTexture, nullptr, BloomTextureView.CPU);
+                Backend->Device->CreateShaderResourceView(BloomTexture, nullptr, BloomTextureShaderResourceView.CPU);
+                BloomPass.BloomTexturesShaderResourceViews[FrameIndex][TextureIndex] = BloomTextureShaderResourceView;
 
-                BloomPass.BloomTexturesViews[i][j] = BloomTextureView;
-                BloomPass.BloomTextures[i][j] = BloomTexture;
+                for (u32 MipLevel = 0; MipLevel < Mips; MipLevel++)
+                {
+                    D3D12_UNORDERED_ACCESS_VIEW_DESC UAVDesc = {};
+                    UAVDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT; // or whatever matches your resource
+                    UAVDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+                    UAVDesc.Texture2D.MipSlice = MipLevel;
+
+                    auto BloomTextureComputeView = Backend->SRVCBVUAV_Allocator.Alloc();
+                    Backend->Device->CreateUnorderedAccessView(BloomTexture, nullptr, &UAVDesc, BloomTextureComputeView.CPU);
+                    BloomPass.BloomTextureComputeMipViews[FrameIndex][TextureIndex][MipLevel] = BloomTextureComputeView;
+                }
+
+                BloomPass.BloomTextures[FrameIndex][TextureIndex] = BloomTexture;
             }
         }
     }
@@ -1087,42 +1100,118 @@ internal void d3d12_render_backend_render(dx12_render_backend* Backend, const ga
 
         auto& BloomPass = Backend->BloomPass;
 
-        auto BloomTextureViews = &BloomPass.BloomTexturesViews[CurrentBackBufferIndex];
-        v2i BloomTextureSize = { (i32)BloomPass.BloomTextures[0][0]->GetDesc().Width, (i32)BloomPass.BloomTextures[0][0]->GetDesc().Height };
+        auto BloomTextures = BloomPass.BloomTextures[CurrentBackBufferIndex];
+        auto BloomTextureShaderResourceViews = BloomPass.BloomTexturesShaderResourceViews[CurrentBackBufferIndex];
+        auto BloomTextureComputeViews = BloomPass.BloomTextureComputeMipViews[CurrentBackBufferIndex];
+        const v2u BloomTextureSize = { (u32)BloomPass.BloomTextures[0][0]->GetDesc().Width, (u32)BloomPass.BloomTextures[0][0]->GetDesc().Height };
+
+        auto get_mip_size = [](u32 Mip, u32 Width0, u32 Height0) -> std::pair<u32, u32>
+        {
+            while (Mip != 0)
+            {
+                Width0 /= 2;
+                Height0 /= 2;
+                Mip--;
+            }
+
+            return { Width0, Height0 };
+        };
+
+        u32 ThreadGroupsX = BloomTextureSize.x / BloomPass.BloomComputeWorkgroupSize;
+        u32 ThreadGroupsY = BloomTextureSize.y / BloomPass.BloomComputeWorkgroupSize;
 
         //Set root signature, pso and descriptor heap
         CommandList->SetPipelineState(BloomPass.PipelineCompute.Handle);
         CommandList->SetComputeRootSignature(BloomPass.RootSignature.Handle);
-        CommandList->SetComputeRoot32BitConstants(0, sizeof(BloomPassData) / 4, &BloomPassData, 0);
 
         // First we need to copy main pass render target to the bloom texture, downsample it and prefilter it to separate bright pixels from darker ones
         {
             BloomPassData.Mode = bloom_pass_buffer_data::mode::PreFilter;
             BloomPassData.Params = v4(1.0f, 1.0f, 1.0f, 1.0f);
             BloomPassData.LOD = 0.0f;
-            CommandList->SetComputeRootDescriptorTable(1, BloomPass.BloomTexturesViews[0]->GPU);
+            CommandList->SetComputeRoot32BitConstants(0, sizeof(BloomPassData) / 4, &BloomPassData, 0);
+
+            CommandList->SetComputeRootDescriptorTable(1, BloomTextureShaderResourceViews[0].GPU);
             CommandList->SetComputeRootDescriptorTable(2, Backend->MainPass.RenderBuffersSRVViews[CurrentBackBufferIndex].GPU);
 
             // Unused
-            CommandList->SetComputeRootDescriptorTable(3, Backend->MainPass.RenderBuffersSRVViews[CurrentBackBufferIndex].GPU);
+            CommandList->SetComputeRootDescriptorTable(3, BloomTextureShaderResourceViews[2].GPU);
 
-            u32 workGroupsX = BloomTextureSize.x / BloomPass.BloomComputeWorkgroupSize;
-            u32 workGroupsY = BloomTextureSize.y / BloomPass.BloomComputeWorkgroupSize;
-
-            CommandList->Dispatch(workGroupsX, workGroupsY, 1);
+            CommandList->Dispatch(ThreadGroupsX, ThreadGroupsY, 1);
         }
 
         // Then downsample
+        if (1)
         {
             BloomPassData.Mode = bloom_pass_buffer_data::mode::DownSample;
             BloomPassData.Params = v4(1.0f, 1.0f, 1.0f, 1.0f);
-            BloomPassData.LOD = 0.0f;
 
             const u32 Mips = 6;
 
-            for (u32 i = 0; i < Mips; i++)
+            for (u32 MipLevel = 1; MipLevel < Mips; MipLevel++)
             {
+                auto [MipWidth, MipHeight] = get_mip_size(MipLevel, BloomTextureSize.x, BloomTextureSize.y);
 
+                ThreadGroupsX = (u32)bkm::Ceil((f32)MipWidth / (f32)BloomPass.BloomComputeWorkgroupSize);
+                ThreadGroupsY = (u32)bkm::Ceil((f32)MipHeight / (f32)BloomPass.BloomComputeWorkgroupSize);
+
+                // Copy and downsample from source mip to dest mip
+                {
+                    // Trace("%i %i", ThreadGroupsX, ThreadGroupsY);
+
+                    BloomPassData.LOD = MipLevel - 1.0f;
+                    CommandList->SetComputeRoot32BitConstants(0, sizeof(BloomPassData) / 4, &BloomPassData, 0);
+
+                    // Write image
+                    CommandList->SetComputeRootDescriptorTable(1, BloomTextureComputeViews[1][MipLevel].GPU);
+
+                    // Source, this is the downsampled texture from previous pass
+                    CommandList->SetComputeRootDescriptorTable(2, BloomTextureShaderResourceViews[0].GPU);
+
+                    // Unused
+                    CommandList->SetComputeRootDescriptorTable(3, BloomTextureShaderResourceViews[2].GPU);
+
+                    CommandList->Dispatch(ThreadGroupsX, ThreadGroupsY, 1);
+                }
+
+                // Wait for it to finish
+                {
+                    D3D12_RESOURCE_BARRIER Result = {};
+                    Result.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+                    Result.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+                    //Result.UAV.pResource = BloomTextures[1];
+                    Result.UAV.pResource = nullptr;
+
+                    CommandList->ResourceBarrier(1, &Result);
+                }
+
+                // Just copy dest mip to source mip and repeat
+                {
+                    BloomPassData.LOD = (f32)MipLevel;
+                    CommandList->SetComputeRoot32BitConstants(0, sizeof(BloomPassData) / 4, &BloomPassData, 0);
+
+                    // Write image
+                    CommandList->SetComputeRootDescriptorTable(1, BloomTextureComputeViews[1][MipLevel].GPU);
+
+                    // Source, this is the downsampled texture from previous pass
+                    CommandList->SetComputeRootDescriptorTable(2, BloomTextureShaderResourceViews[1].GPU);
+
+                    // Unused
+                    CommandList->SetComputeRootDescriptorTable(3, BloomTextureShaderResourceViews[2].GPU);
+
+                    CommandList->Dispatch(ThreadGroupsX, ThreadGroupsY, 1);
+                }
+
+                // Wait for it to finish
+                {
+                    D3D12_RESOURCE_BARRIER Result = {};
+                    Result.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+                    Result.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+                    //Result.UAV.pResource = BloomTextures[0];
+                    Result.UAV.pResource = nullptr;
+
+                    CommandList->ResourceBarrier(1, &Result);
+                }
             }
         }
 

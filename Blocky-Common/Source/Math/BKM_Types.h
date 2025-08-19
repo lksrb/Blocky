@@ -452,6 +452,7 @@ struct qtn
 
 using v2 = v2b<f32>;
 using v2i = v2b<i32>;
+using v2u = v2b<u32>;
 
 // TODO: Should this be here? 
 // === Constructors ===

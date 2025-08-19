@@ -112,6 +112,11 @@ void CSMain(uint3 DTid : SV_DispatchThreadID)
         Color = Prefilter(Color, UV);
         Color.a = 1.0f;
     }
+    else if (c_Mode == MODE_DOWNSAMPLE)
+    {
+        // Downsample
+        Color.rgb = DownsampleBox13(g_Texture, g_Sampler, c_LOD, UV, 1.0f / TextureSize);
+    }
     
     o_Image[DTid.xy] = Color;
 }
