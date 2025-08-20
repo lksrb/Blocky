@@ -162,19 +162,19 @@ internal void dx12_render_backend_destroy(dx12_render_backend* Backend)
     // Distant Quad
     dx12_pipeline_destroy(&Backend->DistantQuad.Pipeline);
 
-    // Bloom
-    dx12_pipeline_destroy(&Backend->BloomPass.PipelineCompute);
-    dx12_root_signature_destroy(&Backend->BloomPass.RootSignature);
-
-    // Fullscreen Pass
-    dx12_pipeline_destroy(&Backend->FullscreenPass.Pipeline);
-    dx12_root_signature_destroy(&Backend->FullscreenPass.RootSignature);
-
-    // Shadows
+    // Shadow Pass
 #if ENABLE_SHADOW_PASS
     dx12_pipeline_destroy(&Backend->ShadowPass.Pipeline);
     dx12_root_signature_destroy(&Backend->ShadowPass.RootSignature);
 #endif
+
+    // Bloom Pass
+    dx12_pipeline_destroy(&Backend->BloomPass.PipelineCompute);
+    dx12_root_signature_destroy(&Backend->BloomPass.RootSignature);
+
+    // Composite Pass
+    dx12_pipeline_destroy(&Backend->CompositePass.Pipeline);
+    dx12_root_signature_destroy(&Backend->CompositePass.RootSignature);
 
     // HUD
     dx12_pipeline_destroy(&Backend->HUD.Pipeline);
@@ -236,11 +236,6 @@ internal void dx12_render_backend_initialize_pipeline(arena* Arena, dx12_render_
                 MainPass.RenderBuffersSRVViews[i] = Backend->SRVCBVUAV_Allocator.Alloc();
                 Backend->Device->CreateShaderResourceView(MainPass.RenderBuffers[i], nullptr, MainPass.RenderBuffersSRVViews[i].CPU);
             }
-        }
-
-        // Generate mip maps
-        {
-
         }
 
         // Create depth resources 
@@ -824,13 +819,7 @@ internal void dx12_render_backend_initialize_pipeline(arena* Arena, dx12_render_
     }
 #endif
 
-    // Create light environment constant buffer for each frame
-    for (u32 i = 0; i < FIF; i++)
-    {
-        Backend->LightEnvironmentConstantBuffers[i] = dx12_constant_buffer_create(Device, sizeof(light_environment));
-    }
-
-    // Fullscreen pipeline
+    // CompositePass Pass
     {
         // Root Signature
         {
@@ -880,9 +869,15 @@ internal void dx12_render_backend_initialize_pipeline(arena* Arena, dx12_render_
             Desc.pStaticSamplers = Samplers;
             Desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE;
 
-            Backend->FullscreenPass.RootSignature = dx12_root_signature_create(Device, Desc);
+            Backend->CompositePass.RootSignature = dx12_root_signature_create(Device, Desc);
         }
-        Backend->FullscreenPass.Pipeline = dx12_graphics_pipeline_create(Device, Backend->FullscreenPass.RootSignature, nullptr, 0, L"Resources/Fullscreen.hlsl", Backend->SwapChainFormat, D3D12_CULL_MODE_FRONT, false, 1);
+        Backend->CompositePass.Pipeline = dx12_graphics_pipeline_create(Device, Backend->CompositePass.RootSignature, nullptr, 0, L"Resources/Composite.hlsl", Backend->SwapChainFormat, D3D12_CULL_MODE_FRONT, false, 1);
+    }
+
+    // Create light environment constant buffer for each frame
+    for (u32 i = 0; i < FIF; i++)
+    {
+        Backend->LightEnvironmentConstantBuffers[i] = dx12_constant_buffer_create(Device, sizeof(light_environment));
     }
 }
 
@@ -1328,8 +1323,8 @@ internal void d3d12_render_backend_render(dx12_render_backend* Backend, const ga
         dx12_cmd_set_viewport(CommandList, 0, 0, (f32)SwapChainDesc.BufferDesc.Width, (f32)SwapChainDesc.BufferDesc.Height);
         dx12_cmd_set_scrissor_rect(CommandList, 0, 0, SwapChainDesc.BufferDesc.Width, SwapChainDesc.BufferDesc.Height);
 
-        CommandList->SetPipelineState(Backend->FullscreenPass.Pipeline.Handle);
-        CommandList->SetGraphicsRootSignature(Backend->FullscreenPass.RootSignature.Handle);
+        CommandList->SetPipelineState(Backend->CompositePass.Pipeline.Handle);
+        CommandList->SetGraphicsRootSignature(Backend->CompositePass.RootSignature.Handle);
 
         // Main pass texture
         CommandList->SetGraphicsRootDescriptorTable(0, Backend->MainPass.RenderBuffersSRVViews[CurrentBackBufferIndex].GPU);

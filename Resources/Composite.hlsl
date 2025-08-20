@@ -1,4 +1,6 @@
- // Composition pass, mostly tonemapping
+//
+// Composition pass, mostly tonemapping
+//
 
 struct pixel_shader_input
 {

@@ -35,7 +35,7 @@ workspace "Blocky"
 		"Resources/Skybox.hlsl",
 		"Resources/DistantQuad.hlsl",
 		"Resources/Shadow.hlsl",
-		"Resources/Fullscreen.hlsl",
+		"Resources/Composite.hlsl",
 		"Resources/MipGen.hlsl",
 		"Resources/Bloom.hlsl",
 	}

@@ -65,7 +65,7 @@ struct dx12_render_backend
     texture WhiteTexture;
     dx12_descriptor_handle BaseTextureDescriptorHandle; // Allocated from SRVCBVUAV_Allocator, contains 'c_MaxTexturesPerDrawCall' views
 
-    // These will be rendered to and then copied via fullscreen pass to swapchain buffers
+    // Main Pass
     struct
     {
         ID3D12Resource* DepthBuffers[FIF];
@@ -79,6 +79,19 @@ struct dx12_render_backend
         dx12_descriptor_handle RenderBuffersSRVViews[FIF];
     } MainPass;
 
+#if ENABLE_SHADOW_PASS
+    struct
+    {
+        ID3D12Resource* ShadowMaps[FIF];
+        dx12_descriptor_handle ShadowMapsDSVViews[FIF];
+        dx12_descriptor_handle ShadowMapsSRVViews[FIF];
+        dx12_pipeline Pipeline;
+        dx12_root_signature RootSignature;
+    } ShadowPass;
+#endif
+
+    // Bloom Pass
+
     struct bloom_render_target
     {
         ID3D12Resource* Handle;
@@ -86,7 +99,6 @@ struct dx12_render_backend
         dx12_descriptor_handle ComputeMipViews[6];
     };
 
-    // Bloom pass needs to be added, fullscreen pass does not cut it
     struct
     {
         dx12_root_signature RootSignature;
@@ -98,13 +110,14 @@ struct dx12_render_backend
         bloom_render_target BloomTexture0[FIF];
         bloom_render_target BloomTexture1[FIF];
         bloom_render_target BloomTexture2[FIF];
-
-        //ID3D12Resource* BloomTextures[FIF][3];
-        //dx12_descriptor_handle BloomTexturesShaderResourceViews[FIF][3];
-        //dx12_descriptor_handle BloomTexturesComputeViews[FIF][3];
-
-        //dx12_descriptor_handle BloomTextureComputeMipViews[FIF][3][6];
     } BloomPass;
+
+    // Composite Pass
+    struct
+    {
+        dx12_pipeline Pipeline;
+        dx12_root_signature RootSignature;
+    } CompositePass;
 
     // Quad
     struct
@@ -147,31 +160,12 @@ struct dx12_render_backend
         dx12_vertex_buffer VertexBuffers[FIF];
     } DistantQuad;
 
-#if ENABLE_SHADOW_PASS
-    // Shadows
-    struct
-    {
-        ID3D12Resource* ShadowMaps[FIF];
-        dx12_descriptor_handle ShadowMapsDSVViews[FIF];
-        dx12_descriptor_handle ShadowMapsSRVViews[FIF];
-        dx12_pipeline Pipeline;
-        dx12_root_signature RootSignature;
-    } ShadowPass;
-#endif
-
     // HUD stuff
     struct
     {
         dx12_vertex_buffer VertexBuffers[FIF];
         dx12_pipeline Pipeline;
     } HUD;
-
-    // Fullscreen Pass
-    struct
-    {
-        dx12_pipeline Pipeline;
-        dx12_root_signature RootSignature;
-    } FullscreenPass;
 
     dx12_constant_buffer LightEnvironmentConstantBuffers[FIF];
 };
