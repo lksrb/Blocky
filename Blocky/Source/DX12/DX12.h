@@ -33,6 +33,15 @@ internal void dx12_info_queue_dump(ID3D12InfoQueue* InfoQueue);
 #pragma comment(lib, "dxguid.lib")
 #endif
 
+internal void dx12_cmd_wait_for_resource(ID3D12GraphicsCommandList* CommandList, D3D12_RESOURCE_BARRIER_TYPE Type, D3D12_RESOURCE_BARRIER_FLAGS Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE, ID3D12Resource* Resource = nullptr)
+{
+    D3D12_RESOURCE_BARRIER Result = {};
+    Result.Type = Type;
+    Result.Flags = Flags;
+    Result.UAV.pResource = Resource;
+    CommandList->ResourceBarrier(1, &Result);
+}
+
 internal D3D12_RESOURCE_BARRIER dx12_cmd_transition(ID3D12GraphicsCommandList* CommandList, ID3D12Resource* Resource, D3D12_RESOURCE_STATES StateBefore, D3D12_RESOURCE_STATES StateAfter, UINT Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_BARRIER_FLAGS Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE)
 {
     D3D12_RESOURCE_BARRIER Result;

@@ -94,6 +94,28 @@ float3 DownsampleBox13(Texture2D<float4> Texture, SamplerState Sampler, float lo
     return result;
 }
 
+float3 UpsampleTent9(Texture2D<float4> Texture, SamplerState Sampler, float lod, float2 uv, float2 texelSize, float radius)
+{
+    float4 offset = texelSize.xyxy * float4(1.0f, 1.0f, -1.0f, 0.0f) * radius;
+
+    // Center
+    float3 result = Texture.SampleLevel(Sampler, uv, lod).rgb * 4.0f;
+
+    result += Texture.SampleLevel(Sampler, uv - offset.xy, lod).rgb;
+    result += Texture.SampleLevel(Sampler, uv - offset.wy, lod).rgb * 2.0;
+    result += Texture.SampleLevel(Sampler, uv - offset.zy, lod).rgb;
+
+    result += Texture.SampleLevel(Sampler, uv + offset.zw, lod).rgb * 2.0;
+    result += Texture.SampleLevel(Sampler, uv + offset.xw, lod).rgb * 2.0;
+
+    result += Texture.SampleLevel(Sampler, uv + offset.zy, lod).rgb;
+    result += Texture.SampleLevel(Sampler, uv + offset.wy, lod).rgb * 2.0;
+    result += Texture.SampleLevel(Sampler, uv + offset.xy, lod).rgb;
+
+    return result * (1.0f / 16.0f);
+}
+
+
 [numthreads(4, 4, 1)]
 void CSMain(uint3 DTid : SV_DispatchThreadID)
 {
@@ -116,6 +138,28 @@ void CSMain(uint3 DTid : SV_DispatchThreadID)
     {
         // Downsample
         Color.rgb = DownsampleBox13(g_Texture, g_Sampler, c_LOD, UV, 1.0f / TextureSize);
+    }
+    else if (c_Mode == MODE_UPSAMPLE_FIRST)
+    {
+        uint2 BloomTexSize = uint2(0, 0);
+        uint NumberOfLevels = 0;
+        g_Texture.GetDimensions(uint(c_LOD + 1.0f), BloomTexSize.x, BloomTexSize.y, NumberOfLevels);
+        float sampleScale = 1.0f;
+        float3 upsampledTexture = UpsampleTent9(g_Texture, g_Sampler, c_LOD + 1.0f, UV, 1.0f / BloomTexSize, sampleScale);
+
+        float3 existing = g_Texture.SampleLevel(g_Sampler, UV, c_LOD).rgb;
+        Color.rgb = existing + upsampledTexture;
+    }
+    else if (c_Mode == MODE_UPSAMPLE)
+    {
+        uint2 BloomTexSize = uint2(0, 0);
+        uint NumberOfLevels = 0;
+        g_Texture.GetDimensions(uint(c_LOD + 1.0f), BloomTexSize.x, BloomTexSize.y, NumberOfLevels);
+        float sampleScale = 1.0f;
+        float3 upsampledTexture = UpsampleTent9(g_BloomTexture, g_Sampler, c_LOD + 1.0f, UV, 1.0f / BloomTexSize, sampleScale);
+
+        float3 existing = g_Texture.SampleLevel(g_Sampler, UV, c_LOD).rgb;
+        Color.rgb = existing + upsampledTexture;
     }
     
     o_Image[DTid.xy] = Color;

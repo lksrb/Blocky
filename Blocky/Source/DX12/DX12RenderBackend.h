@@ -81,10 +81,9 @@ struct dx12_render_backend
 
     struct bloom_render_target
     {
-        ID3D12Resource* Textures[FIF];
-        dx12_descriptor_handle TextureShaderResourceViews[FIF];
-
-        dx12_descriptor_handle BloomTextureComputeMipViews[FIF][6];
+        ID3D12Resource* Handle;
+        dx12_descriptor_handle ShaderResourceView;
+        dx12_descriptor_handle ComputeMipViews[6];
     };
 
     // Bloom pass needs to be added, fullscreen pass does not cut it
@@ -96,12 +95,15 @@ struct dx12_render_backend
         const i32 BloomComputeWorkgroupSize = 4;
 
         // Bloom Textures
-        bloom_render_target BloomRenderTargets;
-        ID3D12Resource* BloomTextures[FIF][3];
-        dx12_descriptor_handle BloomTexturesShaderResourceViews[FIF][3];
+        bloom_render_target BloomTexture0[FIF];
+        bloom_render_target BloomTexture1[FIF];
+        bloom_render_target BloomTexture2[FIF];
+
+        //ID3D12Resource* BloomTextures[FIF][3];
+        //dx12_descriptor_handle BloomTexturesShaderResourceViews[FIF][3];
         //dx12_descriptor_handle BloomTexturesComputeViews[FIF][3];
 
-        dx12_descriptor_handle BloomTextureComputeMipViews[FIF][3][6];
+        //dx12_descriptor_handle BloomTextureComputeMipViews[FIF][3][6];
     } BloomPass;
 
     // Quad
