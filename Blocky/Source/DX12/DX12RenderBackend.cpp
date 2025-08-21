@@ -138,6 +138,11 @@ internal void dx12_render_backend_destroy(dx12_render_backend* Backend)
 #if ENABLE_SHADOW_PASS
         Backend->ShadowPass.ShadowMaps[i]->Release();
 #endif
+        
+        // Bloom Pass
+        Backend->BloomPass.BloomTexture0[i].Handle->Release();
+        Backend->BloomPass.BloomTexture1[i].Handle->Release();
+        Backend->BloomPass.BloomTexture2[i].Handle->Release();
     }
 
     // Quad
@@ -339,16 +344,23 @@ internal void dx12_render_backend_initialize_pipeline(arena* Arena, dx12_render_
         // Bloom textures
         for (u32 FrameIndex = 0; FrameIndex < FIF; FrameIndex++)
         {
-            // Bloom Texture 0
+            bloom_render_target* BloomTextures[] = {
+               &Backend->BloomPass.BloomTexture0[FrameIndex],
+               &Backend->BloomPass.BloomTexture1[FrameIndex],
+               &Backend->BloomPass.BloomTexture2[FrameIndex]
+            };
+
+            // Bloom Textures
+            for (u32 TextureIndex = 0; TextureIndex < CountOf(BloomTextures); TextureIndex++)
             {
-                auto& BloomTexture0 = Backend->BloomPass.BloomTexture0[FrameIndex];
+                auto& BloomTexture = *BloomTextures[TextureIndex];
 
-                BloomTexture0.Handle = dx12_render_target_create(Device, Format, BloomTextureSize.x, BloomTextureSize.y, Mips, true, DebugNames[0]);
+                BloomTexture.Handle = dx12_render_target_create(Device, Format, BloomTextureSize.x, BloomTextureSize.y, Mips, true, DebugNames[TextureIndex]);
 
-                dx12_render_backend_generate_mips(Backend, BloomTexture0.Handle, SwapChainDesc.BufferDesc.Width, SwapChainDesc.BufferDesc.Height, Mips, Format);
+                dx12_render_backend_generate_mips(Backend, BloomTexture.Handle, SwapChainDesc.BufferDesc.Width, SwapChainDesc.BufferDesc.Height, Mips, Format);
 
-                BloomTexture0.ShaderResourceView = Backend->SRVCBVUAV_Allocator.Alloc();
-                Backend->Device->CreateShaderResourceView(BloomTexture0.Handle, nullptr, BloomTexture0.ShaderResourceView.CPU);
+                BloomTexture.ShaderResourceView = Backend->SRVCBVUAV_Allocator.Alloc();
+                Backend->Device->CreateShaderResourceView(BloomTexture.Handle, nullptr, BloomTexture.ShaderResourceView.CPU);
 
                 for (u32 MipLevel = 0; MipLevel < Mips; MipLevel++)
                 {
@@ -357,54 +369,8 @@ internal void dx12_render_backend_initialize_pipeline(arena* Arena, dx12_render_
                     UAVDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
                     UAVDesc.Texture2D.MipSlice = MipLevel;
 
-                    BloomTexture0.ComputeMipViews[MipLevel] = Backend->SRVCBVUAV_Allocator.Alloc();
-                    Backend->Device->CreateUnorderedAccessView(BloomTexture0.Handle, nullptr, &UAVDesc, BloomTexture0.ComputeMipViews[MipLevel].CPU);
-                }
-            }
-
-            // Bloom Texture 1
-            {
-                auto& BloomTexture1 = Backend->BloomPass.BloomTexture1[FrameIndex];
-
-                BloomTexture1.Handle = dx12_render_target_create(Device, Format, BloomTextureSize.x, BloomTextureSize.y, Mips, true, DebugNames[1]);
-
-                dx12_render_backend_generate_mips(Backend, BloomTexture1.Handle, SwapChainDesc.BufferDesc.Width, SwapChainDesc.BufferDesc.Height, Mips, Format);
-
-                BloomTexture1.ShaderResourceView = Backend->SRVCBVUAV_Allocator.Alloc();
-                Backend->Device->CreateShaderResourceView(BloomTexture1.Handle, nullptr, BloomTexture1.ShaderResourceView.CPU);
-
-                for (u32 MipLevel = 0; MipLevel < Mips; MipLevel++)
-                {
-                    D3D12_UNORDERED_ACCESS_VIEW_DESC UAVDesc = {};
-                    UAVDesc.Format = Format;
-                    UAVDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
-                    UAVDesc.Texture2D.MipSlice = MipLevel;
-
-                    BloomTexture1.ComputeMipViews[MipLevel] = Backend->SRVCBVUAV_Allocator.Alloc();
-                    Backend->Device->CreateUnorderedAccessView(BloomTexture1.Handle, nullptr, &UAVDesc, BloomTexture1.ComputeMipViews[MipLevel].CPU);
-                }
-            }
-
-            // Bloom Texture 2
-            {
-                auto& BloomTexture2 = Backend->BloomPass.BloomTexture2[FrameIndex];
-
-                BloomTexture2.Handle = dx12_render_target_create(Device, Format, BloomTextureSize.x, BloomTextureSize.y, Mips, true, DebugNames[2]);
-
-                dx12_render_backend_generate_mips(Backend, BloomTexture2.Handle, SwapChainDesc.BufferDesc.Width, SwapChainDesc.BufferDesc.Height, Mips, Format);
-
-                BloomTexture2.ShaderResourceView = Backend->SRVCBVUAV_Allocator.Alloc();
-                Backend->Device->CreateShaderResourceView(BloomTexture2.Handle, nullptr, BloomTexture2.ShaderResourceView.CPU);
-
-                for (u32 MipLevel = 0; MipLevel < Mips; MipLevel++)
-                {
-                    D3D12_UNORDERED_ACCESS_VIEW_DESC UAVDesc = {};
-                    UAVDesc.Format = Format;
-                    UAVDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
-                    UAVDesc.Texture2D.MipSlice = MipLevel;
-
-                    BloomTexture2.ComputeMipViews[MipLevel] = Backend->SRVCBVUAV_Allocator.Alloc();
-                    Backend->Device->CreateUnorderedAccessView(BloomTexture2.Handle, nullptr, &UAVDesc, BloomTexture2.ComputeMipViews[MipLevel].CPU);
+                    BloomTexture.ComputeMipViews[MipLevel] = Backend->SRVCBVUAV_Allocator.Alloc();
+                    Backend->Device->CreateUnorderedAccessView(BloomTexture.Handle, nullptr, &UAVDesc, BloomTexture.ComputeMipViews[MipLevel].CPU);
                 }
             }
         }
@@ -1364,6 +1330,8 @@ internal void d3d12_render_backend_resize_buffers(dx12_render_backend* Backend, 
     // Flush the GPU queue to make sure the swap chain's back buffers are not being referenced by an in-flight command list.
     dx12_render_backend_flush(Backend);
 
+    auto Device = Backend->Device;
+
     // Reset fence values and release back buffers
     for (u32 i = 0; i < FIF; i++)
     {
@@ -1386,11 +1354,11 @@ internal void d3d12_render_backend_resize_buffers(dx12_render_backend* Backend, 
         {
             // There is no need to free the views since they do the description of the resource does not change at all
             DxAssert(Backend->SwapChain->GetBuffer(i, IID_PPV_ARGS(&Backend->SwapChainBackbuffers[i])));
-            Backend->Device->CreateRenderTargetView(Backend->SwapChainBackbuffers[i], nullptr, Backend->SwapChainBufferRTVViews[i].CPU);
+            Device->CreateRenderTargetView(Backend->SwapChainBackbuffers[i], nullptr, Backend->SwapChainBufferRTVViews[i].CPU);
         }
     }
 
-    // MainPass - Resize render buffers and recreate RTV and DSV views
+    // MainPass
     {
         auto& MainPass = Backend->MainPass;
 
@@ -1400,13 +1368,13 @@ internal void d3d12_render_backend_resize_buffers(dx12_render_backend* Backend, 
             // Render buffers
             {
                 MainPass.RenderBuffers[i]->Release();
-                MainPass.RenderBuffers[i] = dx12_render_target_create(Backend->Device, Backend->MainPass.Format, SwapChainDesc.BufferDesc.Width, SwapChainDesc.BufferDesc.Height, AllowUnorderedAccess, L"MainPassBuffer");
+                MainPass.RenderBuffers[i] = dx12_render_target_create(Device, Backend->MainPass.Format, SwapChainDesc.BufferDesc.Width, SwapChainDesc.BufferDesc.Height, AllowUnorderedAccess, L"MainPassBuffer");
 
                 // Render Target View
-                Backend->Device->CreateRenderTargetView(MainPass.RenderBuffers[i], nullptr, MainPass.RenderBuffersRTVViews[i].CPU);
+                Device->CreateRenderTargetView(MainPass.RenderBuffers[i], nullptr, MainPass.RenderBuffersRTVViews[i].CPU);
 
                 // Shader Resouces View
-                Backend->Device->CreateShaderResourceView(MainPass.RenderBuffers[i], nullptr, MainPass.RenderBuffersSRVViews[i].CPU);
+                Device->CreateShaderResourceView(MainPass.RenderBuffers[i], nullptr, MainPass.RenderBuffersSRVViews[i].CPU);
             }
 
             // Depth buffers
@@ -1414,6 +1382,57 @@ internal void d3d12_render_backend_resize_buffers(dx12_render_backend* Backend, 
                 MainPass.DepthBuffers[i]->Release();
                 MainPass.DepthBuffers[i] = dx12_depth_buffer_create(Backend->Device, SwapChainDesc.BufferDesc.Width, SwapChainDesc.BufferDesc.Height, DXGI_FORMAT_D32_FLOAT, DXGI_FORMAT_D32_FLOAT, L"MainPassDepthBuffer");
                 Backend->Device->CreateDepthStencilView(MainPass.DepthBuffers[i], nullptr, MainPass.DepthBuffersViews[i].CPU);
+            }
+        }
+    }
+
+    // Bloom Pass
+    {
+        auto& BloomPass = Backend->BloomPass;
+        
+        const wchar_t* DebugNames[]{
+            L"BloomTexture0",
+            L"BloomTexture1",
+            L"BloomTexture2"
+        };
+
+        // Calculate bloom size
+        v2i ViewportSize = v2i((i32)SwapChainDesc.BufferDesc.Width, (i32)SwapChainDesc.BufferDesc.Height);
+        v2i BloomTextureSize = v2i(ViewportSize + v2i(1)) / 2;
+        BloomTextureSize += v2i(BloomPass.BloomComputeWorkgroupSize) - (BloomTextureSize % BloomPass.BloomComputeWorkgroupSize);
+        const u32 Mips = 6; // Fixed size for now
+        auto Format = Backend->MainPass.Format;
+
+        // Bloom textures
+        for (u32 FrameIndex = 0; FrameIndex < FIF; FrameIndex++)
+        {
+            bloom_render_target* BloomTextures[] = {
+                &Backend->BloomPass.BloomTexture0[FrameIndex],
+                &Backend->BloomPass.BloomTexture1[FrameIndex],
+                &Backend->BloomPass.BloomTexture2[FrameIndex]
+            };
+
+            // Bloom Texture
+            for (u32 TextureIndex = 0; TextureIndex < CountOf(BloomTextures); TextureIndex++)
+            {
+                auto& BloomTexture = *BloomTextures[TextureIndex];
+
+                BloomTexture.Handle->Release();
+                BloomTexture.Handle = dx12_render_target_create(Device, Format, BloomTextureSize.x, BloomTextureSize.y, Mips, true, DebugNames[TextureIndex]);
+
+                dx12_render_backend_generate_mips(Backend, BloomTexture.Handle, SwapChainDesc.BufferDesc.Width, SwapChainDesc.BufferDesc.Height, Mips, Format);
+
+                Backend->Device->CreateShaderResourceView(BloomTexture.Handle, nullptr, BloomTexture.ShaderResourceView.CPU);
+
+                for (u32 MipLevel = 0; MipLevel < Mips; MipLevel++)
+                {
+                    D3D12_UNORDERED_ACCESS_VIEW_DESC UAVDesc = {};
+                    UAVDesc.Format = Format;
+                    UAVDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+                    UAVDesc.Texture2D.MipSlice = MipLevel;
+
+                    Backend->Device->CreateUnorderedAccessView(BloomTexture.Handle, nullptr, &UAVDesc, BloomTexture.ComputeMipViews[MipLevel].CPU);
+                }
             }
         }
     }

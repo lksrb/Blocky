@@ -10,6 +10,14 @@
 #define ENABLE_SHADOW_PASS 1
 #define SHADOW_MAP_SIZE 1024
 
+// Bloom Pass
+struct bloom_render_target
+{
+    ID3D12Resource* Handle;
+    dx12_descriptor_handle ShaderResourceView;
+    dx12_descriptor_handle ComputeMipViews[6];
+};
+
 struct dx12_render_backend
 {
     ID3D12Device2* Device;
@@ -89,15 +97,6 @@ struct dx12_render_backend
         dx12_root_signature RootSignature;
     } ShadowPass;
 #endif
-
-    // Bloom Pass
-
-    struct bloom_render_target
-    {
-        ID3D12Resource* Handle;
-        dx12_descriptor_handle ShaderResourceView;
-        dx12_descriptor_handle ComputeMipViews[6];
-    };
 
     struct
     {
