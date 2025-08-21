@@ -62,6 +62,10 @@ internal void AddModelPart(entity_model* Model, v3 LocalPosition, v3 Size, textu
     Part.Size = Size * c_TexelSize;
 }
 
+#include <vector>
+
+local_persist std::vector<v3> g_PointLightsPositions;
+
 internal game* game_create(arena* Arena, render_backend* Backend)
 {
     game* Game = arena_new(Arena, game);
@@ -337,13 +341,14 @@ internal void game_update(game* Game, game_renderer* Renderer, const game_input*
     }
 
     local_persist constinit v3 Center = v3(ColumnCount / 2.0f, 0, RowCount / 2.0f);
-
     local_persist v3 Eye = Center + v3(0, 16, 0);
     local_persist f32 Size = 15;
     local_persist f32 Near = 1.0f;
     local_persist f32 Far = 15.5;
     local_persist v3 LightDirection = bkm::Normalize(v3(0.0f, -1.0f, 0));
-    local_persist f32 DirectionalLightPower = 1.0f;
+    local_persist f32 DirectionalLightPower = 0.0f;
+    local_persist v3 PointLightPos = v3(5, 2, 5);
+    local_persist f32 PointLightIntenity = 1.0f;
 
     auto CenterBlock = block_get_safe(Game, (i32)Center.x, (i32)Center.z, (i32)Center.y);
     if (CenterBlock)
@@ -380,11 +385,13 @@ internal void game_update(game* Game, game_renderer* Renderer, const game_input*
         game_renderer_submit_directional_light(Renderer, LightDirection, DirectionalLightPower, v3(1.0f));
     }
 
-    // Render Editor UI
-    if (Game->RenderEditorUI)
+    for (auto& PointLight : g_PointLightsPositions)
     {
-        // For each point lights so we know that its there
-        game_renderer_submit_billboard_quad(Renderer, Eye, v2(0.5), &Game->PointLightIconTexture, v4(1.0f));
+        game_renderer_submit_point_light(Renderer, PointLight, 5, 1, v3(1, 0, 0), PointLightIntenity);
+    }
+
+    {
+        game_renderer_submit_point_light(Renderer, PointLightPos, 5, 1, v3(1), PointLightIntenity);
     }
 
     // ImGui debug UI
@@ -397,12 +404,24 @@ internal void game_update(game* Game, game_renderer* Renderer, const game_input*
         ImGui::DragFloat("Far", &Far, 0.5f, 0.0f, 100.0f);
 
         ImGui::Separator();
+        UI::DrawVec3Control("Point Light Pos", &PointLightPos);
+        ImGui::DragFloat("Point Light Intensity", &PointLightIntenity, 0.5f, 0.0f, 100.0f);
+        ImGui::Separator();
         ImGui::DragFloat("Directional Light Power", &DirectionalLightPower, 0.2f, 0.0f, 100.0f);
         ImGui::Separator();
         ImGui::Checkbox("Bloom", &Renderer->EnableBloom);
         ImGui::Checkbox("Shadows", &Renderer->EnableShadows);
 
         ImGui::End();
+    }
+
+    // Render Editor UI
+    if (Game->RenderEditorUI)
+    {
+        // For each point lights so we know that its there
+        game_renderer_submit_billboard_quad(Renderer, Eye, v2(0.5), &Game->PointLightIconTexture, v4(1.0f));
+
+        game_renderer_submit_billboard_quad(Renderer, PointLightPos, v2(0.5), &Game->PointLightIconTexture, v4(1.0f));
     }
 
     // Render HUD
@@ -701,6 +720,21 @@ internal void game_player_update(game* Game, const game_input* Input, game_rende
                 auto& Block = Game->Blocks[HitIndex];
                 Block.Type = block_type::Air;
 
+                i32 RemoveIndex = -1;
+                for (i32 i = 0; i < (i32)g_PointLightsPositions.size(); i++)
+                {
+                    if (HitBlock.Position == g_PointLightsPositions[i])
+                    {
+                        RemoveIndex = i;
+                        break;
+                    }
+                }
+
+                if (RemoveIndex >= 0)
+                {
+                    g_PointLightsPositions.erase(g_PointLightsPositions.begin() + RemoveIndex);
+                }
+
                 // Color adjacent blocks
 #if 0
                 if (Block.Left != INT_MAX)
@@ -779,8 +813,10 @@ internal void game_player_update(game* Game, const game_input* Input, game_rende
 
                     if (Block)
                     {
-                        Block->Color = v4(1, 0, 1, 1);
+                        Block->Color = v4(1, 0, 0, 1);
                         Block->Type = block_type::Dirt;
+
+                        g_PointLightsPositions.push_back(NewBlockPos);
                     }
                 }
             }
