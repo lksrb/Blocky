@@ -115,7 +115,6 @@ float3 UpsampleTent9(Texture2D<float4> Texture, SamplerState Sampler, float lod,
     return result * (1.0f / 16.0f);
 }
 
-
 [numthreads(4, 4, 1)]
 void CSMain(uint3 DTid : SV_DispatchThreadID)
 {

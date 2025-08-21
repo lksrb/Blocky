@@ -328,21 +328,25 @@ internal void game_renderer_submit_cuboid(game_renderer* Renderer, const v3& Tra
     Assert(Renderer->Cuboid.InstanceCount < c_MaxCubePerBatch, "Renderer->CuboidInstanceCount < c_MaxCuboidsPerBatch");
 
     u32 TextureIndex = 0;
-    for (u32 i = 1; i < Renderer->CurrentTextureStackIndex; i++)
-    {
-        if (Renderer->TextureStack[i] == Texture)
-        {
-            TextureIndex = i;
-            break;
-        }
-    }
 
-    if (TextureIndex == 0)
+    if (Texture != nullptr)
     {
-        Assert(Renderer->CurrentTextureStackIndex < c_MaxTexturesPerDrawCall, "Renderer->TextureStackIndex < c_MaxTexturesPerDrawCall");
-        TextureIndex = Renderer->CurrentTextureStackIndex;
-        Renderer->TextureStack[TextureIndex] = Texture;
-        Renderer->CurrentTextureStackIndex++;
+        for (u32 i = 1; i < Renderer->CurrentTextureStackIndex; i++)
+        {
+            if (Renderer->TextureStack[i] == Texture)
+            {
+                TextureIndex = i;
+                break;
+            }
+        }
+
+        if (TextureIndex == 0)
+        {
+            Assert(Renderer->CurrentTextureStackIndex < c_MaxTexturesPerDrawCall, "Renderer->TextureStackIndex < c_MaxTexturesPerDrawCall");
+            TextureIndex = Renderer->CurrentTextureStackIndex;
+            Renderer->TextureStack[TextureIndex] = Texture;
+            Renderer->CurrentTextureStackIndex++;
+        }
     }
 
     auto& Cuboid = Renderer->Cuboid.InstanceData[Renderer->Cuboid.InstanceCount];

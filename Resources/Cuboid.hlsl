@@ -121,6 +121,9 @@ float3 CalculateDirectionalLight2(directional_light Light, float3 Normal, float3
     float3 LightDiffuse = float3(0.8, 0.8, 0.8);
     float3 LightSpecular = float3(1.0, 1.0, 1.0);
 
+    Light.Radiance = float3(1.0, 1.0, 1.0);
+    TextureColor = float3(1.0, 1.0, 1.0);
+    
     // Combine results
     float3 Ambient = Light.Intensity * LightAmbient * Light.Radiance * TextureColor;
     float3 Diffuse = Light.Intensity * LightDiffuse * Light.Radiance * DiffuseAngle * TextureColor;
@@ -156,7 +159,7 @@ float4 PSMain(pixel_shader_input In) : SV_TARGET
     // Phase 2: Point lights
     for (int j = 0; j < u_PointLightCount; j++)
     {
-        Result += CalculatePointLight(u_PointLights[j], Normal, ViewDir, Shininess, In.WorldPosition.xyz, TextureColor * In.Color.rgb);
+        //Result += CalculatePointLight(u_PointLights[j], Normal, ViewDir, Shininess, In.WorldPosition.xyz, TextureColor * In.Color.rgb);
     }
     
 #if 0

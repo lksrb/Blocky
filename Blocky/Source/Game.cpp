@@ -284,7 +284,7 @@ internal void game_update(game* Game, game_renderer* Renderer, const game_input*
             if (!Block.placed())
                 continue;
 
-            game_renderer_submit_cuboid(Renderer, Block.Position, &Game->BlockTextures[(u32)Block.Type], Block.Color);
+            game_renderer_submit_cuboid(Renderer, Block.Position, nullptr, Block.Color);
         }
     }
 
@@ -343,7 +343,7 @@ internal void game_update(game* Game, game_renderer* Renderer, const game_input*
     local_persist f32 Near = 1.0f;
     local_persist f32 Far = 15.5;
     local_persist v3 LightDirection = bkm::Normalize(v3(0.0f, -1.0f, 0));
-    local_persist f32 DirectionalLightPower = 3.0f;
+    local_persist f32 DirectionalLightPower = 1.0f;
 
     auto CenterBlock = block_get_safe(Game, (i32)Center.x, (i32)Center.z, (i32)Center.y);
     if (CenterBlock)

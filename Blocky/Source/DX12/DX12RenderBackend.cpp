@@ -221,33 +221,28 @@ internal void dx12_render_backend_initialize_pipeline(arena* Arena, dx12_render_
         auto& MainPass = Backend->MainPass;
 
         // Create render resources
+        const bool AllowUnorderedAccess = true;
+        for (u32 i = 0; i < FIF; i++)
         {
-            const bool AllowUnorderedAccess = true;
-            for (u32 i = 0; i < FIF; i++)
-            {
-                MainPass.RenderBuffers[i] = dx12_render_target_create(Device, MainPass.Format,
-                    SwapChainDesc.BufferDesc.Width, SwapChainDesc.BufferDesc.Height, AllowUnorderedAccess, L"MainPassBuffer");
+            MainPass.RenderBuffers[i] = dx12_render_target_create(Device, MainPass.Format,
+                SwapChainDesc.BufferDesc.Width, SwapChainDesc.BufferDesc.Height, AllowUnorderedAccess, L"MainPassBuffer");
 
-                // RTV
-                MainPass.RenderBuffersRTVViews[i] = Backend->RTVAllocator.Alloc();
-                Backend->Device->CreateRenderTargetView(MainPass.RenderBuffers[i], nullptr, MainPass.RenderBuffersRTVViews[i].CPU);
+            // RTV
+            MainPass.RenderBuffersRTVViews[i] = Backend->RTVAllocator.Alloc();
+            Backend->Device->CreateRenderTargetView(MainPass.RenderBuffers[i], nullptr, MainPass.RenderBuffersRTVViews[i].CPU);
 
-                // SRV
-                MainPass.RenderBuffersSRVViews[i] = Backend->SRVCBVUAV_Allocator.Alloc();
-                Backend->Device->CreateShaderResourceView(MainPass.RenderBuffers[i], nullptr, MainPass.RenderBuffersSRVViews[i].CPU);
-            }
+            // SRV
+            MainPass.RenderBuffersSRVViews[i] = Backend->SRVCBVUAV_Allocator.Alloc();
+            Backend->Device->CreateShaderResourceView(MainPass.RenderBuffers[i], nullptr, MainPass.RenderBuffersSRVViews[i].CPU);
         }
 
-        // Create depth resources 
+        // Create depth resources
+        for (u32 i = 0; i < FIF; i++)
         {
-            // Create depth buffers
-            for (u32 i = 0; i < FIF; i++)
-            {
-                MainPass.DepthBuffers[i] = dx12_depth_buffer_create(Device, SwapChainDesc.BufferDesc.Width, SwapChainDesc.BufferDesc.Height, DXGI_FORMAT_D32_FLOAT, DXGI_FORMAT_D32_FLOAT, L"MainPassDepthBuffer");
+            MainPass.DepthBuffers[i] = dx12_depth_buffer_create(Device, SwapChainDesc.BufferDesc.Width, SwapChainDesc.BufferDesc.Height, DXGI_FORMAT_D32_FLOAT, DXGI_FORMAT_D32_FLOAT, L"MainPassDepthBuffer");
 
-                MainPass.DepthBuffersViews[i] = Backend->DSVAllocator.Alloc();
-                Backend->Device->CreateDepthStencilView(MainPass.DepthBuffers[i], nullptr, MainPass.DepthBuffersViews[i].CPU);
-            }
+            MainPass.DepthBuffersViews[i] = Backend->DSVAllocator.Alloc();
+            Backend->Device->CreateDepthStencilView(MainPass.DepthBuffers[i], nullptr, MainPass.DepthBuffersViews[i].CPU);
         }
     }
 
@@ -736,7 +731,6 @@ internal void dx12_render_backend_initialize_pipeline(arena* Arena, dx12_render_
             auto Handle = Backend->SRVCBVUAV_Allocator.Alloc();
             Device->CreateShaderResourceView(Backend->WhiteTexture.Handle, nullptr, Handle.CPU);
         }
-
     }
 
     // Shadow Pass
@@ -932,7 +926,7 @@ internal void d3d12_render_backend_render(dx12_render_backend* Backend, const ga
         // Skip white texture
         Base.CPU.ptr += Backend->DescriptorSizes.CBV_SRV_UAV;
 
-        // Copy descriptors from "offline" heap to "online" heap. 
+        // Copy descriptors from "offline" heap to "online" heap.
         for (u32 i = 1; i < Renderer->CurrentTextureStackIndex; i++)
         {
             auto Src = Renderer->TextureStack[i]->View.CPU;
@@ -1004,9 +998,9 @@ internal void d3d12_render_backend_render(dx12_render_backend* Backend, const ga
 
 #endif
 
-    // 
+    //
     // Render rest of the scene
-    // 
+    //
 
     // Frame that was presented needs to be set to render target again
     dx12_cmd_transition(CommandList, MainPassRenderBuffer, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
@@ -1142,7 +1136,7 @@ internal void d3d12_render_backend_render(dx12_render_backend* Backend, const ga
     dx12_cmd_transition(CommandList, MainPassRenderBuffer, D3D12_RESOURCE_STATE_RENDER_TARGET, EnableBloomPass ? D3D12_RESOURCE_STATE_UNORDERED_ACCESS : D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 
     // Bloom Pass
-    // Take MainPassRenderBuffer, do magic and output it 
+    // Take MainPassRenderBuffer, do magic and output it
     if (EnableBloomPass)
     {
         local_persist bloom_pass_buffer_data BloomPassData;
@@ -1500,7 +1494,7 @@ internal void dx12_render_backend_generate_mips(dx12_render_backend* Backend, ID
 
         Device->CreateDescriptorHeap(&heapDesc, IID_PPV_ARGS(&descriptorHeap));
 
-        // Create mipgen pipeline 
+        // Create mipgen pipeline
         MipMapPipeline = dx12_compute_pipeline_create(Device, MipMapRootSignature, L"Resources/MipGen.hlsl", L"CSMain");
     }
 
