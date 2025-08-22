@@ -45,13 +45,73 @@ struct component_pool
     void Create(ecs_entity_type Capacity)
     {
         Data = new T[Capacity];
-        Set = SparseSetCreate(Capacity);
+        Set = sparse_set_create(Capacity);
     }
 
     void Destroy()
     {
-        SparseSetDestroy(&Set);
+        sparse_set_destroy(&Set);
         delete[] Data;
+    }
+};
+
+template<typename T>
+struct ecs_view
+{
+    entity* DenseBegin;
+    entity* DenseEnd;
+    T* DenseComponentPool;
+
+    auto begin() const { return DenseBegin; }
+    auto end() const { return DenseEnd; }
+
+    T& Get(entity Entity)
+    {
+        return DenseComponentPool[ecs_to_entity_type(Entity)];
+    }
+};
+
+template<typename T0, typename T1>
+struct double_view
+{
+    ecs_view<T0> View0;
+    ecs_view<T1> View1;
+
+    entity* DenseBegin;
+    entity* DenseEnd;
+
+    auto begin() { return DenseBegin; }
+    auto end() { return DenseEnd; }
+
+    auto Get(entity Entity)
+    {
+        auto& Component0 = View0.Get(Entity);
+        auto& Component1 = View1.Get(Entity);
+
+        return std::forward_as_tuple<T0&, T1&>(Component0, Component1);
+    }
+};
+
+template<typename T0, typename T1, typename T2>
+struct ecs_triple_view
+{
+    ecs_view<T0> View0;
+    ecs_view<T1> View1;
+    ecs_view<T2> View2;
+
+    entity* DenseBegin;
+    entity* DenseEnd;
+
+    auto begin() { return DenseBegin; }
+    auto end() { return DenseEnd; }
+
+    auto Get(entity Entity)
+    {
+        auto& Component0 = View0.Get(Entity);
+        auto& Component1 = View1.Get(Entity);
+        auto& Component2 = View2.Get(Entity);
+
+        return std::forward_as_tuple<T0&, T1&, T2&>(Component0, Component1, Component2);
     }
 };
 
@@ -98,11 +158,6 @@ struct entity_part
     v3 LocalPosition;
     v3 Size;
 };
-
-texture_block_coords TextureBlockCoordsCreate()
-{
-    return texture_block_coords{};
-}
 
 struct entity_model
 {
@@ -154,28 +209,28 @@ struct entity_registry
 
 // ** Iterating over tuple elements **
 template<typename TFunc, std::size_t... Index>
-void ForEachHelper(components_pools& Pools, TFunc&& Func, std::index_sequence<Index...>)
+void ecs_for_each_helper(components_pools& Pools, TFunc&& Func, std::index_sequence<Index...>)
 {
     (Func(std::get<Index>(Pools)), ...);  // Expands the function call over all tuple elements
 }
 
 // Wrapper function to apply a function to each pool
 template<typename TFunc>
-void ForEachPool(entity_registry* Registry, TFunc&& Func)
+void for_each_pool(entity_registry* Registry, TFunc&& Func)
 {
-    ForEachHelper(Registry->ComponentPools, std::forward<TFunc>(Func),
+    ecs_for_each_helper(Registry->ComponentPools, std::forward<TFunc>(Func),
                   std::make_index_sequence<std::tuple_size<components_pools>::value>{});
 }
 
 // Get the pool for a specific type
 template<typename T>
-component_pool<T>& GetPool(entity_registry* Registry)
+component_pool<T>& ecs_get_pool(entity_registry* Registry)
 {
     constexpr std::size_t Index = type_index<component_pool<T>, components_pools>::value;
     return std::get<Index>(Registry->ComponentPools);
 }
 
-internal entity_registry EntityRegistryCreate(ecs_entity_type Capacity)
+internal entity_registry ecs_entity_registry_create(ecs_entity_type Capacity)
 {
     entity_registry Registry;
     Registry.Entities = new entity[Capacity];
@@ -183,7 +238,7 @@ internal entity_registry EntityRegistryCreate(ecs_entity_type Capacity)
     memset(Registry.Entities, ecs_to_entity_type(INVALID_ID), Capacity * sizeof(ecs_entity_type));
 
     // Since we know all the components that we will use, we can just instantiate them here
-    ForEachPool(&Registry, [Capacity](auto& Pool)
+    for_each_pool(&Registry, [Capacity](auto& Pool)
     {
         Pool.Create(Capacity);
     });
@@ -191,9 +246,9 @@ internal entity_registry EntityRegistryCreate(ecs_entity_type Capacity)
     return Registry;
 }
 
-internal void EntityRegistryDestroy(entity_registry* Registry)
+internal void ecs_entity_registry_destroy(entity_registry* Registry)
 {
-    ForEachPool(Registry, [](auto& Pool)
+    for_each_pool(Registry, [](auto& Pool)
     {
         Pool.Destroy();
     });
@@ -204,7 +259,7 @@ internal void EntityRegistryDestroy(entity_registry* Registry)
     *Registry = entity_registry();
 }
 
-internal entity CreateEntity(entity_registry* Registry)
+internal entity ecs_create_entity(entity_registry* Registry)
 {
     Assert(Registry->EntitiesCount < Registry->EntitiesCapacity, "Too many entities!");
 
@@ -225,20 +280,20 @@ internal entity CreateEntity(entity_registry* Registry)
     }
 }
 
-internal bool IsValidEntity(entity_registry* Registry, entity Entity)
+internal bool ecs_is_entity_valid(entity_registry* Registry, entity Entity)
 {
     return ecs_to_entity_type(Entity) < Registry->EntitiesCount && Registry->Entities[ecs_to_entity_type(Entity)] == Entity;
 }
 
-internal void DestroyEntity(entity_registry* Registry, entity Entity)
+internal void ecs_destroy_entity(entity_registry* Registry, entity Entity)
 {
-    Assert(IsValidEntity(Registry, Entity), "Entity is not valid!");
+    Assert(ecs_is_entity_valid(Registry, Entity), "Entity is not valid!");
 
-    ForEachPool(Registry, [Entity](auto& Pool)
+    for_each_pool(Registry, [Entity](auto& Pool)
     {
-        if (SparseSetContains(&Pool.Set, ecs_to_entity_type(Entity)))
+        if (sparse_set_contains(&Pool.Set, ecs_to_entity_type(Entity)))
         {
-            rem Rem = SparseSetRemove(&Pool.Set, ecs_to_entity_type(Entity));
+            rem Rem = sparse_set_remove(&Pool.Set, ecs_to_entity_type(Entity));
 
             // Update dense transforms based on the dense index array
             Pool.Data[Rem.DenseIndex] = Pool.Data[Rem.Last];
@@ -263,105 +318,45 @@ internal void DestroyEntity(entity_registry* Registry, entity Entity)
 }
 
 template<typename T>
-internal T& AddComponent(entity_registry* Registry, entity Entity)
+internal T& ecs_add_component(entity_registry* Registry, entity Entity)
 {
-    auto& Pool = GetPool<T>(Registry);
+    auto& Pool = ecs_get_pool<T>(Registry);
 
-    Assert(!SparseSetContains(&Pool.Set, ecs_to_entity_type(Entity)), "Entity already has this component!");
+    Assert(!sparse_set_contains(&Pool.Set, ecs_to_entity_type(Entity)), "Entity already has this component!");
 
-    auto Index = SparseSetAdd(&Pool.Set, ecs_to_entity_type(Entity));
+    auto Index = sparse_set_ad(&Pool.Set, ecs_to_entity_type(Entity));
 
     return Pool.Data[Index];
 }
 
 template<typename T>
-internal void RemoveComponent(entity_registry* Registry, entity Entity)
+internal void ecs_remove_component(entity_registry* Registry, entity Entity)
 {
-    auto& Pool = GetPool<T>(Registry);
+    auto& Pool = ecs_get_pool<T>(Registry);
 
-    Assert(SparseSetContains(&Pool.Set, ecs_to_entity_type(Entity)), "Entity does not have this component!");
+    Assert(sparse_set_contains(&Pool.Set, ecs_to_entity_type(Entity)), "Entity does not have this component!");
 
-    SparseSetRemove(&Pool.Set, ecs_to_entity_type(Entity));
+    sparse_set_remove(&Pool.Set, ecs_to_entity_type(Entity));
 }
 
 template<typename T>
-internal T& GetComponent(entity_registry* Registry, entity Entity)
+internal T& ecs_get_component(entity_registry* Registry, entity Entity)
 {
-    auto& Pool = GetPool<T>(Registry);
+    auto& Pool = ecs_get_pool<T>(Registry);
 
-    Assert(SparseSetContains(&Pool.Set, ecs_to_entity_type(Entity)), "Entity does not have this component!");
+    Assert(sparse_set_contains(&Pool.Set, ecs_to_entity_type(Entity)), "Entity does not have this component!");
 
-    auto Index = SparseSetGet(&Pool.Set, ecs_to_entity_type(Entity));
+    auto Index = sparse_set_get(&Pool.Set, ecs_to_entity_type(Entity));
 
     return Pool.Data[Index];
 }
 
 template<typename T>
-struct view
+internal ecs_view<T> ecs_view_components(entity_registry* Registry)
 {
-    entity* DenseBegin;
-    entity* DenseEnd;
-    T* DenseComponentPool;
+    auto& Pool = ecs_get_pool<T>(Registry);
 
-    auto begin() const { return DenseBegin; }
-    auto end() const { return DenseEnd; }
-
-    T& Get(entity Entity)
-    {
-        return DenseComponentPool[ecs_to_entity_type(Entity)];
-    }
-};
-
-template<typename T0, typename T1>
-struct double_view
-{
-    view<T0> View0;
-    view<T1> View1;
-
-    entity* DenseBegin;
-    entity* DenseEnd;
-
-    auto begin() { return DenseBegin; }
-    auto end() { return DenseEnd; }
-
-    auto Get(entity Entity)
-    {
-        auto& Component0 = View0.Get(Entity);
-        auto& Component1 = View1.Get(Entity);
-
-        return std::forward_as_tuple<T0&, T1&>(Component0, Component1);
-    }
-};
-
-template<typename T0, typename T1, typename T2>
-struct triple_view
-{
-    view<T0> View0;
-    view<T1> View1;
-    view<T2> View2;
-
-    entity* DenseBegin;
-    entity* DenseEnd;
-
-    auto begin() { return DenseBegin; }
-    auto end() { return DenseEnd; }
-
-    auto Get(entity Entity)
-    {
-        auto& Component0 = View0.Get(Entity);
-        auto& Component1 = View1.Get(Entity);
-        auto& Component2 = View2.Get(Entity);
-
-        return std::forward_as_tuple<T0&, T1&, T2&>(Component0, Component1, Component2);
-    }
-};
-
-template<typename T>
-internal view<T> ViewComponents(entity_registry* Registry)
-{
-    auto& Pool = GetPool<T>(Registry);
-
-    view<T> View;
+    ecs_view<T> View;
 
     // Setup iterators
     View.DenseBegin = (entity*)Pool.Set.Dense;
@@ -374,10 +369,10 @@ internal view<T> ViewComponents(entity_registry* Registry)
 }
 
 template<typename T0, typename T1>
-internal double_view<T0, T1> ViewComponents(entity_registry* Registry)
+internal double_view<T0, T1> ecs_view_components(entity_registry* Registry)
 {
-    auto View0 = ViewComponents<T0>(Registry);
-    auto View1 = ViewComponents<T1>(Registry);
+    auto View0 = ecs_view_components<T0>(Registry);
+    auto View1 = ecs_view_components<T1>(Registry);
 
     double_view<T0, T1> View;
 
@@ -401,13 +396,13 @@ internal double_view<T0, T1> ViewComponents(entity_registry* Registry)
 }
 
 template<typename T0, typename T1, typename T2>
-internal triple_view<T0, T1, T2> ViewComponents(entity_registry* Registry)
+internal ecs_triple_view<T0, T1, T2> ecs_view_components(entity_registry* Registry)
 {
-    auto View0 = ViewComponents<T0>(Registry);
-    auto View1 = ViewComponents<T1>(Registry);
-    auto View2 = ViewComponents<T2>(Registry);
+    auto View0 = ecs_view_components<T0>(Registry);
+    auto View1 = ecs_view_components<T1>(Registry);
+    auto View2 = ecs_view_components<T2>(Registry);
 
-    triple_view<T0, T1, T2> View;
+    ecs_triple_view<T0, T1, T2> View;
 
     // Setup iterators
     entity* ViewBegins[] =
@@ -448,27 +443,27 @@ internal triple_view<T0, T1, T2> ViewComponents(entity_registry* Registry)
 
 internal void ECS_Test()
 {
-    entity_registry Registry = EntityRegistryCreate(16);
+    entity_registry Registry = ecs_entity_registry_create(16);
 
     for (i32 i = 0; i < 10; i++)
     {
-        entity Entity = CreateEntity(&Registry);
+        entity Entity = ecs_create_entity(&Registry);
 
-        auto& T = AddComponent<transform_component>(&Registry, Entity);
+        auto& T = ecs_add_component<transform_component>(&Registry, Entity);
         T.Translation.x = (f32)i;
 
-        auto& R = AddComponent<entity_render_component>(&Registry, Entity);
+        auto& R = ecs_add_component<entity_render_component>(&Registry, Entity);
         R.Color = v4((f32)i, 1.0f, 1.0f, 1.0f);
     }
 
     for (i32 i = 0; i < 5; i++)
     {
-        RemoveComponent<transform_component>(&Registry, entity(i));
+        ecs_remove_component<transform_component>(&Registry, entity(i));
     }
 
     // View
     {
-        auto View = ViewComponents<transform_component>(&Registry);
+        auto View = ecs_view_components<transform_component>(&Registry);
         for (auto Entity : View)
         {
             auto& Transform = View.Get(Entity);
@@ -478,7 +473,7 @@ internal void ECS_Test()
     }
 
     {
-        auto View = ViewComponents<transform_component, entity_render_component>(&Registry);
+        auto View = ecs_view_components<transform_component, entity_render_component>(&Registry);
         for (auto Entity : View)
         {
             auto [Transform, Renderable] = View.Get(Entity);

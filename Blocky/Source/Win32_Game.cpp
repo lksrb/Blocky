@@ -20,7 +20,6 @@ internal u32 g_ClientHeight = 0;
 internal bool g_DoResize = false;
 internal bool g_IsRunning = false;
 internal bool g_IsFocused = false;
-internal game_input* g_Input;
 
 LRESULT win32_procedure_handler(HWND WindowHandle, UINT Message, WPARAM WParam, LPARAM LParam)
 {
@@ -539,7 +538,6 @@ int main(int argc, char** argv)
     f32 TimeStep = 0.0f;
     g_IsRunning = true;
     game_input Input = {};
-    g_Input = &Input;
     while (g_IsRunning)
     {
         // Process events
@@ -555,19 +553,16 @@ int main(int argc, char** argv)
             d3d12_render_backend_resize_buffers(DX12Backend, g_ClientWidth, g_ClientHeight);
         }
 
-        // ImGui::Begin();
         if (!IsMinimized)
         {
-            //scoped_timer timer("Game update");
-            win32_dx12_imgui_begin_frame(Win32Dx12ImGuiContext);
-
             v2i ClientArea = { (i32)g_ClientWidth, (i32)g_ClientHeight };
             game_update(Game, Renderer,  &Input, TimeStep, ClientArea);
 
+            //scoped_timer timer("Game update");
+            win32_dx12_imgui_begin_frame(Win32Dx12ImGuiContext);
             game_debug_ui_update(Game, Renderer, &Input, TimeStep, ClientArea);
             win32_dx12_imgui_end_frame(Win32Dx12ImGuiContext);
         }
-        // ImGui::End
 
         // Render stuff
         d3d12_render_backend_render(DX12Backend, Renderer, Win32Dx12ImGuiContext->CurrentDrawData);

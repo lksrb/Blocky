@@ -150,8 +150,8 @@ internal void cow_update(game* Game, entity_registry* Registry, entity Entity, l
     using namespace bkm;
 
     cow* Cow = static_cast<cow*>(Logic->Storage);
-    auto& Transform = GetComponent<transform_component>(Registry, Entity);
-    auto& AABBPhysics = GetComponent<aabb_physics_component>(Registry, Entity);
+    auto& Transform = ecs_get_component<transform_component>(Registry, Entity);
+    auto& AABBPhysics = ecs_get_component<aabb_physics_component>(Registry, Entity);
 
     // Actions
     if (1)

@@ -2,7 +2,7 @@
 
 namespace UI {
 
-    internal void DrawVec3Control(const char* label, v3* values, f32 resetValue = 0.0f, f32 columnWidth = 50.0f)
+    internal void DrawVec3Control(const char* label, v3* values, f32 resetValue = 0.0f, f32 columnWidth = 30.0f)
     {
         ImGuiIO& io = ImGui::GetIO();
         auto boldFont = io.Fonts->Fonts[0];
@@ -66,6 +66,8 @@ namespace UI {
         ImGui::Columns(1);
 
         ImGui::PopID();
+
+        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 3);
     }
 
 }

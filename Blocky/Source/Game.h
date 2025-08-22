@@ -3,7 +3,7 @@
 #include "Random.h"
 #include "AABB.h"
 #include "RayCast.h"
-#include "ECS.h"
+#include "ECS/ECS.h"
 #include "PerlinNoise.h"
 
 struct camera
@@ -120,12 +120,23 @@ struct game
 
     bool RenderEditorUI = true;
     bool RenderHUD = true;
-    bool RenderDebugUI = true; // ImGui stuff
+    bool RenderDebugUI = true; // ImGui
+
+    // Shadows and lighting
+    v3 Center = v3(ColumnCount / 2.0f, 0, RowCount / 2.0f);
+    v3 Eye = Center + v3(0, 16, 0);
+    f32 Size = 15;
+    f32 Near = 1.0f;
+    f32 Far = 15.5;
+    v3 LightDirection = bkm::Normalize(v3(0.0f, -1.0f, 0));
+    f32 DirectionalLightPower = 0.0f;
+    v3 PointLightPos = v3(5, 2, 5);
+    f32 PointLightIntenity = 1.0f;
 };
 
 internal game* game_create(arena* Arena, render_backend* Backend);
 internal void game_destroy(game* Game, render_backend* Backend);
-internal void game_update(game* Game, game_renderer* Renderer, const game_input* Input, f32 TimeStep, v2i ClientArea);
+internal void game_update(game* G, game_renderer* Renderer, const game_input* Input, f32 TimeStep, v2i ClientArea);
 internal void game_debug_ui_update(game* Game, game_renderer* Renderer, const game_input* Input, f32 TimeStep, v2i ClientArea);
 internal void game_player_update(game* Game, const game_input* Input, game_renderer* Renderer, f32 TimeStep);
 internal void game_generate_world(arena* Arena, game* Game);
@@ -167,11 +178,6 @@ internal bool find_first_hit(const ray& Ray, const block* Blocks, u64 BlocksCoun
 
     return FoundHit;
 }
-
-//internal bool FindFirstHit(const ray& Ray, const std::vector<block>& Blocks, v3* HitPoint, v3* HitNormal, block* HitBlock, u64* HitIndex)
-//{
-//    return FindFirstHit(Ray, Blocks.data(), Blocks.size(), HitPoint, HitNormal, HitBlock, HitIndex);
-//}
 
 internal block* block_get_safe(game* Game, i32 C, i32 R, i32 L)
 {

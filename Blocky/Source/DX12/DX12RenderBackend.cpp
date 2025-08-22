@@ -619,7 +619,7 @@ internal void dx12_render_backend_initialize_pipeline(arena* Arena, dx12_render_
             { "TEXINDEX", 0, DXGI_FORMAT_R32_UINT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
         };
 
-        Backend->HUD.Pipeline = dx12_graphics_pipeline_create(Device, Backend->RootSignature, InputElementDescs, CountOf(InputElementDescs), L"Resources/HUD.hlsl", Backend->MainPass.Format);
+        Backend->HUD.Pipeline = dx12_graphics_pipeline_create(Device, Backend->RootSignature, InputElementDescs, CountOf(InputElementDescs), L"Resources/HUD.hlsl", Backend->SwapChainFormat, D3D12_CULL_MODE_BACK, false);
 
         for (u32 i = 0; i < FIF; i++)
         {
@@ -1080,24 +1080,6 @@ internal void d3d12_render_backend_render(dx12_render_backend* Backend, const ga
         CommandList->DrawIndexedInstanced(Renderer->Quad.IndexCount, 1, 0, 0, 0);
     }
 
-    // Render HUD
-    const bool RenderHUD = true;
-    if (RenderHUD && Renderer->HUD.IndexCount > 0)
-    {
-        CommandList->SetPipelineState(Backend->HUD.Pipeline.Handle);
-
-        // Bind vertex buffer
-        dx12_cmd_set_vertex_buffer(CommandList, 0, Backend->HUD.VertexBuffers[CurrentBackBufferIndex].Buffer.Handle, Renderer->HUD.IndexCount * sizeof(hud_quad_vertex), sizeof(hud_quad_vertex));
-
-        // Bind index buffer
-        dx12_cmd_set_index_buffer(CommandList, Backend->Quad.IndexBuffer.Buffer.Handle, Renderer->HUD.IndexCount * sizeof(u32), DXGI_FORMAT_R32_UINT);
-
-        CommandList->SetGraphicsRoot32BitConstants(0, 16, &Renderer->RenderData.HUDBuffer.Projection, 0);
-
-        // Issue draw call
-        CommandList->DrawIndexedInstanced(Renderer->HUD.IndexCount, 1, 0, 0, 0);
-    }
-
     const bool EnableBloomPass = Renderer->EnableBloom;
     dx12_cmd_transition(CommandList, MainPassRenderBuffer, D3D12_RESOURCE_STATE_RENDER_TARGET, EnableBloomPass ? D3D12_RESOURCE_STATE_UNORDERED_ACCESS : D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 
@@ -1161,7 +1143,6 @@ internal void d3d12_render_backend_render(dx12_render_backend* Backend, const ga
         {
             BloomPassData.Mode = bloom_pass_buffer_data::mode::DownSample;
 
-
             for (u32 MipLevel = 1; MipLevel < Mips; MipLevel++)
             {
                 auto [MipWidth, MipHeight] = get_mip_size(MipLevel, BloomTextureSize.x, BloomTextureSize.y);
@@ -1215,8 +1196,6 @@ internal void d3d12_render_backend_render(dx12_render_backend* Backend, const ga
         // First upsample
         {
             BloomPassData.Mode = bloom_pass_buffer_data::mode::FirstUpSample;
-            //ThreadGroupsX *= 2;
-            //ThreadGroupsY *= 2;
 
             auto [MipWidth, MipHeight] = get_mip_size(Mips - 2, BloomTextureSize.x, BloomTextureSize.y);
             ThreadGroupsX = (u32)bkm::Ceil((f32)MipWidth / (f32)BloomPass.BloomComputeWorkgroupSize);
@@ -1293,6 +1272,25 @@ internal void d3d12_render_backend_render(dx12_render_backend* Backend, const ga
         CommandList->SetGraphicsRootDescriptorTable(1, Backend->BloomPass.BloomTexture2[CurrentBackBufferIndex].ShaderResourceView.GPU);
 
         CommandList->DrawInstanced(3, 1, 0, 0);
+    }
+
+    // Render Game HUD
+    const bool RenderHUD = true;
+    if (RenderHUD && Renderer->HUD.IndexCount > 0)
+    {
+        CommandList->SetPipelineState(Backend->HUD.Pipeline.Handle);
+
+        CommandList->SetGraphicsRootSignature(Backend->RootSignature.Handle);
+        CommandList->SetGraphicsRoot32BitConstants(0, 16, &Renderer->RenderData.HUDBuffer.Projection, 0);
+
+        // Bind vertex buffer
+        dx12_cmd_set_vertex_buffer(CommandList, 0, Backend->HUD.VertexBuffers[CurrentBackBufferIndex].Buffer.Handle, Renderer->HUD.IndexCount * sizeof(hud_quad_vertex), sizeof(hud_quad_vertex));
+
+        // Bind index buffer
+        dx12_cmd_set_index_buffer(CommandList, Backend->Quad.IndexBuffer.Buffer.Handle, Renderer->HUD.IndexCount * sizeof(u32), DXGI_FORMAT_R32_UINT);
+        
+        // Issue draw call
+        CommandList->DrawIndexedInstanced(Renderer->HUD.IndexCount, 1, 0, 0, 0);
     }
 
     // Render debug UI

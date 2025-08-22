@@ -82,7 +82,7 @@ internal game* game_create(arena* Arena, render_backend* Backend)
 
     //Game->MoonTexture = TextureCreate(Renderer->Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, "Resources/Textures/MC/environemnt/moon.png");
 
-    Game->Registry = EntityRegistryCreate(100);
+    Game->Registry = ecs_entity_registry_create(100);
 
     entity_model CowModel = EntityModelCreate();
 
@@ -137,30 +137,30 @@ internal game* game_create(arena* Arena, render_backend* Backend)
     // Create another set of cows
     for (i32 i = 10; i < 11; i++)
     {
-        auto CowEntity = CreateEntity(&Game->Registry);
+        auto CowEntity = ecs_create_entity(&Game->Registry);
 
-        auto& Transform = AddComponent<transform_component>(&Game->Registry, CowEntity);
+        auto& Transform = ecs_add_component<transform_component>(&Game->Registry, CowEntity);
         Transform.Translation = v3((f32)c_TexelSize / 2 + 10.0f, 17.0, c_TexelSize / 2 + 10.0f);
         Transform.Scale = v3(1.0f);
         Transform.Rotation = v3(0.0f, 0.0f, 0.0f);
 
-        auto& Render = AddComponent<entity_render_component>(&Game->Registry, CowEntity);
+        auto& Render = ecs_add_component<entity_render_component>(&Game->Registry, CowEntity);
         Render.Texture = Game->CowTexture;
         Render.Model = CowModel;
 
-        auto& AABB = AddComponent<aabb_physics_component>(&Game->Registry, CowEntity);
+        auto& AABB = ecs_add_component<aabb_physics_component>(&Game->Registry, CowEntity);
         AABB.BoxSize = v3(0.8f, 1.8, 0.8f);
         AABB.Velocity = v3(0.0f);
         AABB.Grounded = false;
 
-        auto& Logic = AddComponent<logic_component>(&Game->Registry, CowEntity);
+        auto& Logic = ecs_add_component<logic_component>(&Game->Registry, CowEntity);
         Logic.CreateFunction = cow_create;
         Logic.DestroyFunction = cow_destroy;
         Logic.UpdateFunction = cow_update;
     }
 
     // On Create event
-    auto View = ViewComponents<logic_component>(&Game->Registry);
+    auto View = ecs_view_components<logic_component>(&Game->Registry);
     for (auto Entity : View)
     {
         auto& Logic = View.Get(Entity);
@@ -240,50 +240,54 @@ internal void game_generate_world(arena* Arena, game* Game)
     }
 }
 
-internal void game_update(game* Game, game_renderer* Renderer, const game_input* Input, f32 TimeStep, v2i ClientArea)
+internal void game_update(game* G, game_renderer* Renderer, const game_input* Input, f32 TimeStep, v2i ClientArea)
 {
     //debug_cycle_counter GameUpdateCounter("GameUpdateCounter");
 
     if (Input->is_key_pressed(key::H) || Input->is_mouse_pressed(mouse::Side1) || Input->is_mouse_pressed(mouse::Side0))
     {
-        Game->RenderDebugUI = !Game->RenderDebugUI;
+        G->RenderDebugUI = !G->RenderDebugUI;
     }
 
     // Player update
     // NOTE: I dont think we need everything to be an entity, just most dynamic stuff
     // Player and blocks are perfect examples of where we possibly dont need that flexibility
-    game_player_update(Game, Input, Renderer, TimeStep);
-
-    // Entity update
-    // Physics simulation gave us some state of the entity and now we can use it to react to in the update loop
-    if (1)
+    bool UpdatePlayer = true;
+    if (UpdatePlayer)
     {
-        game_update_entities(Game, TimeStep);
+        game_player_update(G, Input, Renderer, TimeStep);
     }
 
-    // Physics simulation
-    if (1)
+    // Physics simulation gave us some state of the entity and now we can use it to react to in the update loop
+    bool UpdateEntities = true;
+    if (UpdateEntities)
     {
-        game_physics_simulation_update_entities(Game, TimeStep);
+        game_update_entities(G, TimeStep);
+    }
+
+    bool SimulatePhysics = true;
+    if (SimulatePhysics)
+    {
+        game_physics_simulation_update_entities(G, TimeStep);
     }
 
     // Count time
-    Game->TimeSinceStart += TimeStep;
+    G->TimeSinceStart += TimeStep;
 
-    // Render
-    if (1)
+    bool RenderEntities = true;
+    if (RenderEntities)
     {
-        game_render_entities(Game, Renderer, TimeStep);
+        game_render_entities(G, Renderer, TimeStep);
     }
 
-    // Render blocks
-    if (1)
+    bool RenderBlocks = true;
+    if (RenderBlocks)
     {
         //debug_cycle_counter GameUpdateCounter("Render Blocks");
 
-        for (u32 i = 0; i < Game->BlocksCount; i++)
+        for (u32 i = 0; i < G->BlocksCount; i++)
         {
-            auto& Block = Game->Blocks[i];
+            auto& Block = G->Blocks[i];
 
             if (!Block.placed())
                 continue;
@@ -293,19 +297,13 @@ internal void game_update(game* Game, game_renderer* Renderer, const game_input*
     }
 
     // Lights
-    v3 TestLightPos = v3(10, 5, 10);
-    //GameRendererSubmitPointLight(Renderer, TestLightPos, 10.0, 1.0f, v3(1.0f), 2.0f);
-
-    //GameRendererSubmitDirectionalLight(Renderer, )
-
-    f32 GameTime = Game->TimeSinceStart * 0.1f;
+    f32 GameTime = G->TimeSinceStart * 0.1f;
     GameTime = 0;
-    //Trace("%.3f", GameTime);
 
     // Render sun
-    v3 SunDirection;
-    v3 SunPosition;
     {
+        v3 SunDirection;
+        v3 SunPosition;
         f32 DirGameTime = GameTime + bkm::PI_HALF;
         f32 Distance = 10.0f;
         f32 Angle = bkm::PI_HALF - GameTime; // speed of day-night cycle (radians per second)
@@ -340,17 +338,7 @@ internal void game_update(game* Game, game_renderer* Renderer, const game_input*
         //GameRendererSubmitDirectionalLight(Renderer, -SunDirection, 1.5f, v3(1.0f));
     }
 
-    local_persist constinit v3 Center = v3(ColumnCount / 2.0f, 0, RowCount / 2.0f);
-    local_persist v3 Eye = Center + v3(0, 16, 0);
-    local_persist f32 Size = 15;
-    local_persist f32 Near = 1.0f;
-    local_persist f32 Far = 15.5;
-    local_persist v3 LightDirection = bkm::Normalize(v3(0.0f, -1.0f, 0));
-    local_persist f32 DirectionalLightPower = 0.0f;
-    local_persist v3 PointLightPos = v3(5, 2, 5);
-    local_persist f32 PointLightIntenity = 1.0f;
-
-    auto CenterBlock = block_get_safe(Game, (i32)Center.x, (i32)Center.z, (i32)Center.y);
+    auto CenterBlock = block_get_safe(G, (i32)G->Center.x, (i32)G->Center.z, (i32)G->Center.y);
     if (CenterBlock)
     {
         CenterBlock->Color = v4(0.0f, 1.0, 1.0, 1.0f);
@@ -359,10 +347,17 @@ internal void game_update(game* Game, game_renderer* Renderer, const game_input*
     {
         m4 LightSpaceMatrix;
 
+        auto Size = G->Size;
+        auto Near = G->Near;
+        auto Far = G->Far;
+        auto Eye = G->Eye;
+        auto LightDirection = G->LightDirection;
+
+        // Building light space matrix
         {
             m4 LightProjection = bkm::OrthoRH_ZO(-Size, Size, -Size, Size, Near, Far);
 
-            v3 forward = bkm::Normalize(Center - Eye);
+            v3 forward = bkm::Normalize(G->Center - G->Eye);
             v3 right = bkm::Normalize(bkm::Cross((fabs(forward.y) > 0.99f) ? v3(0, 0, 1) : v3(0, 1, 0), forward));
             v3 safeUp = bkm::Cross(forward, right);
 
@@ -373,59 +368,32 @@ internal void game_update(game* Game, game_renderer* Renderer, const game_input*
             LightSpaceMatrix = LightProjection * LightView; // Remove translation
         }
 
-        v3 CameraPosition = Game->Player.Position + Game->CameraOffset;
+        v3 CameraPosition = G->Player.Position + G->CameraOffset;
 
-        m4 InverseView = bkm::Translate(m4(1.0f), CameraPosition) * bkm::ToM4(qtn(Game->Player.Rotation));
-        Game->Camera.View = bkm::Inverse(InverseView);
-        Game->Camera.recalculate_projection_perspective(ClientArea.x, ClientArea.y);
+        m4 InverseView = bkm::Translate(m4(1.0f), CameraPosition) * bkm::ToM4(qtn(G->Player.Rotation));
+        G->Camera.View = bkm::Inverse(InverseView);
+        G->Camera.recalculate_projection_perspective(ClientArea.x, ClientArea.y);
 
         m4 HUDProjection = bkm::OrthoRH_ZO(0, (f32)ClientArea.x, (f32)ClientArea.y, 0, -1, 1);
-        game_renderer_set_render_data(Renderer, CameraPosition, Game->Camera.View, Game->Camera.Projection, InverseView, HUDProjection, GameTime, LightSpaceMatrix);
+        game_renderer_set_render_data(Renderer, CameraPosition, G->Camera.View, G->Camera.Projection, InverseView, HUDProjection, GameTime, LightSpaceMatrix);
 
-        game_renderer_submit_directional_light(Renderer, LightDirection, DirectionalLightPower, v3(1.0f));
+        game_renderer_submit_directional_light(Renderer, LightDirection, G->DirectionalLightPower, v3(1.0f));
     }
 
     for (auto& PointLight : g_PointLightsPositions)
     {
-        game_renderer_submit_point_light(Renderer, PointLight, 5, 1, v3(1, 0, 0), PointLightIntenity);
-    }
-
-    {
-        game_renderer_submit_point_light(Renderer, PointLightPos, 5, 1, v3(1), PointLightIntenity);
-    }
-
-    // ImGui debug UI
-    if (Game->RenderDebugUI)
-    {
-        ImGui::Begin("Shadow maps");
-        UI::DrawVec3Control("Eye", &Eye);
-        ImGui::DragFloat("Size", &Size, 1.0f, 0.0f, 100.0f);
-        ImGui::DragFloat("Near", &Near, 0.1f, -100.0f, 100.0f);
-        ImGui::DragFloat("Far", &Far, 0.5f, 0.0f, 100.0f);
-
-        ImGui::Separator();
-        UI::DrawVec3Control("Point Light Pos", &PointLightPos);
-        ImGui::DragFloat("Point Light Intensity", &PointLightIntenity, 0.5f, 0.0f, 100.0f);
-        ImGui::Separator();
-        ImGui::DragFloat("Directional Light Power", &DirectionalLightPower, 0.2f, 0.0f, 100.0f);
-        ImGui::Separator();
-        ImGui::Checkbox("Bloom", &Renderer->EnableBloom);
-        ImGui::Checkbox("Shadows", &Renderer->EnableShadows);
-
-        ImGui::End();
+        game_renderer_submit_point_light(Renderer, PointLight, 5, 1, v3(1, 0, 0), G->PointLightIntenity);
     }
 
     // Render Editor UI
-    if (Game->RenderEditorUI)
+    if (G->RenderEditorUI)
     {
         // For each point lights so we know that its there
-        game_renderer_submit_billboard_quad(Renderer, Eye, v2(0.5), &Game->PointLightIconTexture, v4(1.0f));
-
-        game_renderer_submit_billboard_quad(Renderer, PointLightPos, v2(0.5), &Game->PointLightIconTexture, v4(1.0f));
+        game_renderer_submit_billboard_quad(Renderer, G->Eye, v2(0.5), &G->PointLightIconTexture, v4(1.0f));
     }
 
     // Render HUD
-    if (Game->RenderHUD)
+    if (G->RenderHUD)
     {
         m4 Projection = bkm::OrthoRH_ZO(0, (f32)ClientArea.x, (f32)ClientArea.y, 0, 0.0f, 1.0f);
 
@@ -440,13 +408,42 @@ internal void game_update(game* Game, game_renderer* Renderer, const game_input*
         Positions[1] = { CenterX + CrosshairSize, CenterY + CrosshairSize, 0.0f };
         Positions[0] = { CenterX, CenterY + CrosshairSize, 0.0f };
 
-        game_renderer_submit_hud_quad(Renderer, Positions, &Game->CrosshairTexture, texture_coords(), v4(1.0f, 1.0f, 1.0f, 0.7f));
+        game_renderer_submit_hud_quad(Renderer, Positions, &G->CrosshairTexture, texture_coords(), v4(1.0f, 1.0f, 1.0f, 0.7f));
     }
 }
 
-internal void game_debug_ui_update(game* Game, game_renderer* Renderer, const game_input* Input, f32 TimeStep, v2i ClientArea)
+internal void game_debug_ui_update(game* G, game_renderer* Renderer, const game_input* Input, f32 TimeStep, v2i ClientArea)
 {
+    if (!G->RenderDebugUI)
+        return;
 
+    ImGui::Begin("Settings");
+
+    if (ImGui::CollapsingHeader("Global Settings", ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        ImGui::Checkbox("Render HUD", &G->RenderHUD);
+        ImGui::Checkbox("Bloom", &Renderer->EnableBloom);
+        ImGui::Checkbox("Shadows", &Renderer->EnableShadows);
+    }
+
+    if (ImGui::CollapsingHeader("Shadow Maps Testing", ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        UI::DrawVec3Control("Eye", &G->Eye);
+        ImGui::DragFloat("Size", &G->Size, 1.0f, 0.0f, 100.0f);
+        ImGui::DragFloat("Near", &G->Near, 0.1f, -100.0f, 100.0f);
+        ImGui::DragFloat("Far", &G->Far, 0.5f, 0.0f, 100.0f);
+    }
+
+    if (ImGui::CollapsingHeader("Light Testing", ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        UI::DrawVec3Control("Point Light Pos", &G->PointLightPos);
+        ImGui::DragFloat("Point Light Intensity", &G->PointLightIntenity, 0.5f, 0.0f, 100.0f);
+        ImGui::Separator();
+        ImGui::DragFloat("Directional Light Power", &G->DirectionalLightPower, 0.2f, 0.0f, 100.0f);
+        ImGui::Separator();
+    }
+
+    ImGui::End();
 }
 
 internal void game_player_update(game* Game, const game_input* Input, game_renderer* Renderer, f32 TimeStep)
@@ -848,7 +845,7 @@ internal void game_update_entities(game* Game, f32 TimeStep)
     // However I dont think its necessary right now when the COW just goes and jumps off a cliff. There are more important things.
     //debug_cycle_counter Counter("GameUpdateEntities");
 
-    auto View = ViewComponents<logic_component>(&Game->Registry);
+    auto View = ecs_view_components<logic_component>(&Game->Registry);
 
     for (auto Entity : View)
     {
@@ -859,7 +856,7 @@ internal void game_update_entities(game* Game, f32 TimeStep)
 
 internal void game_physics_simulation_update_entities(game* Game, f32 TimeStep)
 {
-    auto View = ViewComponents<transform_component, aabb_physics_component>(&Game->Registry);
+    auto View = ecs_view_components<transform_component, aabb_physics_component>(&Game->Registry);
 
     for (auto Entity : View)
     {
@@ -977,7 +974,6 @@ internal void game_physics_simulation_update_entities(game* Game, f32 TimeStep)
                 }
             }
         }
-
     ExitLoopZ:
         Transform.Translation = NextPos;
         AABBPhysics.Velocity = NextVelocity;
@@ -988,7 +984,7 @@ internal void game_render_entities(game* Game, game_renderer* Renderer, f32 Time
 {
     //debug_cycle_counter GameRenderEntities("Render Entities");
 
-    auto View = ViewComponents<transform_component, entity_render_component>(&Game->Registry);
+    auto View = ecs_view_components<transform_component, entity_render_component>(&Game->Registry);
     for (auto Entity : View)
     {
         auto [Transform, Render] = View.Get(Entity);
