@@ -289,18 +289,19 @@ internal void game_update(game* G, game_renderer* Renderer, const game_input* In
             if (!Block.placed())
                 continue;
 
+            v4 BlockColor = Block.Color;
+
             if (Block.Type == block_type::GlowStone)
             {
-                f32 Radius = 3.0f;
+                Block.Emission = G->GlowStoneEmission;
+                f32 Radius = 6.0f;
                 f32 FallOff = 1.0f;
                 v3 Radiance = G->GlowStoneColor;
-                game_renderer_submit_cuboid(Renderer, Block.Position, &G->BlockTextures[(u32)Block.Type], v4(G->GlowStoneColor, 1.0f), G->GlowStoneEmission);
+                BlockColor = v4(Radiance, 1.0f);
                 game_renderer_submit_point_light(Renderer, Block.Position, Radius, FallOff, Radiance, G->GlowStoneEmission * 3.0f);
             }
-            else if (Block.Type == block_type::Dirt)
-            {
-                game_renderer_submit_cuboid(Renderer, Block.Position, &G->BlockTextures[(u32)Block.Type], Block.Color, Block.Emission);
-            }
+
+            game_renderer_submit_cuboid(Renderer, Block.Position, &G->BlockTextures[(u32)Block.Type], BlockColor, Block.Emission);
         }
     }
 

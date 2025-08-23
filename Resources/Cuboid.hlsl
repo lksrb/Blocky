@@ -161,7 +161,6 @@ float4 PSMain(pixel_shader_input In) : SV_TARGET
     // Phase 2: Point lights
     for (int j = 0; j < u_PointLightCount; j++)
     {
-        //Result += CalculatePointLight(u_PointLights[j], Normal, ViewDir, Shininess, In.WorldPosition.xyz, TextureColor * In.Color.rgb);
         Result += CalculatePointLight(u_PointLights[j], Normal, ViewDir, Shininess, In.WorldPosition.xyz, TextureColor * In.Color.rgb);
     }
     
