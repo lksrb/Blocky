@@ -42,6 +42,7 @@ enum class block_type : u32
 {
     Dirt = 0,
     Air,
+    GlowStone,
 
     INVALID
 };
@@ -77,9 +78,10 @@ struct player
 // TODO: Possible cache optimalizations
 struct block
 {
-    v4 Color = v4(1.0f);
-    block_type Type = block_type::INVALID;
     v3 Position = {}; // Position can be removed
+    block_type Type = block_type::INVALID;
+    v4 Color = v4(1.0f);
+    f32 Emission = 0.0f;
 
     inline bool placed() const { return Type != block_type::Air; }
     //i32 Left = INT_MAX, Right = INT_MAX, Front = INT_MAX, Back = INT_MAX, Up = INT_MAX, Down = INT_MAX; // Neighbours
@@ -132,18 +134,23 @@ struct game
     f32 DirectionalLightPower = 0.0f;
     v3 PointLightPos = v3(5, 2, 5);
     f32 PointLightIntenity = 1.0f;
+
+    v3 GlowStoneColor = v3(0.8f, 0.3f, 0.2f);
+    f32 GlowStoneEmission = 2.0f;
 };
 
 internal game* game_create(arena* Arena, render_backend* Backend);
-internal void game_destroy(game* Game, render_backend* Backend);
+internal void game_destroy(game* G, render_backend* Backend);
 internal void game_update(game* G, game_renderer* Renderer, const game_input* Input, f32 TimeStep, v2i ClientArea);
-internal void game_debug_ui_update(game* Game, game_renderer* Renderer, const game_input* Input, f32 TimeStep, v2i ClientArea);
-internal void game_player_update(game* Game, const game_input* Input, game_renderer* Renderer, f32 TimeStep);
+internal void game_debug_ui_update(game* G, game_renderer* Renderer, const game_input* Input, f32 TimeStep, v2i ClientArea);
+internal void game_player_update(game* G, const game_input* Input, game_renderer* Renderer, f32 TimeStep);
 internal void game_generate_world(arena* Arena, game* Game);
 
-internal void game_update_entities(game* Game, f32 TimeStep);
-internal void game_physics_simulation_update_entities(game* Game, f32 TimeStep);
-internal void game_render_entities(game* Game, game_renderer* Renderer, f32 TimeStep);
+internal void game_update_entities(game* G, f32 TimeStep);
+internal void game_render_entities(game* G, game_renderer* Renderer, f32 TimeStep);
+internal void game_physics_simulation_update_entities(game* G, f32 TimeStep);
+
+internal void game_render_editor_ui(game* G, game_renderer* Renderer);
 
 internal bool find_first_hit(const ray& Ray, const block* Blocks, u64 BlocksCount, v3* HitPoint, v3* HitNormal, block* HitBlock, u64* HitIndex)
 {

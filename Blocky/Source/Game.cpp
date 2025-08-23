@@ -62,10 +62,6 @@ internal void AddModelPart(entity_model* Model, v3 LocalPosition, v3 Size, textu
     Part.Size = Size * c_TexelSize;
 }
 
-#include <vector>
-
-local_persist std::vector<v3> g_PointLightsPositions;
-
 internal game* game_create(arena* Arena, render_backend* Backend)
 {
     game* Game = arena_new(Arena, game);
@@ -75,6 +71,7 @@ internal game* game_create(arena* Arena, render_backend* Backend)
     // Crosshair texture will be separate from block textures
     Game->CrosshairTexture = texture_create(Backend, "Resources/Textures/MC/Crosshair.png");
     Game->BlockTextures[(u32)block_type::Dirt] = texture_create(Backend, "Resources/Textures/MC/dirt_2.png");
+    Game->BlockTextures[(u32)block_type::GlowStone] = texture_create(Backend, "Resources/Textures/glowstone.png");
     Game->CowTexture = texture_create(Backend, "Resources/Textures/MC/cow.png");
     Game->PointLightIconTexture = texture_create(Backend, "Resources/Textures/PointLight.png", true);
 
@@ -292,7 +289,18 @@ internal void game_update(game* G, game_renderer* Renderer, const game_input* In
             if (!Block.placed())
                 continue;
 
-            game_renderer_submit_cuboid(Renderer, Block.Position, nullptr, Block.Color);
+            if (Block.Type == block_type::GlowStone)
+            {
+                f32 Radius = 3.0f;
+                f32 FallOff = 1.0f;
+                v3 Radiance = G->GlowStoneColor;
+                game_renderer_submit_cuboid(Renderer, Block.Position, &G->BlockTextures[(u32)Block.Type], v4(G->GlowStoneColor, 1.0f), G->GlowStoneEmission);
+                game_renderer_submit_point_light(Renderer, Block.Position, Radius, FallOff, Radiance, G->GlowStoneEmission * 3.0f);
+            }
+            else if (Block.Type == block_type::Dirt)
+            {
+                game_renderer_submit_cuboid(Renderer, Block.Position, &G->BlockTextures[(u32)Block.Type], Block.Color, Block.Emission);
+            }
         }
     }
 
@@ -380,16 +388,22 @@ internal void game_update(game* G, game_renderer* Renderer, const game_input* In
         game_renderer_submit_directional_light(Renderer, LightDirection, G->DirectionalLightPower, v3(1.0f));
     }
 
-    for (auto& PointLight : g_PointLightsPositions)
+    // Render lights
     {
-        game_renderer_submit_point_light(Renderer, PointLight, 5, 1, v3(1, 0, 0), G->PointLightIntenity);
+        // Point lights
+        auto View = ecs_view_components<transform_component, point_light_component>(&G->Registry);
+        for (auto Entity : View)
+        {
+            auto [Transform, PLC] = View.Get(Entity);
+            game_renderer_submit_point_light(Renderer, Transform.Translation, PLC.Radius, PLC.FallOff, PLC.Radiance, PLC.Intensity);
+        }
     }
 
     // Render Editor UI
+
     if (G->RenderEditorUI)
     {
-        // For each point lights so we know that its there
-        game_renderer_submit_billboard_quad(Renderer, G->Eye, v2(0.5), &G->PointLightIconTexture, v4(1.0f));
+        game_render_editor_ui(G, Renderer);
     }
 
     // Render HUD
@@ -409,6 +423,19 @@ internal void game_update(game* G, game_renderer* Renderer, const game_input* In
         Positions[0] = { CenterX, CenterY + CrosshairSize, 0.0f };
 
         game_renderer_submit_hud_quad(Renderer, Positions, &G->CrosshairTexture, texture_coords(), v4(1.0f, 1.0f, 1.0f, 0.7f));
+    }
+}
+
+internal void game_render_editor_ui(game* G, game_renderer* Renderer)
+{
+    // For each point lights so we know that its there
+    game_renderer_submit_billboard_quad(Renderer, G->Eye, v2(0.5), &G->PointLightIconTexture, v4(1.0f));
+
+    auto View = ecs_view_components<transform_component, point_light_component>(&G->Registry);
+    for (auto Entity : View)
+    {
+        auto [Transform, PLC] = View.Get(Entity);
+        game_renderer_submit_billboard_quad(Renderer, Transform.Translation, v2(0.5), &G->PointLightIconTexture, v4(1.0f));
     }
 }
 
@@ -440,6 +467,10 @@ internal void game_debug_ui_update(game* G, game_renderer* Renderer, const game_
         ImGui::DragFloat("Point Light Intensity", &G->PointLightIntenity, 0.5f, 0.0f, 100.0f);
         ImGui::Separator();
         ImGui::DragFloat("Directional Light Power", &G->DirectionalLightPower, 0.2f, 0.0f, 100.0f);
+
+        UI::DrawVec3Control("GlowStone color", &G->GlowStoneColor);
+        ImGui::DragFloat("GlowStone Emission", &G->GlowStoneEmission, 0.2f, 0.0f, 100.0f);
+
         ImGui::Separator();
     }
 
@@ -700,7 +731,6 @@ internal void game_player_update(game* Game, const game_input* Input, game_rende
 
     if (GameFocused)
     {
-
         // Destroy block
         if (Input->is_mouse_pressed(mouse::Left))
         {
@@ -717,21 +747,7 @@ internal void game_player_update(game* Game, const game_input* Input, game_rende
                 auto& Block = Game->Blocks[HitIndex];
                 Block.Type = block_type::Air;
 
-                i32 RemoveIndex = -1;
-                for (i32 i = 0; i < (i32)g_PointLightsPositions.size(); i++)
-                {
-                    if (HitBlock.Position == g_PointLightsPositions[i])
-                    {
-                        RemoveIndex = i;
-                        break;
-                    }
-                }
-
-                if (RemoveIndex >= 0)
-                {
-                    g_PointLightsPositions.erase(g_PointLightsPositions.begin() + RemoveIndex);
-                }
-
+                //entity Entity = ecs_create_entity(&Game->Registry);
                 // Color adjacent blocks
 #if 0
                 if (Block.Left != INT_MAX)
@@ -784,7 +800,7 @@ internal void game_player_update(game* Game, const game_input* Input, game_rende
         // Create blocks
         if (Input->is_mouse_pressed(mouse::Right))
         {
-            v2i PlacePos = { 0,0 };
+            v2i PlacePos = { 0, 0 };
 
             ray Ray;
             Ray.Origin = Player.Position + Game->CameraOffset; // TODO: Camera position
@@ -810,10 +826,10 @@ internal void game_player_update(game* Game, const game_input* Input, game_rende
 
                     if (Block)
                     {
-                        Block->Color = v4(1, 0, 0, 1);
-                        Block->Type = block_type::Dirt;
-
-                        g_PointLightsPositions.push_back(NewBlockPos);
+                        //Block->Color = v4(1, 1, 1, 1);
+                        //Block->Color = Game->GlowStoneColor;
+                        Block->Type = block_type::GlowStone;
+                        //Block->Emission = 2;
                     }
                 }
             }

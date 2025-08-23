@@ -323,7 +323,7 @@ internal void game_renderer_submit_cuboid(game_renderer* Renderer, const v3& Tra
 #endif
 }
 
-internal void game_renderer_submit_cuboid(game_renderer* Renderer, const v3& Translation, const texture* Texture, const v4& Color)
+internal void game_renderer_submit_cuboid(game_renderer* Renderer, const v3& Translation, const texture* Texture, const v4& Color, f32 Emission)
 {
     Assert(Renderer->Cuboid.InstanceCount < c_MaxCubePerBatch, "Renderer->CuboidInstanceCount < c_MaxCuboidsPerBatch");
 
@@ -354,16 +354,14 @@ internal void game_renderer_submit_cuboid(game_renderer* Renderer, const v3& Tra
     // TODO: We can do better by simply copying data and then calculate everything at one swoop
 #if ENABLE_SIMD
     Cuboid.XmmTransform = XMMatrixTranslationFromVector(XMVectorSet(Translation.x, Translation.y, Translation.z, 0.0f));
+#else
+    Cuboid.Transform = bkm::Translate(m4(1.0f), Translation);
+#endif
 
     Cuboid.Color = Color;
     Cuboid.TextureIndex = TextureIndex;
+    Cuboid.Emission = Emission;
     Renderer->Cuboid.InstanceCount++;
-#else
-    Cuboid.Color = Color;
-    Cuboid.Transform = bkm::Translate(m4(1.0f), Translation);
-    Cuboid.TextureIndex = TextureIndex;
-    Renderer->Cuboid.InstanceCount++;
-#endif
 }
 
 internal void game_renderer_submit_cuboid(game_renderer* Renderer, const v3& Translation, const v4& Color)
@@ -374,15 +372,13 @@ internal void game_renderer_submit_cuboid(game_renderer* Renderer, const v3& Tra
 
 #if ENABLE_SIMD
     Cuboid.XmmTransform = XMMatrixTranslation(Translation.x, Translation.y, Translation.z);
-    Cuboid.Color = Color;
-    Cuboid.TextureIndex = 0;
-    Renderer->Cuboid.InstanceCount++;
 #else
-    Cuboid.Color = Color;
     Cuboid.Transform = bkm::Translate(m4(1.0f), Translation);
+#endif
+
+    Cuboid.Color = Color;
     Cuboid.TextureIndex = 0;
     Renderer->Cuboid.InstanceCount++;
-#endif
 }
 
 internal void game_renderer_submit_quaded_cuboid(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale, const texture* Texture, const texture_block_coords& TextureCoords, const v4& Color)

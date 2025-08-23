@@ -20,6 +20,7 @@ struct vertex_shader_input
     float4 TransformRow3 : TRANSFORMD;
     float4 Color : COLOR;
     uint TexIndex : TEXINDEX;
+    float Emission : EMISSION;
 };
 
 struct pixel_shader_input
@@ -32,6 +33,7 @@ struct pixel_shader_input
     float3 ViewPosition : VIEWPOSITION;
     float2 TexCoord : TEXCOORD;
     uint TexIndex : TEXINDEX;
+    float Emission : EMISSION;
 };
 
 pixel_shader_input VSMain(vertex_shader_input In)
@@ -48,6 +50,7 @@ pixel_shader_input VSMain(vertex_shader_input In)
     Out.PositionInLightSpace = mul(c_LightSpaceMatrix, float4(Out.WorldPosition.xyz, 1.0f)); // SHADOWS
     Out.TexCoord = In.TexCoord;
     Out.TexIndex = In.TexIndex;
+    Out.Emission = In.Emission;
 
     return Out;
 }
@@ -135,61 +138,6 @@ float3 CalculateDirectionalLight2(directional_light Light, float3 Normal, float3
 }
 #endif
 
-// Point light calculation
-float3 CalculatePointLight2(point_light Light, float3 Normal, float3 ViewDir, float Shininess, float3 WorldPosition, float3 TextureColor, float Emission)
-{
-    float3 Result = float3(0.0, 0.0, 0.0);
-
-    float3 LightDir = normalize(Light.Position.xyz - WorldPosition);
-    float LightDistance = length(Light.Position.xyz - WorldPosition);
-
-    // Calculate diffuse
-    float DiffuseAngle = max(dot(Normal, LightDir), 0.0);
-
-    // Calculate specular
-    float3 ReflectDir = reflect(-LightDir, Normal); // Phong
-    float3 HalfwayDir = normalize(LightDir + ViewDir); // Blinn-Phong
-    float Spec = pow(max(dot(Normal, HalfwayDir), 0.0), Shininess);
-        
-    // Attenuation
-    float constant = 1.0;
-    float Linear = 0.09;
-    float quadratic = 0.032;
-
-    // Calculate attenuation
-    float Attenuation = clamp(1.0 - (LightDistance * LightDistance) / (Light.Radius * Light.Radius), 0.0, 1.0);
-    Attenuation *= lerp(Attenuation, 1.0, Light.FallOff);
-
-    // TODO: Materials
-    float3 LightAmbient = float3(0.05, 0.05, 0.05);
-    float3 LightDiffuse = float3(0.8, 0.8, 0.8);
-    float3 LightSpecular = float3(1.0, 1.0, 1.0);
-
-    // Combine Results
-    float3 Ambient = Light.Intensity * LightAmbient * TextureColor;
-    float3 Diffuse = Light.Radiance * Light.Intensity * LightDiffuse * DiffuseAngle * TextureColor;
-    float3 Specular = Light.Radiance * Light.Intensity * LightSpecular * Spec;
-
-    Ambient *= Attenuation;
-    Diffuse *= Attenuation;
-    Specular *= Attenuation;
-
-    // Specular is weird due to the texture color not being a specular one
-    Result += (Ambient + Diffuse);
-    
-    // Add emission power to simulate emissive materials
-    Emission = 2;
-    
-    // Pink only
-    float epsilon = 1e-5;
-    bool approxEqual = all(abs(TextureColor - float3(1, 0, 0) < epsilon));
-    
-    if (approxEqual)
-        Result += TextureColor * Emission;
-    
-    return Result;
-}
-
 float4 PSMain(pixel_shader_input In) : SV_TARGET
 {
     float3 Normal = normalize(In.Normal);
@@ -214,8 +162,11 @@ float4 PSMain(pixel_shader_input In) : SV_TARGET
     for (int j = 0; j < u_PointLightCount; j++)
     {
         //Result += CalculatePointLight(u_PointLights[j], Normal, ViewDir, Shininess, In.WorldPosition.xyz, TextureColor * In.Color.rgb);
-        Result += CalculatePointLight2(u_PointLights[j], Normal, ViewDir, Shininess, In.WorldPosition.xyz, TextureColor * In.Color.rgb, In.Color);
+        Result += CalculatePointLight(u_PointLights[j], Normal, ViewDir, Shininess, In.WorldPosition.xyz, TextureColor * In.Color.rgb);
     }
+    
+    // Emissive material
+    Result += TextureColor * In.Color.rgb * In.Emission;
     
 #if 0
     //float4 Result = In.Color;

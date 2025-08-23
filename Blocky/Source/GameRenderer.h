@@ -111,6 +111,7 @@ struct cuboid_transform_vertex_data
 
     v4 Color;
     u32 TextureIndex;
+    f32 Emission;
 };
 
 // Basically a push constant
@@ -365,7 +366,7 @@ internal void game_renderer_submit_distant_quad(game_renderer* Renderer, const v
 internal void game_renderer_submit_cuboid(game_renderer* Renderer, const v3& Translation, const v4& Color);
 internal void game_renderer_submit_cuboid(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale, const v4& Color);
 internal void game_renderer_submit_cuboid(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale, const texture* Texture, const v4& Color);
-internal void game_renderer_submit_cuboid(game_renderer* Renderer, const v3& Translation, const texture* Texture, const v4& Color);
+internal void game_renderer_submit_cuboid(game_renderer* Renderer, const v3& Translation, const texture* Texture, const v4& Color, f32 Emission);
 
 // Quaded cuboids - slower than cuboids but each quad can have its own unique texture
 internal void game_renderer_submit_quaded_cuboid(game_renderer* Renderer, const v3& Translation, const v3& Rotation, const v3& Scale, const texture* Texture, const texture_block_coords& TextureCoords, const v4& Color);
