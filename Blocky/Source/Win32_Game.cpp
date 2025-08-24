@@ -132,6 +132,8 @@ internal void win32_process_events(game_input* Input, HWND WindowHandle)
     memset(Input->KeyPressed, 0, sizeof(Input->KeyPressed));
     memset(Input->MousePressed, 0, sizeof(Input->MousePressed));
 
+    Input->MouseScrollDelta = 0;
+
     // TODO: Handle everything in WndProc?
     // Win32 message queue
     MSG Message;

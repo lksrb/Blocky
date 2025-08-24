@@ -44,7 +44,7 @@ internal bool sparse_set_contains(sparse_set* Set, ecs_entity_type Entity)
     return DenseIndex < Set->DenseCount && Set->Dense[DenseIndex] == Entity;
 }
 
-internal ecs_entity_type sparse_set_ad(sparse_set* Set, ecs_entity_type Entity)
+internal ecs_entity_type sparse_set_add(sparse_set* Set, ecs_entity_type Entity)
 {
     Assert(!sparse_set_contains(Set, Entity), "Entity already has this component!");
 

@@ -66,12 +66,20 @@ internal game* game_create(arena* Arena, render_backend* Backend)
 {
     game* Game = arena_new(Arena, game);
 
-    game_generate_world(Arena, Game);
+    {
+        Game->BlocksCount = RowCount * ColumnCount * LayerCount;
+        Game->Blocks = arena_new_array(Arena, block, Game->BlocksCount);
+        Game->GenSeries = random_series_create();
+        game_generate_world(Game, Game->Blocks, Game->BlocksCount);
+    }
 
     // Crosshair texture will be separate from block textures
     Game->CrosshairTexture = texture_create(Backend, "Resources/Textures/MC/Crosshair.png");
     Game->BlockTextures[(u32)block_type::Dirt] = texture_create(Backend, "Resources/Textures/MC/dirt_2.png");
     Game->BlockTextures[(u32)block_type::GlowStone] = texture_create(Backend, "Resources/Textures/glowstone.png");
+    Game->BlockTextures[(u32)block_type::Stone] = texture_create(Backend, "Resources/Textures/stone.png");
+    Game->BlockTextures[(u32)block_type::Bedrock] = texture_create(Backend, "Resources/Textures/bedrock.png");
+    Game->BlockTextures[(u32)block_type::Grass] = texture_create(Backend, "Resources/Textures/grass_block_top.png");
     Game->CowTexture = texture_create(Backend, "Resources/Textures/MC/cow.png");
     Game->PointLightIconTexture = texture_create(Backend, "Resources/Textures/PointLight.png", true);
 
@@ -132,7 +140,7 @@ internal game* game_create(arena* Arena, render_backend* Backend)
     }
 
     // Create another set of cows
-    for (i32 i = 10; i < 11; i++)
+    for (i32 i = 0; i < 1; i++)
     {
         auto CowEntity = ecs_create_entity(&Game->Registry);
 
@@ -169,27 +177,23 @@ internal game* game_create(arena* Arena, render_backend* Backend)
 
 internal void game_destroy(game* Game, render_backend* RenderBackend)
 {
-    for (u32 i = 0; i < BLOCK_TYPE_COUNT; i++)
+    for (u32 i = 1; i < BLOCK_TYPE_COUNT - 1; i++)
     {
-        //texture_destroy(&Game->BlockTextures[i]);
+        texture_destroy(RenderBackend, &Game->BlockTextures[i]);
     }
 
-    texture_destroy(RenderBackend, &Game->BlockTextures[(u32)block_type::Dirt]);
     texture_destroy(RenderBackend, &Game->CowTexture);
     texture_destroy(RenderBackend, &Game->CrosshairTexture);
     texture_destroy(RenderBackend, &Game->PointLightIconTexture);
     //texture_destroy(&Game->SunTexture);
 }
 
-internal void game_generate_world(arena* Arena, game* Game)
+internal void game_generate_world(game* Game, block* Blocks, u32 BlocksCount)
 {
-    Game->BlocksCount = RowCount * ColumnCount * LayerCount;
-    Game->Blocks = arena_new_array(Arena, block, Game->BlocksCount);
+    perlin_noise_create(&Game->PerlinNoise, random_series_u32(&Game->GenSeries, 1));
+    i32 MaxTerrainHeight = LayerCount / 2 + 4;
 
-    u32 Seed = 1217917;
-    //perlin_noise_create(&Game->PerlinNoise, Seed);
-    i32 MaxTerrainHeight = 8;
-
+    // 1. Generate the terrain
     const v3 StartPos = { 0, 0, 0 };
     v3 CurrentPosition = StartPos;
     for (i32 Z = 0; Z < RowCount; Z++)
@@ -201,8 +205,8 @@ internal void game_generate_world(arena* Arena, game* Game)
 
             // Step 1: Generate height using noise
             f32 NoiseScale = 0.05f;
-            //f32 HeightValue = perlin_noise_get(&Game->PerlinNoise, X * NoiseScale, Z * NoiseScale); // in [0, 1]
-            f32 HeightValue = 0;
+            f32 HeightValue = perlin_noise_get(&Game->PerlinNoise, X * NoiseScale, Z * NoiseScale); // in [0, 1]
+            //f32 HeightValue = 0;
             i32 TerrainHeight = (i32)(HeightValue * MaxTerrainHeight);
 
             for (i32 Y = 0; Y < LayerCount; Y++)
@@ -216,17 +220,29 @@ internal void game_generate_world(arena* Arena, game* Game)
                 {
                     Block.Type = block_type::Air;
                 }
-                else if (Y == TerrainHeight)
-                {
-                    Block.Type = block_type::Dirt;
-                }
-                else if (Y > TerrainHeight - 3)
-                {
-                    Block.Type = block_type::Dirt;
-                }
                 else
                 {
-                    Block.Type = block_type::Dirt;
+                    if (Y <= 1)
+                    {
+                        Block.Type = block_type::Bedrock;
+                    }
+                    else if (Y <= 3)
+                    {
+                        Block.Type = block_type::Stone;
+                    }
+                    else if (Y <= 5)
+                    {
+                        Block.Type = block_type::Dirt;
+                    }
+                    else if (Y <= 6)
+                    {
+                        Block.Type = block_type::Grass;
+                        Block.Color = v4(0.2f, 0.8f, 0.1f, 1.0f);
+                    }
+                    else
+                    {
+                        Block.Type = block_type::Air;
+                    }
                 }
 
                 CurrentPosition.y++;
@@ -235,6 +251,41 @@ internal void game_generate_world(arena* Arena, game* Game)
         }
         CurrentPosition.z++;
     }
+
+    // 2. Put on some trees (they only grow on grass blocks)
+   /* CurrentPosition = StartPos;
+    for (i32 Z = 0; Z < RowCount; Z++)
+    {
+        CurrentPosition.x = StartPos.x;
+        for (i32 X = 0; X < ColumnCount; X++)
+        {
+            CurrentPosition.y = StartPos.y;
+
+            for (i32 Y = 0; Y < LayerCount; Y++)
+            {
+                i32 Index = (Y * RowCount * ColumnCount) + (Z * ColumnCount) + X;
+                auto& Block = Game->Blocks[Index];
+
+                if (Block.Type == block_type::Grass)
+                {
+                    i32 DenyOffset = 10;
+                    if (X > DenyOffset && X < RowCount - DenyOffset && X > DenyOffset && Z > DenyOffset && Z < ColumnCount - DenyOffset)
+                    {
+                        auto BlockAbove = block_get_safe(Game, X, Z, Y + 1);
+
+                        if (BlockAbove && Index % 10 == 0 && random_series_u32(&Rand, 0, 1000) >= 900)
+                        {
+                            BlockAbove->Type = block_type::Dirt;
+                        }
+                    }
+                }
+                CurrentPosition.y++;
+            }
+
+            CurrentPosition.x++;
+        }
+        CurrentPosition.z++;
+    }*/
 }
 
 internal void game_update(game* G, game_renderer* Renderer, const game_input* Input, f32 TimeStep, v2i ClientArea)
@@ -289,19 +340,19 @@ internal void game_update(game* G, game_renderer* Renderer, const game_input* In
             if (!Block.placed())
                 continue;
 
-            v4 BlockColor = Block.Color;
+            //v4 BlockColor = Block.Color;
 
-            if (Block.Type == block_type::GlowStone)
-            {
-                Block.Emission = G->GlowStoneEmission;
-                f32 Radius = 6.0f;
-                f32 FallOff = 1.0f;
-                v3 Radiance = G->GlowStoneColor;
-                BlockColor = v4(Radiance, 1.0f);
-                game_renderer_submit_point_light(Renderer, Block.Position, Radius, FallOff, Radiance, G->GlowStoneEmission * 3.0f);
-            }
+            //if (Block.Type == block_type::GlowStone)
+            //{
+            //    Block.Emission = G->GlowStoneEmission;
+            //    f32 Radius = 6.0f;
+            //    f32 FallOff = 1.0f;
+            //    v3 Radiance = G->GlowStoneColor;
+            //    BlockColor = v4(Radiance, 1.0f);
+            //    game_renderer_submit_point_light(Renderer, Block.Position, Radius, FallOff, Radiance, G->GlowStoneEmission * 3.0f);
+            //}
 
-            game_renderer_submit_cuboid(Renderer, Block.Position, &G->BlockTextures[(u32)Block.Type], BlockColor, Block.Emission);
+            game_renderer_submit_cuboid(Renderer, Block.Position, &G->BlockTextures[(u32)Block.Type], Block.Color, Block.Emission);
         }
     }
 
@@ -360,7 +411,7 @@ internal void game_update(game* G, game_renderer* Renderer, const game_input* In
         auto Near = G->Near;
         auto Far = G->Far;
         auto Eye = G->Eye;
-        auto LightDirection = G->LightDirection;
+        auto LightDirection = G->DirectonalLightDirection;
 
         // Building light space matrix
         {
@@ -386,7 +437,7 @@ internal void game_update(game* G, game_renderer* Renderer, const game_input* In
         m4 HUDProjection = bkm::OrthoRH_ZO(0, (f32)ClientArea.x, (f32)ClientArea.y, 0, -1, 1);
         game_renderer_set_render_data(Renderer, CameraPosition, G->Camera.View, G->Camera.Projection, InverseView, HUDProjection, GameTime, LightSpaceMatrix);
 
-        game_renderer_submit_directional_light(Renderer, LightDirection, G->DirectionalLightPower, v3(1.0f));
+        game_renderer_submit_directional_light(Renderer, LightDirection, G->DirectionalLightPower, G->DirectionalLightColor);
     }
 
     // Render lights
@@ -401,7 +452,6 @@ internal void game_update(game* G, game_renderer* Renderer, const game_input* In
     }
 
     // Render Editor UI
-
     if (G->RenderEditorUI)
     {
         game_render_editor_ui(G, Renderer);
@@ -452,6 +502,25 @@ internal void game_debug_ui_update(game* G, game_renderer* Renderer, const game_
         ImGui::Checkbox("Render HUD", &G->RenderHUD);
         ImGui::Checkbox("Bloom", &Renderer->EnableBloom);
         ImGui::Checkbox("Shadows", &Renderer->EnableShadows);
+        ImGui::Separator();
+        if (ImGui::Button("Regenerate the world"))
+        {
+            game_generate_world(G, G->Blocks, G->BlocksCount);
+        }
+    }
+
+    if (ImGui::CollapsingHeader("Player Settings", ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        //i32 X = (i32)G->Player.Position.x;
+        //i32 Y = (i32)G->Player.Position.y;
+        //i32 Z = (i32)G->Player.Position.z;
+
+        i32 X = (i32)bkm::Floor(G->Player.Position.x + 0.5f);
+        i32 Y = (i32)bkm::Floor(G->Player.Position.y + 0.5f);
+        i32 Z = (i32)bkm::Floor(G->Player.Position.z + 0.5f);
+        ImGui::Text("Coords: X: %i Y: %i Z: %i", X, Y, Z);
+        ImGui::Separator();
+        ImGui::Text("Currently selected block: %s", g_BlockLabels[(u32)G->Player.CurrentlySelectedBlock]);
     }
 
     if (ImGui::CollapsingHeader("Shadow Maps Testing", ImGuiTreeNodeFlags_DefaultOpen))
@@ -464,15 +533,25 @@ internal void game_debug_ui_update(game* G, game_renderer* Renderer, const game_
 
     if (ImGui::CollapsingHeader("Light Testing", ImGuiTreeNodeFlags_DefaultOpen))
     {
-        UI::DrawVec3Control("Point Light Pos", &G->PointLightPos);
-        ImGui::DragFloat("Point Light Intensity", &G->PointLightIntenity, 0.5f, 0.0f, 100.0f);
+        //UI::DrawVec3Control("Point Light Pos", &G->PointLightPos);
+        //ImGui::DragFloat("Point Light Intensity", &G->PointLightIntenity, 0.5f, 0.0f, 100.0f);
         ImGui::Separator();
+        ImGui::ColorEdit3("Directiona Light Color", &G->DirectionalLightColor.x);
         ImGui::DragFloat("Directional Light Power", &G->DirectionalLightPower, 0.2f, 0.0f, 100.0f);
 
-        UI::DrawVec3Control("GlowStone color", &G->GlowStoneColor);
+        ImGui::ColorEdit3("GlowStone Color", &G->GlowStoneColor.x);
         ImGui::DragFloat("GlowStone Emission", &G->GlowStoneEmission, 0.2f, 0.0f, 100.0f);
 
         ImGui::Separator();
+
+        // Point lights
+        auto View = ecs_view_components<transform_component, point_light_component>(&G->Registry);
+        for (auto Entity : View)
+        {
+            auto [Transform, PLC] = View.Get(Entity);
+
+            ImGui::Text("%.3f %.3f %.3f", Transform.Translation.x, Transform.Translation.y, Transform.Translation.z);
+        }
     }
 
     ImGui::End();
@@ -485,7 +564,7 @@ internal void game_player_update(game* Game, const game_input* Input, game_rende
     v3 Up = { 0.0f, 1.0, 0.0f };
     v3 Right = { 1.0f, 0.0, 0.0f };
     v3 Forward = { 0.0f, 0.0, -1.0f };
-    f32 Speed = 15.0f;
+    f32 Speed = 10.0f;
 
     // Very important
     local_persist bool GameFocused = false;
@@ -581,6 +660,36 @@ internal void game_player_update(game* Game, const game_input* Input, game_rende
             }
         }
 
+        // Cycle through available blocks
+        if (Input->MouseScrollDelta > 0)
+        {
+            auto NextBlockType = (block_type)((u32)Player.CurrentlySelectedBlock + 1);
+
+            if (NextBlockType == block_type::INVALID)
+                NextBlockType = (block_type)1; // Excluding Air block type
+
+            Assert(NextBlockType != block_type::INVALID, "Bruh");
+            Assert(NextBlockType != block_type::Air, "Bruh");
+
+            Player.CurrentlySelectedBlock = NextBlockType;
+        }
+        else if (Input->MouseScrollDelta < 0)
+        {
+            auto NextBlockType = block_type::INVALID;
+            if (Player.CurrentlySelectedBlock == (block_type)1)
+            {
+                NextBlockType = block_type(u32(block_type::INVALID) - 1);
+            }
+            else
+            {
+                NextBlockType = block_type((u32)Player.CurrentlySelectedBlock - 1);
+            }
+
+            Assert(NextBlockType != block_type::INVALID, "Bruh");
+            Assert(NextBlockType != block_type::Air, "Bruh");
+            Player.CurrentlySelectedBlock = NextBlockType;
+        }
+
         if (bkm::Length(Direction) > 0.0f)
             Direction = bkm::Normalize(Direction);
     }
@@ -663,7 +772,7 @@ internal void game_player_update(game* Game, const game_input* Input, game_rende
                         aabb BlockAABB = aabb_from_v3(Block->Position, v3(1.0f));
                         if (AABBCheckCollision(PlayerAABB, BlockAABB))
                         {
-                            Block->Color = v4(0, 0, 1, 1);
+                            //Block->Color = v4(0, 0, 1, 1);
                             NextPos.x = Player.Position.x;
                             NextVelocity.x = 0.0f;
                             goto ExitLoopX;
@@ -694,7 +803,7 @@ internal void game_player_update(game* Game, const game_input* Input, game_rende
                         aabb BlockAABB = aabb_from_v3(Block->Position, v3(1.0f));
                         if (AABBCheckCollision(PlayerAABB, BlockAABB))
                         {
-                            Block->Color = v4(0, 0, 1, 1);
+                            //Block->Color = v4(0, 0, 1, 1);
                             NextPos.z = Player.Position.z;
                             NextVelocity.z = 0.0f;
                             goto ExitLoopZ;
@@ -746,6 +855,15 @@ internal void game_player_update(game* Game, const game_input* Input, game_rende
             if (find_first_hit(Ray, Game->Blocks, Game->BlocksCount, &HitPoint, &HitNormal, &HitBlock, &HitIndex))
             {
                 auto& Block = Game->Blocks[HitIndex];
+
+                if (Block.Type == block_type::GlowStone)
+                {
+                    Trace("Destroy: %i", (i32)Block.PointLightEntity);
+                    ecs_destroy_entity(&Game->Registry, Block.PointLightEntity);
+                    Block.PointLightEntity = INVALID_ID;
+                    Block.Emission = 0.0f;
+                }
+
                 Block.Type = block_type::Air;
 
                 //entity Entity = ecs_create_entity(&Game->Registry);
@@ -794,7 +912,7 @@ internal void game_player_update(game* Game, const game_input* Input, game_rende
                 }
 #endif
 
-                Info("Block destroyed.");
+                //Info("Block destroyed.");
             }
         }
 
@@ -827,10 +945,37 @@ internal void game_player_update(game* Game, const game_input* Input, game_rende
 
                     if (Block)
                     {
-                        //Block->Color = v4(1, 1, 1, 1);
-                        //Block->Color = Game->GlowStoneColor;
-                        Block->Type = block_type::GlowStone;
-                        //Block->Emission = 2;
+                        Block->Type = Player.CurrentlySelectedBlock;
+
+                        // Custom properties of each block
+                        if (Block->Type == block_type::Dirt)
+                        {
+                            Block->Color = v4(1.0f);
+                            Block->Emission = 0;
+                        }
+                        else if (Block->Type == block_type::GlowStone)
+                        {
+                            entity Entity = ecs_create_entity(&Game->Registry);
+                            Trace("Createing %i", (i32)Entity);
+
+                            Block->PointLightEntity = Entity;
+                            Block->Emission = Game->GlowStoneEmission;
+                            Block->Color = v4(0.8f, 0.3f, 0.2f, 1.0f);
+
+                            auto& PLC = ecs_add_component2<point_light_component>(&Game->Registry, Entity);
+                            PLC.Radius = 6.0f;
+                            PLC.FallOff = 1.0f;
+                            PLC.Radiance = v3(Block->Color);
+                            PLC.Intensity = Block->Emission * 3.0f;
+
+                            auto& Transform = ecs_add_component<transform_component>(&Game->Registry, Entity);
+                            Transform.Translation = Block->Position;
+                            Trace("%.3f, %.3f, %.3f", Transform.Translation.x, Transform.Translation.y, Transform.Translation.z);
+
+                            //auto& PLC2 = ecs_get_component<point_light_component>(&Game->Registry, Entity);
+
+                            Trace("test");
+                        }
                     }
                 }
             }

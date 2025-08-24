@@ -40,13 +40,27 @@ struct camera
 
 enum class block_type : u32
 {
-    Dirt = 0,
-    Air,
+    Air = 0,
+
+    Dirt,
     GlowStone,
+    Stone,
+    Bedrock,
+    Grass,
 
     INVALID
 };
 #define BLOCK_TYPE_COUNT (u32)block_type::INVALID
+
+const char* g_BlockLabels[] = {
+    "Air",
+    "Dirt",
+    "GlowStone",
+    "Stone",
+    "Bedrock",
+    "Grass",
+    "INVALID"
+};
 
 //enum class entity_type : u32
 //{
@@ -73,6 +87,8 @@ struct player
     v3 Velocity = v3(0.0f);
     bool IsPhysicsObject = false;
     bool Grounded = false;
+
+    block_type CurrentlySelectedBlock = block_type::Dirt;
 };
 
 // TODO: Possible cache optimalizations
@@ -81,17 +97,40 @@ struct block
     v3 Position = {}; // Position can be removed
     block_type Type = block_type::INVALID;
     v4 Color = v4(1.0f);
-    f32 Emission = 0.0f;
 
-    inline bool placed() const { return Type != block_type::Air; }
+    f32 Emission = 0.0f;
+    entity PointLightEntity = INVALID_ID; // For glowstone
+
+    bool placed() const { return Type != block_type::Air; }
     //i32 Left = INT_MAX, Right = INT_MAX, Front = INT_MAX, Back = INT_MAX, Up = INT_MAX, Down = INT_MAX; // Neighbours
 };
 
-internal const i64 RowCount = 16;
-internal const i64 ColumnCount = 16;
-internal const i64 LayerCount = 8;
+internal const i64 RowCount = 64;
+internal const i64 ColumnCount = 64;
+internal const i64 LayerCount = 16;
 internal const i32 MaxAliveEntitiesCount = 16;
 internal const f32 c_TexelSize = 1 / 16.0f; // Global scale for entity models. 1m block is exactly 16x16 texels.
+
+// 16 * 16
+//struct block_pos
+//{
+//    union
+//    {
+//        struct
+//        {
+//            u8 XandZ; // 4 bit for X and 4 bits for Z
+//            u8 Y; // 0-255
+//        };
+//
+//        u16 Pos;
+//    };
+//};
+
+struct chunk
+{
+    v3 BasePosition;
+    block Blocks[16 * 16 * 16];
+};
 
 struct game
 {
@@ -124,16 +163,18 @@ struct game
     bool RenderHUD = true;
     bool RenderDebugUI = true; // ImGui
 
+    random_series GenSeries;
+
     // Shadows and lighting
     v3 Center = v3(ColumnCount / 2.0f, 0, RowCount / 2.0f);
     v3 Eye = Center + v3(0, 16, 0);
     f32 Size = 15;
     f32 Near = 1.0f;
     f32 Far = 15.5;
-    v3 LightDirection = bkm::Normalize(v3(0.0f, -1.0f, 0));
-    f32 DirectionalLightPower = 0.0f;
-    v3 PointLightPos = v3(5, 2, 5);
-    f32 PointLightIntenity = 1.0f;
+
+    v3 DirectonalLightDirection = bkm::Normalize(v3(0.0f, -1.0f, 0));
+    v3 DirectionalLightColor = v3(0.578f, 0.488f, 0.503f);
+    f32 DirectionalLightPower = 1.0f;
 
     v3 GlowStoneColor = v3(0.8f, 0.3f, 0.2f);
     f32 GlowStoneEmission = 2.0f;
@@ -144,7 +185,7 @@ internal void game_destroy(game* G, render_backend* Backend);
 internal void game_update(game* G, game_renderer* Renderer, const game_input* Input, f32 TimeStep, v2i ClientArea);
 internal void game_debug_ui_update(game* G, game_renderer* Renderer, const game_input* Input, f32 TimeStep, v2i ClientArea);
 internal void game_player_update(game* G, const game_input* Input, game_renderer* Renderer, f32 TimeStep);
-internal void game_generate_world(arena* Arena, game* Game);
+internal void game_generate_world(game* Game, block* Blocks, u32 BlocksCount);
 
 internal void game_update_entities(game* G, f32 TimeStep);
 internal void game_render_entities(game* G, game_renderer* Renderer, f32 TimeStep);

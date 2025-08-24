@@ -215,6 +215,7 @@ internal entity ecs_create_entity(entity_registry* Registry)
         entity Entity = Registry->FreeList;
         Registry->FreeList = Registry->Entities[ecs_to_entity_type(Entity)];
         Registry->Entities[ecs_to_entity_type(Entity)] = Entity;
+        ++Registry->EntitiesCount;
         return Entity;
     }
 }
@@ -263,9 +264,21 @@ internal T& ecs_add_component(entity_registry* Registry, entity Entity)
 
     Assert(!sparse_set_contains(&Pool.Set, ecs_to_entity_type(Entity)), "Entity already has this component!");
 
-    auto Index = sparse_set_ad(&Pool.Set, ecs_to_entity_type(Entity));
+    auto Index = sparse_set_add(&Pool.Set, ecs_to_entity_type(Entity));
+    
+    return Pool.Data[ecs_to_entity_type(Entity)];
+}
 
-    return Pool.Data[Index];
+template<typename T>
+internal T& ecs_add_component2(entity_registry* Registry, entity Entity)
+{
+    auto& Pool = ecs_get_pool<T>(Registry);
+
+    Assert(!sparse_set_contains(&Pool.Set, ecs_to_entity_type(Entity)), "Entity already has this component!");
+
+    auto Index = sparse_set_add(&Pool.Set, ecs_to_entity_type(Entity));
+
+    return Pool.Data[ecs_to_entity_type(Entity)];
 }
 
 template<typename T>

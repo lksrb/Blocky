@@ -124,9 +124,6 @@ float3 CalculateDirectionalLight2(directional_light Light, float3 Normal, float3
     float3 LightDiffuse = float3(0.8, 0.8, 0.8);
     float3 LightSpecular = float3(1.0, 1.0, 1.0);
 
-    Light.Radiance = float3(1.0, 1.0, 1.0);
-    TextureColor = float3(1.0, 1.0, 1.0);
-    
     // Combine results
     float3 Ambient = Light.Intensity * LightAmbient * Light.Radiance * TextureColor;
     float3 Diffuse = Light.Intensity * LightDiffuse * Light.Radiance * DiffuseAngle * TextureColor;
@@ -152,7 +149,7 @@ float4 PSMain(pixel_shader_input In) : SV_TARGET
     for (int i = 0; i < u_DirectionalLightCount; i++)
     {
 #if ENABLE_SHADOWS
-        Result += CalculateDirectionalLight2(u_DirectionalLights[i], Normal, ViewDir, Shininess, TextureColor * In.Color.rgb, ShadowValue);
+        Result += CalculateDirectionalLight(u_DirectionalLights[i], Normal, ViewDir, Shininess, TextureColor * In.Color.rgb);
 #else
         Result += CalculateDirectionalLight2(u_DirectionalLights[i], Normal, ViewDir, Shininess, TextureColor * In.Color.rgb); 
 #endif

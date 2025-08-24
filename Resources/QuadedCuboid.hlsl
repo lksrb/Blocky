@@ -105,20 +105,23 @@ float4 PSMain(pixel_shader_input In) : SV_TARGET
 #endif
 
     float3 TextureColor = g_Texture[In.TexIndex].Sample(g_Sampler, In.TexCoord);
-    float3 Result = TextureColor * In.Color.rgb;
+    float3 Result = float3(0.0, 0.0, 0.0);
     
     // Phase 1: Directional lights
     float Shininess = 32.0;
     for (int i = 0; i < u_DirectionalLightCount; i++)
     {
-        //Result += CalculateDirectionalLight(u_DirectionalLights[i], Normal, ViewDir, Shininess, TextureColor * In.Color.rgb);
+        Result += CalculateDirectionalLight(u_DirectionalLights[i], Normal, ViewDir, Shininess, TextureColor * In.Color.rgb);
     }
     
     // Phase 2: Point lights
     for (int j = 0; j < u_PointLightCount; j++)
     {
-        //Result += CalculatePointLight(u_PointLights[j], Normal, ViewDir, Shininess, In.WorldPosition, TextureColor * In.Color.rgb);
+        Result += CalculatePointLight(u_PointLights[j], Normal, ViewDir, Shininess, In.WorldPosition, TextureColor * In.Color.rgb);
     }
+    
+    // Emissive material
+    //Result += TextureColor * In.Color.rgb * In.Emission;
     
     #if 0
     //float4 Result = In.Color;

@@ -264,7 +264,7 @@ struct game_renderer
     } HUD;
 
     // Render feature enabling
-    bool EnableShadows = true;
+    bool EnableShadows = false;
     bool EnableBloom = true;
 };
 
