@@ -2,65 +2,7 @@
 
 #include "GameRenderer.cpp"
 
-#include "Cow.h"
-
-#include <cmath>
-
-struct texture_rect
-{
-    u8 X, Y, Width, Height, RotationCount; // TODO: Can we can rid of rotation count?
-
-    texture_rect() = default;
-
-    texture_rect(u8 x, u8 y, u8 w, u8 h, u8 r)
-        : X(x), Y(y), Width(w), Height(h), RotationCount(r)
-    {}
-};
-
-// IDEA: We can keep the pixel coords on the texture and calculate them in runtime
-struct texture_rects
-{
-    texture_rects() = default;
-
-    texture_rects(texture_rect front, texture_rect back,
-                  texture_rect left, texture_rect right,
-                  texture_rect top, texture_rect bottom)
-        : Front(front), Back(back),
-        Left(left), Right(right),
-        Top(top), Bottom(bottom)
-    {}
-
-    union
-    {
-        struct
-        {
-            texture_rect Front;
-            texture_rect Back;
-            texture_rect Left;
-            texture_rect Right;
-            texture_rect Top;
-            texture_rect Bottom;
-        };
-
-        texture_rect Data[6];
-    };
-};
-
-internal void AddModelPart(entity_model* Model, v3 LocalPosition, v3 Size, texture_rects Rects)
-{
-    auto& Part = Model->Parts[Model->PartsCount++];
-    texture_block_coords TextureCoords;
-
-    i32 i = 0;
-    for (auto& Rect : Rects.Data)
-    {
-        TextureCoords.TextureCoords[i++] = get_texture_coords(Rect.X, Rect.Y, Rect.Width, Rect.Height, Rect.RotationCount);
-    }
-
-    Part.Coords = TextureCoords;
-    Part.LocalPosition = LocalPosition * c_TexelSize;
-    Part.Size = Size * c_TexelSize;
-}
+#include "Cow.cpp"
 
 internal game* game_create(arena* Arena, render_backend* Backend)
 {
@@ -86,8 +28,6 @@ internal game* game_create(arena* Arena, render_backend* Backend)
     //Game->SunTexture = TextureCreate(Renderer->Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, "Resources/Textures/MC/environemnt/sun.png");
 
     //Game->MoonTexture = TextureCreate(Renderer->Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, "Resources/Textures/MC/environemnt/moon.png");
-
-    Game->Registry = ecs_entity_registry_create(100);
 
     entity_model CowModel = EntityModelCreate();
 
@@ -142,34 +82,23 @@ internal game* game_create(arena* Arena, render_backend* Backend)
     // Create another set of cows
     for (i32 i = 0; i < 1; i++)
     {
-        auto CowEntity = ecs_create_entity(&Game->Registry);
+        auto& Cow = Game->Cows.emplace_back();
 
-        auto& Transform = ecs_add_component<transform_component>(&Game->Registry, CowEntity);
+        auto& Transform = Cow.Transform;
         Transform.Translation = v3((f32)c_TexelSize / 2 + 10.0f, 17.0, c_TexelSize / 2 + 10.0f);
         Transform.Scale = v3(1.0f);
         Transform.Rotation = v3(0.0f, 0.0f, 0.0f);
 
-        auto& Render = ecs_add_component<entity_render_component>(&Game->Registry, CowEntity);
+        auto& Render = Cow.Render;
         Render.Texture = Game->CowTexture;
         Render.Model = CowModel;
 
-        auto& AABB = ecs_add_component<aabb_physics_component>(&Game->Registry, CowEntity);
+        auto& AABB = Cow.AABBPhysics;
         AABB.BoxSize = v3(0.8f, 1.8, 0.8f);
         AABB.Velocity = v3(0.0f);
         AABB.Grounded = false;
 
-        auto& Logic = ecs_add_component<logic_component>(&Game->Registry, CowEntity);
-        Logic.CreateFunction = cow_create;
-        Logic.DestroyFunction = cow_destroy;
-        Logic.UpdateFunction = cow_update;
-    }
-
-    // On Create event
-    auto View = ecs_view_components<logic_component>(&Game->Registry);
-    for (auto Entity : View)
-    {
-        auto& Logic = View.Get(Entity);
-        Logic.CreateFunction(&Game->Registry, Entity, &Logic);
+        cow_create(&Cow);
     }
 
     return Game;
@@ -340,17 +269,11 @@ internal void game_update(game* G, game_renderer* Renderer, const game_input* In
             if (!Block.placed())
                 continue;
 
-            //v4 BlockColor = Block.Color;
-
-            //if (Block.Type == block_type::GlowStone)
-            //{
-            //    Block.Emission = G->GlowStoneEmission;
-            //    f32 Radius = 6.0f;
-            //    f32 FallOff = 1.0f;
-            //    v3 Radiance = G->GlowStoneColor;
-            //    BlockColor = v4(Radiance, 1.0f);
-            //    game_renderer_submit_point_light(Renderer, Block.Position, Radius, FallOff, Radiance, G->GlowStoneEmission * 3.0f);
-            //}
+            if (Block.Type == block_type::GlowStone)
+            {
+                //Block.Emission = G->GlowStoneEmission;
+                game_renderer_submit_point_light(Renderer, Block.Position, 6.0f, 1.0f, v3(Block.Color), Block.Emission * 3.0f);
+            }
 
             game_renderer_submit_cuboid(Renderer, Block.Position, &G->BlockTextures[(u32)Block.Type], Block.Color, Block.Emission);
         }
@@ -440,17 +363,6 @@ internal void game_update(game* G, game_renderer* Renderer, const game_input* In
         game_renderer_submit_directional_light(Renderer, LightDirection, G->DirectionalLightPower, G->DirectionalLightColor);
     }
 
-    // Render lights
-    {
-        // Point lights
-        auto View = ecs_view_components<transform_component, point_light_component>(&G->Registry);
-        for (auto Entity : View)
-        {
-            auto [Transform, PLC] = View.Get(Entity);
-            game_renderer_submit_point_light(Renderer, Transform.Translation, PLC.Radius, PLC.FallOff, PLC.Radiance, PLC.Intensity);
-        }
-    }
-
     // Render Editor UI
     if (G->RenderEditorUI)
     {
@@ -481,13 +393,6 @@ internal void game_render_editor_ui(game* G, game_renderer* Renderer)
 {
     // For each point lights so we know that its there
     game_renderer_submit_billboard_quad(Renderer, G->Eye, v2(0.5), &G->PointLightIconTexture, v4(1.0f));
-
-    auto View = ecs_view_components<transform_component, point_light_component>(&G->Registry);
-    for (auto Entity : View)
-    {
-        auto [Transform, PLC] = View.Get(Entity);
-        game_renderer_submit_billboard_quad(Renderer, Transform.Translation, v2(0.5), &G->PointLightIconTexture, v4(1.0f));
-    }
 }
 
 internal void game_debug_ui_update(game* G, game_renderer* Renderer, const game_input* Input, f32 TimeStep, v2i ClientArea)
@@ -543,15 +448,6 @@ internal void game_debug_ui_update(game* G, game_renderer* Renderer, const game_
         ImGui::DragFloat("GlowStone Emission", &G->GlowStoneEmission, 0.2f, 0.0f, 100.0f);
 
         ImGui::Separator();
-
-        // Point lights
-        auto View = ecs_view_components<transform_component, point_light_component>(&G->Registry);
-        for (auto Entity : View)
-        {
-            auto [Transform, PLC] = View.Get(Entity);
-
-            ImGui::Text("%.3f %.3f %.3f", Transform.Translation.x, Transform.Translation.y, Transform.Translation.z);
-        }
     }
 
     ImGui::End();
@@ -858,15 +754,10 @@ internal void game_player_update(game* Game, const game_input* Input, game_rende
 
                 if (Block.Type == block_type::GlowStone)
                 {
-                    Trace("Destroy: %i", (i32)Block.PointLightEntity);
-                    ecs_destroy_entity(&Game->Registry, Block.PointLightEntity);
-                    Block.PointLightEntity = INVALID_ID;
-                    Block.Emission = 0.0f;
                 }
 
                 Block.Type = block_type::Air;
 
-                //entity Entity = ecs_create_entity(&Game->Registry);
                 // Color adjacent blocks
 #if 0
                 if (Block.Left != INT_MAX)
@@ -955,26 +846,20 @@ internal void game_player_update(game* Game, const game_input* Input, game_rende
                         }
                         else if (Block->Type == block_type::GlowStone)
                         {
-                            entity Entity = ecs_create_entity(&Game->Registry);
-                            Trace("Createing %i", (i32)Entity);
+                            //auto& PointLight = Game->PointLights.emplace_back();
 
-                            Block->PointLightEntity = Entity;
+                            ////Block.PointLightIndex;
                             Block->Emission = Game->GlowStoneEmission;
                             Block->Color = v4(0.8f, 0.3f, 0.2f, 1.0f);
 
-                            auto& PLC = ecs_add_component2<point_light_component>(&Game->Registry, Entity);
-                            PLC.Radius = 6.0f;
-                            PLC.FallOff = 1.0f;
-                            PLC.Radiance = v3(Block->Color);
-                            PLC.Intensity = Block->Emission * 3.0f;
+                            //auto& PLC = PointLight.PLC;
+                            //PLC.Radius = 6.0f;
+                            //PLC.FallOff = 1.0f;
+                            //PLC.Radiance = v3(Block->Color);
+                            //PLC.Intensity = Block->Emission * 3.0f;
 
-                            auto& Transform = ecs_add_component<transform_component>(&Game->Registry, Entity);
-                            Transform.Translation = Block->Position;
-                            Trace("%.3f, %.3f, %.3f", Transform.Translation.x, Transform.Translation.y, Transform.Translation.z);
-
-                            //auto& PLC2 = ecs_get_component<point_light_component>(&Game->Registry, Entity);
-
-                            Trace("test");
+                            //PointLight.Position = Block->Position;
+                            //Trace("%.3f, %.3f, %.3f", PointLight.Position.x, PointLight.Position.y, PointLight.Position.z);
                         }
                     }
                 }
@@ -1007,22 +892,18 @@ internal void game_update_entities(game* Game, f32 TimeStep)
     // However I dont think its necessary right now when the COW just goes and jumps off a cliff. There are more important things.
     //debug_cycle_counter Counter("GameUpdateEntities");
 
-    auto View = ecs_view_components<logic_component>(&Game->Registry);
-
-    for (auto Entity : View)
+    for (auto& Cow : Game->Cows)
     {
-        auto& Logic = View.Get(Entity);
-        Logic.UpdateFunction(Game, &Game->Registry, Entity, &Logic, TimeStep);
+        cow_update(&Cow, Game, TimeStep);
     }
 }
 
 internal void game_physics_simulation_update_entities(game* Game, f32 TimeStep)
 {
-    auto View = ecs_view_components<transform_component, aabb_physics_component>(&Game->Registry);
-
-    for (auto Entity : View)
+    for (auto& Cow : Game->Cows)
     {
-        auto [Transform, AABBPhysics] = View.Get(Entity);
+        auto& Transform = Cow.Transform;
+        auto& AABBPhysics = Cow.AABBPhysics;
 
         const f32 G = -9.81f * 2;
         const f32 CheckRadius = 2.0f;
@@ -1146,10 +1027,10 @@ internal void game_render_entities(game* Game, game_renderer* Renderer, f32 Time
 {
     //debug_cycle_counter GameRenderEntities("Render Entities");
 
-    auto View = ecs_view_components<transform_component, entity_render_component>(&Game->Registry);
-    for (auto Entity : View)
+    for (auto& Cow : Game->Cows)
     {
-        auto [Transform, Render] = View.Get(Entity);
+        auto& Transform = Cow.Transform;
+        auto& Render = Cow.Render;
 
         for (i32 i = 0; i < Render.Model.PartsCount; i++)
         {

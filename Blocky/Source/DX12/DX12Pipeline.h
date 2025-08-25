@@ -86,9 +86,8 @@ internal dx12_pipeline dx12_graphics_pipeline_create(ID3D12Device* Device, const
         LPCWSTR Arguments[] = {
            L"-T", L"ps_6_0",  // Shader profile
            L"-E", L"PSMain", // Entry point
-           L"-IResources"
-           //L"-Zi",            // Debug info
-           //L"-Qembed_debug",  // Embed debug info
+           L"-IResources",
+           L"-O3"
         };
 #endif
         DxcBuffer Buffer = {};
@@ -206,8 +205,7 @@ internal dx12_pipeline dx12_compute_pipeline_create(ID3D12Device* Device, const 
         LPCWSTR Arguments[] = {
             L"-T", L"cs_6_0",  // Shader profile
             L"-E", ShaderEntryPoint, // Entry point
-            //L"-Zi",            // Debug info
-            //L"-Qembed_debug",  // Embed debug info
+            L"-O3"
         };
 #endif
 

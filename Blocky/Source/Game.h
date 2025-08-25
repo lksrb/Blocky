@@ -3,8 +3,111 @@
 #include "Random.h"
 #include "AABB.h"
 #include "RayCast.h"
-#include "ECS/ECS.h"
 #include "PerlinNoise.h"
+
+#include "Components.h"
+#include "Cow.h"
+
+#include <vector>
+
+internal const i64 RowCount = 64;
+internal const i64 ColumnCount = 64;
+internal const i64 LayerCount = 16;
+internal const i32 MaxAliveEntitiesCount = 16;
+internal const f32 c_TexelSize = 1 / 16.0f; // Global scale for entity models. 1m block is exactly 16x16 texels.
+
+struct texture_rect
+{
+    u8 X, Y, Width, Height, RotationCount; // TODO: Can we can rid of rotation count?
+
+    texture_rect() = default;
+
+    texture_rect(u8 x, u8 y, u8 w, u8 h, u8 r)
+        : X(x), Y(y), Width(w), Height(h), RotationCount(r)
+    {}
+};
+
+// IDEA: We can keep the pixel coords on the texture and calculate them in runtime
+struct texture_rects
+{
+    texture_rects() = default;
+
+    texture_rects(texture_rect front, texture_rect back,
+                  texture_rect left, texture_rect right,
+                  texture_rect top, texture_rect bottom)
+        : Front(front), Back(back),
+        Left(left), Right(right),
+        Top(top), Bottom(bottom)
+    {}
+
+    union
+    {
+        struct
+        {
+            texture_rect Front;
+            texture_rect Back;
+            texture_rect Left;
+            texture_rect Right;
+            texture_rect Top;
+            texture_rect Bottom;
+        };
+
+        texture_rect Data[6];
+    };
+};
+
+internal texture_coords get_texture_coords(i32 GridWidth, i32 GridHeight, i32 BottomLeftX, i32 BottomLeftY, i32 RotationCount = 0)
+{
+    texture_coords TextureCoords;
+
+    // TODO: Make this more generic?
+    f32 TextureWidth = 64.0f;
+    f32 TextureHeight = 32.0f;
+
+    f32 TexelWidth = 1 / TextureWidth;
+    f32 TexelHeight = 1 / TextureHeight;
+
+    // 8x8 Grid
+    TextureCoords.Coords[0] = { 0.0f, 0.0f };
+    TextureCoords.Coords[1] = { GridWidth * TexelWidth, 0.0f };
+    TextureCoords.Coords[2] = { GridWidth * TexelWidth, GridHeight * TexelHeight };
+    TextureCoords.Coords[3] = { 0.0f, GridHeight * TexelHeight };
+
+    // Rotate 90 degrees 'RotationCount'
+    while (RotationCount-- > 0)
+    {
+        auto OriginalCoords = TextureCoords;
+
+        TextureCoords.Coords[0] = OriginalCoords.Coords[1];  // New Bottom-left
+        TextureCoords.Coords[1] = OriginalCoords.Coords[2];  // New Bottom-right
+        TextureCoords.Coords[2] = OriginalCoords.Coords[3];  // New Top-right
+        TextureCoords.Coords[3] = OriginalCoords.Coords[0];  // New Top-left
+    }
+
+    // Translation of the Grid
+    TextureCoords.Coords[0] += v2(TexelWidth * BottomLeftX, TexelHeight * (TextureHeight - BottomLeftY - 1));
+    TextureCoords.Coords[1] += v2(TexelWidth * BottomLeftX, TexelHeight * (TextureHeight - BottomLeftY - 1));
+    TextureCoords.Coords[2] += v2(TexelWidth * BottomLeftX, TexelHeight * (TextureHeight - BottomLeftY - 1));
+    TextureCoords.Coords[3] += v2(TexelWidth * BottomLeftX, TexelHeight * (TextureHeight - BottomLeftY - 1));
+
+    return TextureCoords;
+};
+
+internal void AddModelPart(entity_model* Model, v3 LocalPosition, v3 Size, texture_rects Rects)
+{
+    auto& Part = Model->Parts[Model->PartsCount++];
+    texture_block_coords TextureCoords;
+
+    i32 i = 0;
+    for (auto& Rect : Rects.Data)
+    {
+        TextureCoords.TextureCoords[i++] = get_texture_coords(Rect.X, Rect.Y, Rect.Width, Rect.Height, Rect.RotationCount);
+    }
+
+    Part.Coords = TextureCoords;
+    Part.LocalPosition = LocalPosition * c_TexelSize;
+    Part.Size = Size * c_TexelSize;
+}
 
 struct camera
 {
@@ -38,7 +141,7 @@ struct camera
     m4 get_view_projection() const { return Projection * View; }
 };
 
-enum class block_type : u32
+enum class block_type : u8
 {
     Air = 0,
 
@@ -50,7 +153,7 @@ enum class block_type : u32
 
     INVALID
 };
-#define BLOCK_TYPE_COUNT (u32)block_type::INVALID
+#define BLOCK_TYPE_COUNT (u8)block_type::INVALID
 
 const char* g_BlockLabels[] = {
     "Air",
@@ -61,23 +164,6 @@ const char* g_BlockLabels[] = {
     "Grass",
     "INVALID"
 };
-
-//enum class entity_type : u32
-//{
-//    None = 0,
-//    Player,
-//    Cow,
-//    // ...
-//};
-
-enum class entity_flags : u32
-{
-    None = 0,
-    Valid = 1 << 0,
-    InteractsWithBlocks = 1 << 1,
-    Renderable = 1 << 2,
-};
-ENABLE_BITWISE_OPERATORS(entity_flags, u32);
 
 struct player
 {
@@ -97,19 +183,11 @@ struct block
     v3 Position = {}; // Position can be removed
     block_type Type = block_type::INVALID;
     v4 Color = v4(1.0f);
-
     f32 Emission = 0.0f;
-    entity PointLightEntity = INVALID_ID; // For glowstone
 
     bool placed() const { return Type != block_type::Air; }
     //i32 Left = INT_MAX, Right = INT_MAX, Front = INT_MAX, Back = INT_MAX, Up = INT_MAX, Down = INT_MAX; // Neighbours
 };
-
-internal const i64 RowCount = 64;
-internal const i64 ColumnCount = 64;
-internal const i64 LayerCount = 16;
-internal const i32 MaxAliveEntitiesCount = 16;
-internal const f32 c_TexelSize = 1 / 16.0f; // Global scale for entity models. 1m block is exactly 16x16 texels.
 
 // 16 * 16
 //struct block_pos
@@ -157,7 +235,7 @@ struct game
 
     perlin_noise PerlinNoise;
 
-    entity_registry Registry;
+    std::vector<cow_object> Cows;
 
     bool RenderEditorUI = true;
     bool RenderHUD = true;
@@ -238,43 +316,6 @@ internal block* block_get_safe(game* Game, i32 C, i32 R, i32 L)
 
     return nullptr;
 }
-
-internal texture_coords get_texture_coords(i32 GridWidth, i32 GridHeight, i32 BottomLeftX, i32 BottomLeftY, i32 RotationCount = 0)
-{
-    texture_coords TextureCoords;
-
-    // TODO: Make this more generic?
-    f32 TextureWidth = 64.0f;
-    f32 TextureHeight = 32.0f;
-
-    f32 TexelWidth = 1 / TextureWidth;
-    f32 TexelHeight = 1 / TextureHeight;
-
-    // 8x8 Grid
-    TextureCoords.Coords[0] = { 0.0f, 0.0f };
-    TextureCoords.Coords[1] = { GridWidth * TexelWidth, 0.0f };
-    TextureCoords.Coords[2] = { GridWidth * TexelWidth, GridHeight * TexelHeight };
-    TextureCoords.Coords[3] = { 0.0f, GridHeight * TexelHeight };
-
-    // Rotate 90 degrees 'RotationCount'
-    while (RotationCount-- > 0)
-    {
-        auto OriginalCoords = TextureCoords;
-
-        TextureCoords.Coords[0] = OriginalCoords.Coords[1];  // New Bottom-left
-        TextureCoords.Coords[1] = OriginalCoords.Coords[2];  // New Bottom-right
-        TextureCoords.Coords[2] = OriginalCoords.Coords[3];  // New Top-right
-        TextureCoords.Coords[3] = OriginalCoords.Coords[0];  // New Top-left
-    }
-
-    // Translation of the Grid
-    TextureCoords.Coords[0] += v2(TexelWidth * BottomLeftX, TexelHeight * (TextureHeight - BottomLeftY - 1));
-    TextureCoords.Coords[1] += v2(TexelWidth * BottomLeftX, TexelHeight * (TextureHeight - BottomLeftY - 1));
-    TextureCoords.Coords[2] += v2(TexelWidth * BottomLeftX, TexelHeight * (TextureHeight - BottomLeftY - 1));
-    TextureCoords.Coords[3] += v2(TexelWidth * BottomLeftX, TexelHeight * (TextureHeight - BottomLeftY - 1));
-
-    return TextureCoords;
-};
 
 struct block_pos
 {

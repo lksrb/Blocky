@@ -1,5 +1,7 @@
 #pragma once
 
+struct game;
+
 enum class alive_entity_state : u32
 {
     None = 0,
@@ -61,12 +63,8 @@ internal const char* get_alive_entity_state_string(alive_entity_state State)
     return "UNKNOWN";
 }
 
-// Forward declarations
-struct cow;
-internal void cow_change_state(cow* Cow, alive_entity_state NewState);
-
 // Internal storage
-struct cow
+struct cow_object
 {
     f32 Speed = 1.0f;
     v2 Direction = v2(0.0f);
@@ -79,241 +77,13 @@ struct cow
     state_timer IdleTimer; // Neposeda
 
     random_series RandomSeries;
+
+    transform_component Transform;
+    aabb_physics_component AABBPhysics;
+    entity_render_component Render;
 };
 
-internal void cow_create(entity_registry* Registry, entity Entity, logic_component* Logic)
-{
-    auto Cow = new cow; // TODO: Arena allocator
-    Logic->Storage = Cow;
-
-    // Set initial state
-    cow_change_state(Cow, alive_entity_state::Idle);
-
-    Cow->CurrentAction = { action_type::None, 3.0f, true };
-
-    // Initialize random series for random behaviour
-    Cow->RandomSeries = random_series_create();
-
-    //auto& MeshRender = AddComponent<mesh_render_component>(Registry, Entity);
-    //auto Mesh = MeshRender.Mesh = new mesh;
-
-    //return;
-    //// Read mesh
-    //{
-    //    buffer Buffer = ReadBinary("Resources/Mesh/Cow.blmesh");
-    //    u8* Pointer = (u8*)Buffer.Data;
-
-    //    // Get tag
-    //    char Tag[4];
-    //    memcpy(Tag, Pointer, 4);
-    //    Pointer += 4;
-
-    //    // Get vertices
-    //    u32 Size = 0;
-    //    memcpy(&Size, Pointer, 4);
-    //    Pointer += 4;
-    //    Mesh->Vertices = { (mesh_vertex*)Pointer, Size };
-    //    Pointer += Size;
-
-    //    // Get Indices
-    //    Size = 0;
-    //    memcpy(&Size, Pointer, 4);
-    //    Pointer += 4;
-    //    Mesh->Indices = { (u32*)Pointer, Size };
-    //    Pointer += Size;
-
-    //    // Get Submeshes
-    //    Size = 0;
-    //    memcpy(&Size, Pointer, 4);
-    //    Pointer += 4;
-    //    Mesh->Submeshes = { (submesh*)Pointer, Size };
-    //    Pointer += Size;
-
-    //    // Get Texture
-    //    u32 Width;
-    //    u32 Height;
-    //    memcpy(&Width, Pointer, 4);
-    //    Pointer += 4;
-    //    memcpy(&Height, Pointer, 4);
-    //    Pointer += 4;
-    //    //Mesh->Texture = { Width, Height, Pointer };
-    //}
-}
-
-internal void cow_destroy(entity_registry* Registry, entity Entity, logic_component* Logic)
-{
-    delete Logic->Storage; // Does not call destruction, I dont think we need it
-}
-
-internal void cow_update(game* Game, entity_registry* Registry, entity Entity, logic_component* Logic, f32 TimeStep)
-{
-    using namespace bkm;
-
-    cow* Cow = static_cast<cow*>(Logic->Storage);
-    auto& Transform = ecs_get_component<transform_component>(Registry, Entity);
-    auto& AABBPhysics = ecs_get_component<aabb_physics_component>(Registry, Entity);
-
-    // Actions
-    if (1)
-    {
-        Transform.Rotation.y += TimeStep;
-        switch (Cow->CurrentAction.Type)
-        {
-            case action_type::None:
-            {
-                block_pos Pos = get_world_to_block_position(Transform.Translation);
-
-                auto GroundBlock = block_get_safe(Game, Pos.C, Pos.R, Pos.L - 1);
-
-                if (GroundBlock)
-                {
-                    GroundBlock->Color = v4(1.0f, 0.0f, 0.0f, 1.0f);
-                }
-
-                break;
-            }
-            case action_type::RotateRandomly:
-            {
-                // TODO: Should this really be encoded into vec2? We could use singular f32 to represent the angle...
-                f32 TargetAngle = Atan2(Cow->Direction.y, Cow->Direction.x);
-                f32 AngleDiff = DeltaAngle(Transform.Rotation.y, TargetAngle);
-                f32 RotationStep = TimeStep * 5.0f;
-
-                if (Abs(AngleDiff) < RotationStep)
-                {
-                    //Transform.Rotation.y = TargetAngle;
-                    Cow->CurrentAction.Finished = true;
-
-                }
-                else
-                {
-                    //Transform.Rotation.y += Sign(TargetAngle - Transform.Rotation.y) * RotationStep;
-                }
-                break;
-            }
-
-            case action_type::LookAtPlayer:
-            {
-                v3 PlayerDirDiff = Game->Player.Position - Transform.Translation;
-
-//                Transform.Rotation.y = Atan2(PlayerDirDiff.x, PlayerDirDiff.z);
-
-                break;
-            }
-        }
-
-        // After an action is finished, start counting
-        if (Cow->CurrentAction.Finished)
-        {
-            if (Cow->ActionTimer > Cow->CurrentAction.Duration)
-            {
-                Cow->ActionTimer = 0.0f;
-
-                Cow->CurrentAction = { action_type::RotateRandomly, 1.0f, false };
-                //Cow->CurrentAction = { action_type::LookAtPlayer, 1.0f, false };
-
-                // Once moment
-                switch (Cow->CurrentAction.Type)
-                {
-                    case action_type::RotateRandomly:
-                    {
-                        // Choose a random direcion to face body to
-                        Cow->Direction = random_normal(&Cow->RandomSeries);
-
-                        Cow->CurrentAction.Duration = 1.0f + random_float01(&Cow->RandomSeries);
-
-                        Trace("%.3f, %.3f", Cow->Direction.x, Cow->Direction.y);
-
-                        //Cow->Direction = v2(0.0f, -1.0);
-                        break;
-                    }
-                    case action_type::LookAtPlayer:
-                    {
-                        
-                        break;
-                    }
-                    default:
-                        break;
-                }
-            }
-            else
-            {
-                Cow->ActionTimer += TimeStep;
-            }
-        }
-
-    }
-
-    // !!!
-    return;
-
-    // State update
-    if (0)
-    {
-        if (Cow->State == alive_entity_state::Idle)
-        {
-            Cow->Direction = v2(0.0f);
-
-            state_timer_update(&Cow->IdleTimer, TimeStep, [&]()
-            {
-                cow_change_state(Cow, alive_entity_state::Walking);
-            });
-        }
-        else if (Cow->State == alive_entity_state::Walking)
-        {
-            state_timer_update(&Cow->DecideDirectionTimer, TimeStep, [&]()
-            {
-                Cow->Direction = random_direction(&Cow->RandomSeries);
-            });
-
-            Cow->Speed = 1.0f;
-            // This way we can actually set velocity while respecting the physics simulation
-            AABBPhysics.Velocity.x = Cow->Speed * Cow->Direction.x;
-            AABBPhysics.Velocity.z = Cow->Speed * Cow->Direction.y;
-        }
-        else if (Cow->State == alive_entity_state::Running)
-        {
-            Cow->Speed = 5.0f;
-            // This way we can actually set velocity while respecting the physics simulation... Not really
-            // We need to take to account that Cow maybe hit by something so this does not respect it.
-            // Instead we need to change cow state to InAir so it does respect it
-            AABBPhysics.Velocity.x = Cow->Speed * Cow->Direction.x;
-            AABBPhysics.Velocity.z = Cow->Speed * Cow->Direction.y;
-        }
-        else if (Cow->State == alive_entity_state::InAir)
-        {
-            // Dont modify anything
-        }
-    }
-
-    // Alter "animation" of the legs, faster cow gets, faster the legs animation
-    if (bkm::NonZero(v2(AABBPhysics.Velocity.x, AABBPhysics.Velocity.z)))
-    {
-        Transform.Rotation.y = bkm::Lerp(Transform.Rotation.y, bkm::Atan2(AABBPhysics.Velocity.x, AABBPhysics.Velocity.z), TimeStep * 5.0f);
-    }
-}
-
-internal void cow_change_state(cow* Cow, alive_entity_state NewState)
-{
-    Assert(NewState != alive_entity_state::None, "Cannot change state to \"None\"!");
-    if (Cow->State == NewState)
-        return;
-
-    alive_entity_state OldState = Cow->State;
-    Cow->State = NewState;
-
-    Trace("Cow has changed its state! From '%s' to '%s'.", get_alive_entity_state_string(OldState), get_alive_entity_state_string(NewState));
-
-    // Something that will be done only once
-    if (NewState == alive_entity_state::Idle)
-    {
-        Cow->IdleTimer.Current = 0;
-        Cow->IdleTimer.Time = 1.0f;
-    }
-    else if (NewState == alive_entity_state::Walking)
-    {
-        Cow->DecideDirectionTimer.Current = 0;
-        Cow->DecideDirectionTimer.Time = 1.0f;
-    }
-}
-
+internal void cow_create(cow_object* Cow);
+internal void cow_destroy(cow_object* Cow);
+internal void cow_update(cow_object* Cow, game* Game, f32 TimeStep);
+internal void cow_change_state(cow_object* Cow, alive_entity_state NewState);

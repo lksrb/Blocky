@@ -17,7 +17,7 @@
  * Or just compare if the template magic is negligable or not compared to macro.
  */
 
-#define INVALID_ID entity((ecs_entity_type)-1)
+#define ECS_INVALID_ID entity((ecs_entity_type)-1)
 
 using ecs_entity_type = u32;
 enum class entity : ecs_entity_type {};
@@ -45,7 +45,7 @@ struct component_pool
     void Create(ecs_entity_type Capacity)
     {
         Data = new T[Capacity];
-        Set = sparse_set_create(Capacity);
+        Set = sparse_set_create(Capacity, Capacity);
     }
 
     void Destroy()
@@ -143,7 +143,7 @@ struct entity_registry
 
     components_pools ComponentPools;
 
-    entity FreeList = INVALID_ID;
+    entity FreeList = ECS_INVALID_ID;
 };
 
 // ** Iterating over tuple elements **
@@ -174,7 +174,7 @@ internal entity_registry ecs_entity_registry_create(ecs_entity_type Capacity)
     entity_registry Registry;
     Registry.Entities = new entity[Capacity];
     Registry.EntitiesCapacity = Capacity;
-    memset(Registry.Entities, ecs_to_entity_type(INVALID_ID), Capacity * sizeof(ecs_entity_type));
+    memset(Registry.Entities, ecs_to_entity_type(ECS_INVALID_ID), Capacity * sizeof(ecs_entity_type));
 
     // Since we know all the components that we will use, we can just instantiate them here
     for_each_pool(&Registry, [Capacity](auto& Pool)
@@ -202,7 +202,7 @@ internal entity ecs_create_entity(entity_registry* Registry)
 {
     Assert(Registry->EntitiesCount < Registry->EntitiesCapacity, "Too many entities!");
 
-    if (Registry->FreeList == INVALID_ID)
+    if (Registry->FreeList == ECS_INVALID_ID)
     {
         entity Entity = ecs_to_entity(Registry->EntitiesCount);
         Registry->Entities[ecs_to_entity_type(Entity)] = Entity;
@@ -240,10 +240,10 @@ internal void ecs_destroy_entity(entity_registry* Registry, entity Entity)
         }
     });
 
-    if (Registry->FreeList == INVALID_ID)
+    if (Registry->FreeList == ECS_INVALID_ID)
     {
         // Set free list entity to an invalid value to signalize that the its the last in the chain
-        Registry->Entities[ecs_to_entity_type(Entity)] = INVALID_ID;
+        Registry->Entities[ecs_to_entity_type(Entity)] = ECS_INVALID_ID;
 
         // Set free list to entity index
         Registry->FreeList = Entity;
@@ -266,19 +266,7 @@ internal T& ecs_add_component(entity_registry* Registry, entity Entity)
 
     auto Index = sparse_set_add(&Pool.Set, ecs_to_entity_type(Entity));
     
-    return Pool.Data[ecs_to_entity_type(Entity)];
-}
-
-template<typename T>
-internal T& ecs_add_component2(entity_registry* Registry, entity Entity)
-{
-    auto& Pool = ecs_get_pool<T>(Registry);
-
-    Assert(!sparse_set_contains(&Pool.Set, ecs_to_entity_type(Entity)), "Entity already has this component!");
-
-    auto Index = sparse_set_add(&Pool.Set, ecs_to_entity_type(Entity));
-
-    return Pool.Data[ecs_to_entity_type(Entity)];
+    return Pool.Data[Index];
 }
 
 template<typename T>
@@ -312,7 +300,7 @@ internal ecs_view<T> ecs_view_components(entity_registry* Registry)
 
     // Setup iterators
     View.DenseBegin = (entity*)Pool.Set.Dense;
-    View.DenseEnd = (entity*)Pool.Set.Dense + Pool.Set.DenseCount;
+    View.DenseEnd = (entity*)Pool.Set.Dense + Pool.Set.Size;
 
     // Also grab direct pointer to the pool
     View.DenseComponentPool = Pool.Data;

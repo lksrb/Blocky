@@ -30,21 +30,6 @@ struct point_light_component
     f32 Intensity = 1.0f;
 };
 
-struct logic_component
-{
-    // TODO: Do we need pointer to the game structure in the create/destroy function?
-    using create_function = void(*)(entity_registry* Registry, entity Entity, logic_component* Logic);
-    using destroy_function = void(*)(entity_registry* Registry, entity Entity, logic_component* Logic);
-    using update_function = void(*)(game* Game, entity_registry* Registry, entity Entity, logic_component* Logic, f32 TimeStep);
-
-    // These cannot be null
-    create_function CreateFunction; // Used for setup of an entity
-    destroy_function DestroyFunction; // Called upon destruction of an entity
-    update_function UpdateFunction; // Called each frame 
-
-    void* Storage;
-};
-
 struct entity_part
 {
     texture_block_coords Coords;

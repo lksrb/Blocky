@@ -326,34 +326,31 @@ internal void game_renderer_submit_cuboid(game_renderer* Renderer, const v3& Tra
 internal void game_renderer_submit_cuboid(game_renderer* Renderer, const v3& Translation, const texture* Texture, const v4& Color, f32 Emission)
 {
     Assert(Renderer->Cuboid.InstanceCount < c_MaxCubePerBatch, "Renderer->CuboidInstanceCount < c_MaxCuboidsPerBatch");
+    Assert(Texture != nullptr, "Texture cannot be nullptr!");
 
     u32 TextureIndex = 0;
-
-    if (Texture != nullptr)
+    for (u32 i = 1; i < Renderer->CurrentTextureStackIndex; i++)
     {
-        for (u32 i = 1; i < Renderer->CurrentTextureStackIndex; i++)
+        if (Renderer->TextureStack[i] == Texture)
         {
-            if (Renderer->TextureStack[i] == Texture)
-            {
-                TextureIndex = i;
-                break;
-            }
+            TextureIndex = i;
+            break;
         }
+    }
 
-        if (TextureIndex == 0)
-        {
-            Assert(Renderer->CurrentTextureStackIndex < c_MaxTexturesPerDrawCall, "Renderer->TextureStackIndex < c_MaxTexturesPerDrawCall");
-            TextureIndex = Renderer->CurrentTextureStackIndex;
-            Renderer->TextureStack[TextureIndex] = Texture;
-            Renderer->CurrentTextureStackIndex++;
-        }
+    if (TextureIndex == 0)
+    {
+        Assert(Renderer->CurrentTextureStackIndex < c_MaxTexturesPerDrawCall, "Renderer->TextureStackIndex < c_MaxTexturesPerDrawCall");
+        TextureIndex = Renderer->CurrentTextureStackIndex;
+        Renderer->TextureStack[TextureIndex] = Texture;
+        Renderer->CurrentTextureStackIndex++;
     }
 
     auto& Cuboid = Renderer->Cuboid.InstanceData[Renderer->Cuboid.InstanceCount];
 
     // TODO: We can do better by simply copying data and then calculate everything at one swoop
 #if ENABLE_SIMD
-    Cuboid.XmmTransform = XMMatrixTranslationFromVector(XMVectorSet(Translation.x, Translation.y, Translation.z, 0.0f));
+    Cuboid.XmmTransform = XMMatrixTranslation(Translation.x, Translation.y, Translation.z);
 #else
     Cuboid.Transform = bkm::Translate(m4(1.0f), Translation);
 #endif
