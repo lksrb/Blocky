@@ -6,24 +6,31 @@
 
 internal game* game_create(arena* Arena, render_backend* Backend)
 {
-    game* Game = arena_new(Arena, game);
+    game* G = arena_new(Arena, game);
 
     {
-        Game->BlocksCount = RowCount * ColumnCount * LayerCount;
-        Game->Blocks = arena_new_array(Arena, block, Game->BlocksCount);
-        Game->GenSeries = random_series_create();
-        game_generate_world(Game, Game->Blocks, Game->BlocksCount);
+        G->BlocksCount = RowCount * ColumnCount * LayerCount;
+        G->Blocks = arena_new_array(Arena, block, G->BlocksCount);
+        G->GenSeries = random_series_create();
+
+        game_load_world_from_file(G, "Test.w");
+
+        //bool GenerateWorld = false;
+        //if (GenerateWorld)
+        //game_generate_world(G);
+        //else
+        //game_write_world_to_file(G, "Test.w");
     }
 
     // Crosshair texture will be separate from block textures
-    Game->CrosshairTexture = texture_create(Backend, "Resources/Textures/MC/Crosshair.png");
-    Game->BlockTextures[(u32)block_type::Dirt] = texture_create(Backend, "Resources/Textures/MC/dirt_2.png");
-    Game->BlockTextures[(u32)block_type::GlowStone] = texture_create(Backend, "Resources/Textures/glowstone.png");
-    Game->BlockTextures[(u32)block_type::Stone] = texture_create(Backend, "Resources/Textures/stone.png");
-    Game->BlockTextures[(u32)block_type::Bedrock] = texture_create(Backend, "Resources/Textures/bedrock.png");
-    Game->BlockTextures[(u32)block_type::Grass] = texture_create(Backend, "Resources/Textures/grass_block_top.png");
-    Game->CowTexture = texture_create(Backend, "Resources/Textures/MC/cow.png");
-    Game->PointLightIconTexture = texture_create(Backend, "Resources/Textures/PointLight.png", true);
+    G->CrosshairTexture = texture_create(Backend, "Resources/Textures/MC/Crosshair.png");
+    G->BlockTextures[(u32)block_type::Dirt] = texture_create(Backend, "Resources/Textures/MC/dirt_2.png");
+    G->BlockTextures[(u32)block_type::GlowStone] = texture_create(Backend, "Resources/Textures/glowstone.png");
+    G->BlockTextures[(u32)block_type::Stone] = texture_create(Backend, "Resources/Textures/stone.png");
+    G->BlockTextures[(u32)block_type::Bedrock] = texture_create(Backend, "Resources/Textures/bedrock.png");
+    G->BlockTextures[(u32)block_type::Grass] = texture_create(Backend, "Resources/Textures/grass_block_top.png");
+    G->CowTexture = texture_create(Backend, "Resources/Textures/MC/cow.png");
+    G->PointLightIconTexture = texture_create(Backend, "Resources/Textures/PointLight.png", true);
 
     //Game->SunTexture = TextureCreate(Renderer->Device, Renderer->DirectCommandAllocators[0], Renderer->DirectCommandList, Renderer->DirectCommandQueue, "Resources/Textures/MC/environemnt/sun.png");
 
@@ -82,7 +89,7 @@ internal game* game_create(arena* Arena, render_backend* Backend)
     // Create another set of cows
     for (i32 i = 0; i < 1; i++)
     {
-        auto& Cow = Game->Cows.emplace_back();
+        auto& Cow = G->Cows.emplace_back();
 
         auto& Transform = Cow.Transform;
         Transform.Translation = v3((f32)c_TexelSize / 2 + 10.0f, 17.0, c_TexelSize / 2 + 10.0f);
@@ -90,7 +97,7 @@ internal game* game_create(arena* Arena, render_backend* Backend)
         Transform.Rotation = v3(0.0f, 0.0f, 0.0f);
 
         auto& Render = Cow.Render;
-        Render.Texture = Game->CowTexture;
+        Render.Texture = G->CowTexture;
         Render.Model = CowModel;
 
         auto& AABB = Cow.AABBPhysics;
@@ -101,25 +108,28 @@ internal game* game_create(arena* Arena, render_backend* Backend)
         cow_create(&Cow);
     }
 
-    return Game;
+    return G;
 }
 
-internal void game_destroy(game* Game, render_backend* RenderBackend)
+internal void game_destroy(game* G, render_backend* RenderBackend)
 {
     for (u32 i = 1; i < BLOCK_TYPE_COUNT - 1; i++)
     {
-        texture_destroy(RenderBackend, &Game->BlockTextures[i]);
+        texture_destroy(RenderBackend, &G->BlockTextures[i]);
     }
 
-    texture_destroy(RenderBackend, &Game->CowTexture);
-    texture_destroy(RenderBackend, &Game->CrosshairTexture);
-    texture_destroy(RenderBackend, &Game->PointLightIconTexture);
+    texture_destroy(RenderBackend, &G->CowTexture);
+    texture_destroy(RenderBackend, &G->CrosshairTexture);
+    texture_destroy(RenderBackend, &G->PointLightIconTexture);
     //texture_destroy(&Game->SunTexture);
 }
 
-internal void game_generate_world(game* Game, block* Blocks, u32 BlocksCount)
+internal void game_generate_world(game* G)
 {
-    perlin_noise_create(&Game->PerlinNoise, random_series_u32(&Game->GenSeries, 1));
+    block* Blocks = G->Blocks; 
+    u32 BlocksCount = G->BlocksCount;
+
+    perlin_noise_create(&G->PerlinNoise, random_series_u32(&G->GenSeries, 1));
     i32 MaxTerrainHeight = LayerCount / 2 + 4;
 
     // 1. Generate the terrain
@@ -134,14 +144,14 @@ internal void game_generate_world(game* Game, block* Blocks, u32 BlocksCount)
 
             // Step 1: Generate height using noise
             f32 NoiseScale = 0.05f;
-            f32 HeightValue = perlin_noise_get(&Game->PerlinNoise, X * NoiseScale, Z * NoiseScale); // in [0, 1]
+            f32 HeightValue = perlin_noise_get(&G->PerlinNoise, X * NoiseScale, Z * NoiseScale); // in [0, 1]
             //f32 HeightValue = 0;
             i32 TerrainHeight = (i32)(HeightValue * MaxTerrainHeight);
 
             for (i32 Y = 0; Y < LayerCount; Y++)
             {
                 i32 Index = (Y * RowCount * ColumnCount) + (Z * ColumnCount) + X;
-                auto& Block = Game->Blocks[Index];
+                auto& Block = G->Blocks[Index];
                 Block.Color = v4(1.0f);
                 Block.Position = v3(CurrentPosition.x, CurrentPosition.y, CurrentPosition.z);
 
@@ -215,6 +225,26 @@ internal void game_generate_world(game* Game, block* Blocks, u32 BlocksCount)
         }
         CurrentPosition.z++;
     }*/
+}
+
+internal void game_load_world_from_file(game* G, const char* Path)
+{
+    buffer WorldFile = platform_read_buffer(Path);
+
+    G->Blocks = (block*)WorldFile.Data;
+    G->BlocksCount = WorldFile.Size / sizeof(block);
+}
+
+internal void game_write_world_to_file(game* G, const char* Path)
+{
+    buffer Buffer = {
+        .Data = G->Blocks,
+        .Size = G->BlocksCount * sizeof(block)
+    };
+
+    platform_write_buffer(Path, Buffer);
+
+    Info("World successfully dumped to a file! File: %s", Path);
 }
 
 internal void game_update(game* G, game_renderer* Renderer, const game_input* Input, f32 TimeStep, v2i ClientArea)
@@ -410,7 +440,15 @@ internal void game_debug_ui_update(game* G, game_renderer* Renderer, const game_
         ImGui::Separator();
         if (ImGui::Button("Regenerate the world"))
         {
-            game_generate_world(G, G->Blocks, G->BlocksCount);
+            game_generate_world(G);
+        }
+        if (ImGui::Button("Save the world."))
+        {
+            game_write_world_to_file(G, "Test.w");
+        }
+        if (ImGui::Button("Open the world"))
+        {
+            game_load_world_from_file(G, "Test.w");
         }
     }
 

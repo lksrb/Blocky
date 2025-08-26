@@ -263,13 +263,17 @@ internal void game_destroy(game* G, render_backend* Backend);
 internal void game_update(game* G, game_renderer* Renderer, const game_input* Input, f32 TimeStep, v2i ClientArea);
 internal void game_debug_ui_update(game* G, game_renderer* Renderer, const game_input* Input, f32 TimeStep, v2i ClientArea);
 internal void game_player_update(game* G, const game_input* Input, game_renderer* Renderer, f32 TimeStep);
-internal void game_generate_world(game* Game, block* Blocks, u32 BlocksCount);
+
+internal void game_generate_world(game* Game);
+internal void game_load_world_from_file(game* G, const char* Path);
+internal void game_write_world_to_file(game* G, const char* Path);
 
 internal void game_update_entities(game* G, f32 TimeStep);
 internal void game_render_entities(game* G, game_renderer* Renderer, f32 TimeStep);
 internal void game_physics_simulation_update_entities(game* G, f32 TimeStep);
 
 internal void game_render_editor_ui(game* G, game_renderer* Renderer);
+
 
 internal bool find_first_hit(const ray& Ray, const block* Blocks, u64 BlocksCount, v3* HitPoint, v3* HitNormal, block* HitBlock, u64* HitIndex)
 {
@@ -331,6 +335,3 @@ internal block_pos get_world_to_block_position(const v3& WorldPos)
 
     return { C,R,L };
 }
-
-// TODO: Move somewhere
-internal buffer win32_read_buffer(const char* Path);

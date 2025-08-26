@@ -91,29 +91,28 @@ LRESULT win32_procedure_handler(HWND WindowHandle, UINT Message, WPARAM WParam, 
     return Result;
 }
 
-internal buffer win32_read_buffer(const char* Path)
+internal buffer platform_read_buffer(const char* FilePath)
 {
     buffer Result = {};
 
-    HANDLE FileHandle = ::CreateFileA(Path, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr);
+    HANDLE FileHandle = ::CreateFileA(FilePath, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr);
     if (FileHandle != INVALID_HANDLE_VALUE)
     {
-        DWORD dwBytesRead = 0;
-        DWORD dwBytesWritten = 0;
-        LARGE_INTEGER size;
-        if (::GetFileSizeEx(FileHandle, &size))
+        DWORD BytesRead = 0;
+        LARGE_INTEGER Size;
+        if (::GetFileSizeEx(FileHandle, &Size))
         {
             // NOTE: We allocate more but that does not matter for now
-            u8* data = static_cast<u8*>(::VirtualAlloc(nullptr, size.QuadPart, MEM_COMMIT, PAGE_READWRITE));
+            u8* Data = static_cast<u8*>(::VirtualAlloc(nullptr, Size.QuadPart, MEM_COMMIT, PAGE_READWRITE));
 
-            if (::ReadFile(FileHandle, data, static_cast<DWORD>(size.QuadPart), &dwBytesRead, nullptr))
+            if (::ReadFile(FileHandle, Data, static_cast<DWORD>(Size.QuadPart), &BytesRead, nullptr))
             {
-                Result.Data = data;
-                Result.Size = static_cast<u32>(size.QuadPart);
+                Result.Data = Data;
+                Result.Size = static_cast<u32>(Size.QuadPart);
             }
             else
             {
-                ::VirtualFree(data, 0, MEM_RELEASE);
+                ::VirtualFree(Data, 0, MEM_RELEASE);
             }
         }
 
@@ -121,6 +120,22 @@ internal buffer win32_read_buffer(const char* Path)
     }
 
     return Result;
+}
+
+internal bool platform_write_buffer(const char* FilePath, buffer Buffer)
+{
+    bool Success = false;
+    HANDLE FileHandle = ::CreateFileA(FilePath, GENERIC_WRITE, FILE_SHARE_WRITE, nullptr, CREATE_ALWAYS, 0, nullptr);
+
+    if (FileHandle != INVALID_HANDLE_VALUE)
+    {
+        DWORD BytesWritten;
+        Success = ::WriteFile(FileHandle, Buffer.Data, static_cast<DWORD>(Buffer.Size), &BytesWritten, 0);
+        Assert(BytesWritten == Buffer.Size, "Whole file was not written!");
+        CloseHandle(FileHandle);
+    }
+
+    return Success;
 }
 
 internal void win32_process_events(game_input* Input, HWND WindowHandle)

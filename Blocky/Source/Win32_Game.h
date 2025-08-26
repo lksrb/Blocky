@@ -103,3 +103,8 @@ struct game_input
     bool is_mouse_down(mouse Mouse) const { return MouseDown[(u32)Mouse]; }
     bool is_mouse_pressed(mouse Mouse) const { return MousePressed[(u32)Mouse]; }
 };
+
+// Cross-platform stuff
+// Should be in some platform layer but who cares.
+internal buffer platform_read_buffer(const char* FilePath);
+internal bool platform_write_buffer(const char* FilePath, buffer Buffer);
