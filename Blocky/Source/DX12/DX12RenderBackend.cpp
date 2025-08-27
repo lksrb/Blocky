@@ -981,7 +981,7 @@ internal void d3d12_render_backend_render(dx12_render_backend* Backend, const ga
 
     CommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-    const bool RenderSkybox = false;
+    const bool RenderSkybox = true;
     if (RenderSkybox)
     {
         auto& Skybox = Backend->Skybox;
@@ -997,6 +997,22 @@ internal void d3d12_render_backend_render(dx12_render_backend* Backend, const ga
         dx12_cmd_set_index_buffer(CommandList, Skybox.IndexBuffer.Buffer.Handle, sizeof(c_SkyboxIndices), DXGI_FORMAT_R32_UINT);
 
         CommandList->DrawIndexedInstanced(36, 1, 0, 0, 0);
+    }
+
+    const bool RenderDistantObjects = true;
+    if (RenderDistantObjects && Renderer->DistantQuad.IndexCount > 0)
+    {
+        CommandList->SetGraphicsRootSignature(Backend->Skybox.RootSignature.Handle);
+        CommandList->SetPipelineState(Backend->DistantQuad.Pipeline.Handle);
+        CommandList->SetGraphicsRoot32BitConstants(0, sizeof(distant_quad_buffer_data) / 4, &Renderer->RenderData.DistantObjectBuffer, 0);
+
+        // Bind vertex positions
+        dx12_cmd_set_vertex_buffer(CommandList, 0, Backend->DistantQuad.VertexBuffers[CurrentBackBufferIndex].Buffer.Handle, Renderer->DistantQuad.IndexCount * sizeof(distant_quad_vertex), sizeof(distant_quad_vertex));
+
+        // Bind index buffer
+        dx12_cmd_set_index_buffer(CommandList, Backend->Quad.IndexBuffer.Buffer.Handle, Renderer->DistantQuad.IndexCount * sizeof(u32), DXGI_FORMAT_R32_UINT);
+
+        CommandList->DrawIndexedInstanced(Renderer->DistantQuad.IndexCount, 1, 0, 0, 0);
     }
 
     const bool RenderInstancedCuboids = true;
@@ -1020,23 +1036,6 @@ internal void d3d12_render_backend_render(dx12_render_backend* Backend, const ga
 
         // Issue draw call
         CommandList->DrawIndexedInstanced(36, Renderer->Cuboid.InstanceCount, 0, 0, 0);
-    }
-
-    // Render distant objects
-    const bool RenderDistantObjects = false;
-    if (RenderDistantObjects && Renderer->DistantQuad.IndexCount > 0)
-    {
-        CommandList->SetGraphicsRootSignature(Backend->Skybox.RootSignature.Handle);
-        CommandList->SetPipelineState(Backend->DistantQuad.Pipeline.Handle);
-        CommandList->SetGraphicsRoot32BitConstants(0, sizeof(distant_quad_buffer_data) / 4, &Renderer->RenderData.DistantObjectBuffer, 0);
-
-        // Bind vertex positions
-        dx12_cmd_set_vertex_buffer(CommandList, 0, Backend->DistantQuad.VertexBuffers[CurrentBackBufferIndex].Buffer.Handle, Renderer->DistantQuad.IndexCount * sizeof(distant_quad_vertex), sizeof(distant_quad_vertex));
-
-        // Bind index buffer
-        dx12_cmd_set_index_buffer(CommandList, Backend->Quad.IndexBuffer.Buffer.Handle, Renderer->DistantQuad.IndexCount * sizeof(u32), DXGI_FORMAT_R32_UINT);
-
-        CommandList->DrawIndexedInstanced(Renderer->DistantQuad.IndexCount, 1, 0, 0, 0);
     }
 
     CommandList->SetGraphicsRootSignature(Backend->RootSignature.Handle);

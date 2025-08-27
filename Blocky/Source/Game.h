@@ -150,6 +150,7 @@ enum class block_type : u8
     Stone,
     Bedrock,
     Grass,
+    OakPlank,
 
     INVALID
 };
@@ -162,16 +163,17 @@ const char* g_BlockLabels[] = {
     "Stone",
     "Bedrock",
     "Grass",
+    "OakPlank",
     "INVALID"
 };
 
 struct player
 {
-    v3 Position = v3(-2.0f, 10.0f, -2.0f);
+    v3 Position = v3(2.0f, 10.0f, 2.0f);
     //v3 Position = v3(2.5f, 0.0f, 0.0f);
     v3 Rotation = v3(-0.655001104, 4.02360773, 0);
     v3 Velocity = v3(0.0f);
-    bool IsPhysicsObject = false;
+    bool IsPhysicsObject = true;
     bool Grounded = false;
 
     block_type CurrentlySelectedBlock = block_type::Dirt;
@@ -273,7 +275,6 @@ internal void game_render_entities(game* G, game_renderer* Renderer, f32 TimeSte
 internal void game_physics_simulation_update_entities(game* G, f32 TimeStep);
 
 internal void game_render_editor_ui(game* G, game_renderer* Renderer);
-
 
 internal bool find_first_hit(const ray& Ray, const block* Blocks, u64 BlocksCount, v3* HitPoint, v3* HitNormal, block* HitBlock, u64* HitIndex)
 {

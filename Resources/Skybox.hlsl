@@ -36,7 +36,7 @@ float4 PSMain(pixel_shader_input In) : SV_Target
     // In.Position - screen coords in pixels
     
     float2 UV = (In.WorldPosition.xy + float2(1.0, 1.0)) / 2;
-    float T = sin(c_Time * 0.1);
+    float T = sin(c_Time);
     float2 Resolution = float2(2160, 1185);
     
     // Normalized and flipped
@@ -45,6 +45,7 @@ float4 PSMain(pixel_shader_input In) : SV_Target
     
      // Define key colors
     float3 Night = float3(0.05, 0.05, 0.2); // dark blue
+    float3 DarkNight = float3(0.005, 0.005, 0.02); // almost black
     float3 Horizon = float3(1.0, 0.4, 0.2); // orange-pink (dawn)
     float3 DawnZenith = float3(0.2, 0.4, 0.8); // light blue (early morning)
     float3 DayZenith = float3(0.4, 0.6, 1.0); // bright daytime blue
