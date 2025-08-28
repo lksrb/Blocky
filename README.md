@@ -1,5 +1,5 @@
 # Blocky
-Blocky is a voxel 3D game. 
+Blocky is a 3D voxel-based game. Build and destroy blocks.
 
 ## Controls
 Tutorial is present when you open the game.
