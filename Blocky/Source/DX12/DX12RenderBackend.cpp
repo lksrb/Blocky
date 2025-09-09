@@ -24,7 +24,16 @@ internal dx12_render_backend* dx12_render_backend_create(arena* Arena, const win
 
     // Create device
     // This takes ~300 ms, insane
-    DxAssert(D3D12CreateDevice(nullptr, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&Backend->Device)));
+    HRESULT Error = D3D12CreateDevice(nullptr, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&Backend->Device));
+    if (Error == DXGI_ERROR_UNSUPPORTED)
+    {
+        Assert(false, "DirectX 12 is not supported on this system.");
+    }
+    else
+    {
+        //Err("D3D12CreateDevice was unsuccessful. %i", (i32)Error);
+        //Assert(false, "");
+    }
 
     // Create factory
     DxAssert(CreateDXGIFactory2(DX12_ENABLE_DEBUG_LAYER ? DXGI_CREATE_FACTORY_DEBUG : 0, IID_PPV_ARGS(&Backend->Factory)));

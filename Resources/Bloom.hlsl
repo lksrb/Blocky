@@ -1,6 +1,8 @@
 //
 // Bloom shader
 //
+// Implementation taken from an amazing tutorial: https://learnopengl.com/Guest-Articles/2022/Phys.-Based-Bloom
+// 
 
 cbuffer root_constants : register(b0)
 {

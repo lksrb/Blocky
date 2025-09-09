@@ -18,55 +18,65 @@ struct raycast_result
 
 // Slab method raycast
 // Ignores negative values to ensure one direction
+// From https://tavianator.com/2022/ray_box_boundary.html
 internal raycast_result RayCastIntersectsAABB(const ray& Ray, const aabb& Box)
 {
     raycast_result Result = {};
 
-    // TODO: How does this work?
-    f32 Min = -INFINITY;
-    f32 Max = INFINITY;
-    v3 Normal(0.0f);
-    for (u32 Axis = 0; Axis < 3; ++Axis)
+    f32 tMin = -INFINITY;  // Closest entry point along ray
+    f32 tMax = INFINITY;  // Furthest exit point along ray
+    v3 hitNormal = { 0, 0, 0 };
+
+    // Loop over X, Y, Z axes
+    for (u32 axis = 0; axis < 3; ++axis)
     {
-        f32 InvD = 1.0f / (Axis == 0 ? Ray.Direction.x : (Axis == 1 ? Ray.Direction.y : Ray.Direction.z));
-        f32 T0 = ((Axis == 0 ? Box.Min.x : (Axis == 1 ? Box.Min.y : Box.Min.z)) - (Axis == 0 ? Ray.Origin.x : (Axis == 1 ? Ray.Origin.y : Ray.Origin.z))) * InvD;
-        f32 T1 = ((Axis == 0 ? Box.Max.x : (Axis == 1 ? Box.Max.y : Box.Max.z)) - (Axis == 0 ? Ray.Origin.x : (Axis == 1 ? Ray.Origin.y : Ray.Origin.z))) * InvD;
+        f32 rayOrigin = Ray.Origin[axis];
+        f32 rayDir = Ray.Direction[axis];
+        f32 boxMin = Box.Min[axis];
+        f32 boxMax = Box.Max[axis];
+        
+        f32 invDir = 1.0f / rayDir;
+        
+        f32 t0 = (boxMin - rayOrigin) * invDir;
+        f32 t1 = (boxMax - rayOrigin) * invDir;
 
-        if (InvD < 0.0f)
+        // Ensure t0 is the near intersection and t1 is the far
+        if (invDir < 0.0f)
+            std::swap(t0, t1);
+
+        // Update near intersection
+        if (t0 > tMin)
         {
-            // Swap
-            f32 Temp = T0;
-            T0 = T1;
-            T1 = Temp;
+            tMin = t0;
+
+            // Update hit normal (points outward from box)
+            hitNormal = { 0, 0, 0 };
+            hitNormal[axis] = (rayDir > 0.0f) ? -1.0f : 1.0f;
         }
 
-        if (T0 > Min)
-        {
-            Min = T0;
-            Normal = { 0, 0, 0 };
-            if (Axis == 0) Normal.x = (Ray.Direction.x > 0) ? -1.0f : 1.0f;
-            if (Axis == 1) Normal.y = (Ray.Direction.y > 0) ? -1.0f : 1.0f;
-            if (Axis == 2) Normal.z = (Ray.Direction.z > 0) ? -1.0f : 1.0f;
-        }
+        // Update far intersection
+        tMax = bkm::Min(tMax, t1);
 
-        //Min = std::max(Min, t0);
-        Max = bkm::Min(Max, T1);
-
-        if (Max < Min)
+        // Early exit: no overlap along this axis
+        if (tMax < tMin)
         {
             Result.Hit = false;
-            break;
+            return Result;
         }
     }
 
-    // Ignore hits behind the ray
-    if (Min < 0)
+    // Ignore intersections that are behind the ray origin
+    if (tMin < 0.0f)
     {
         Result.Hit = false;
+        return Result;
     }
 
-    Result.Near = Min;
-    Result.Far = Max;
-    Result.Normal = Normal;
+    Result.Hit = true;
+    Result.Near = tMin;
+    Result.Far = tMax;
+    Result.Normal = hitNormal;
+
     return Result;
 }
+

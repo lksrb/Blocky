@@ -26,3 +26,11 @@ This script will generate ```Blocky.sln``` into the root folder.
 <ins>**3. Browsing the code**</ins>
 
 Open ```Blocky.sln``` in the root folder using Visual Studio 2022 to browse code.
+
+## Resources
+Following features of Blocky game were made possible by external resources:
+
+- Bloom shader implementation: https://learnopengl.com/Guest-Articles/2022/Phys.-Based-Bloom
+- Lighting techniques like Phong or Blinn-Phong: https://learnopengl.com/Advanced-Lighting/Advanced-Lighting
+-Slab method for fast raycasting: https://tavianator.com/2022/ray_box_boundary.html
+

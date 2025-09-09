@@ -1,3 +1,6 @@
+// 
+// Lighting implementation taken from an amazing tutorial: https://learnopengl.com/Advanced-Lighting/Advanced-Lighting
+//
 #ifndef __LIGHT_HLSL_
 #define __LIGHT_HLSL_
 
